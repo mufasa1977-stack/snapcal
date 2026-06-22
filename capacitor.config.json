@@ -1,0 +1,8 @@
+{
+  "appId": "com.xionprotech.snapcal",
+  "appName": "SnapCal",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -1,0 +1,250 @@
+[
+  {
+    "chain": "Wawa",
+    "category": "Convenience / Gas Station",
+    "verdict": "You can absolutely eat clean at Wawa — the build-your-own hoagie line is your friend and the kiosk lets you customize everything. Anchor strategy: build a cold turkey or grilled-chicken hoagie on a Shorti or wheat roll, order it 'no mayo, extra veggies, mustard or light dressing,' and an 800-cal bomb becomes a 350-450 cal lean meal.",
+    "best_picks": {
+      "lose_weight": [
+        {"name": "Junior Oven Roasted Turkey Hoagie (no mayo)", "calories": 310, "protein_g": 17, "carbs_g": 27, "fat_g": 12, "why": "Portion-controlled hoagie — lean turkey, small roll, loads of veggies. Filling and protein-forward for the calories."},
+        {"name": "Cold Turkey Shorti on Wheat (cucumbers, spinach, no mayo)", "calories": 380, "protein_g": 23, "carbs_g": 61, "fat_g": 12, "why": "Wheat roll adds fiber, veggies add volume, skipping mayo cuts ~150 cal of pure fat. Satisfying lunch under 400."}
+      ],
+      "maintain": [
+        {"name": "Mediterranean Grilled Chicken Salad", "calories": 400, "protein_g": 35, "carbs_g": 20, "fat_g": 18, "why": "Grilled chicken, romaine, tomato, cucumber, feta, olives — high protein, low carb, balanced fat. Get dressing on the side."},
+        {"name": "Cold Oven Roasted Turkey Hoagie on Shorti (lettuce/pickles, light mayo)", "calories": 460, "protein_g": 30, "carbs_g": 42, "fat_g": 18, "why": "Classic everyday order in the maintenance sweet spot — solid protein, real bread, keeps you full till dinner."}
+      ],
+      "build_muscle": [
+        {"name": "Custom Grilled Chicken Salad (double chicken)", "calories": 590, "protein_g": 51, "carbs_g": 6, "fat_g": 40, "why": "51g protein at only 6g carbs — elite muscle-building macros. Go light on cheese/dressing to trim the fat."},
+        {"name": "Classic Oven Roasted Turkey Hoagie (10-inch, no mayo)", "calories": 700, "protein_g": 52, "carbs_g": 71, "fat_g": 22, "why": "52g protein plus carbs to refuel a hard training day. No-mayo keeps the fat reasonable for the protein you get."}
+      ]
+    },
+    "smart_swaps": [
+      {"instead_of": "Classic Meatball Parmesan Hoagie (970 cal)", "get": "Classic Oven Roasted Turkey Hoagie, no mayo (700 cal)", "saves": "-270 cal, -25g fat", "goal": "lose_weight"},
+      {"instead_of": "Custom Grilled Chicken Salad, full mayo/cheese (590 cal)", "get": "Mediterranean Grilled Chicken Salad, light dressing (400 cal)", "saves": "-190 cal, -22g fat", "goal": "maintain"},
+      {"instead_of": "Classic Honey Smoked Turkey Hoagie w/ mayo (890 cal)", "get": "Cold Turkey Shorti on Wheat, no mayo (380 cal)", "saves": "-510 cal, -25g fat", "goal": "lose_weight"}
+    ],
+    "order_hacks": [
+      "Order any hoagie 'no mayo, extra veggies, mustard or light Italian' — mayo alone is ~100-200 cal of straight fat per sandwich.",
+      "Default to the Shorti (6\") or Junior over the Classic (10\") roll — same flavors, roughly half the bread calories.",
+      "Pick the wheat roll for fiber, or order it as a salad/bowl (no bread) to drop ~200 carb-calories entirely.",
+      "Choose lean proteins — oven-roasted or honey-smoked turkey and grilled chicken — over Italian meats, meatball, or cheesesteak, which can double the calories and fat."
+    ],
+    "treat": {"name": "Shorti Cheesesteak (no extra cheese sauce)", "calories": 490, "protein_g": 29, "carbs_g": 43, "fat_g": 22, "why": "The crave-worthy Wawa cheesesteak hit for ~490 cal vs a 970-cal meatball or 890-cal honey-smoked bomb — gooey, savory, real protein, and roughly half the damage."}
+  },
+  {
+    "chain": "Sheetz",
+    "category": "Convenience / Gas Station",
+    "verdict": "Sheetz is very doable thanks to its 'Eat Shmart' line and fully customizable MTO touchscreen — you control every topping and sauce. Anchor strategy: build a turkey or grilled-chicken sub on wheat (or skip the bread for an MTO Bowl), choose egg whites at breakfast, and swap mayo for mustard or fat-free Italian.",
+    "best_picks": {
+      "lose_weight": [
+        {"name": "6\" Turkey Sub on Wheat (mustard, veggies, no mayo)", "calories": 320, "protein_g": 22, "carbs_g": 48, "fat_g": 4, "why": "Lean turkey, light bread, no mayo — only 4g fat and 22g protein. One of the most filling sub-400 picks on the board."},
+        {"name": "Grilled Chicken Salad, fat-free Italian", "calories": 311, "protein_g": 32, "carbs_g": 34, "fat_g": 17, "why": "32g protein for ~310 cal is excellent satiety per calorie. Skip the croutons to trim further."}
+      ],
+      "maintain": [
+        {"name": "Grilled Chicken Salad, full toppings + dressing", "calories": 389, "protein_g": 35, "carbs_g": 34, "fat_g": 17, "why": "35g protein, balanced carbs and fat, lots of veggie volume — a complete meal right in the maintenance zone."},
+        {"name": "6\" Turkey Sub (standard build, light mayo)", "calories": 520, "protein_g": 22, "carbs_g": 48, "fat_g": 26, "why": "The everyday MTO order — solid protein and real bread in the 500-cal range; drop to light/no mayo to push it lower."}
+      ],
+      "build_muscle": [
+        {"name": "MTO Bowl — Grilled Chicken over rice, extra protein (no bread)", "calories": 560, "protein_g": 45, "carbs_g": 40, "fat_g": 22, "why": "Skipping the roll for a bowl saves ~200 carb-calories while loading double grilled chicken for recovery."},
+        {"name": "Grilled Chicken Salad + extra grilled chicken", "calories": 480, "protein_g": 48, "carbs_g": 20, "fat_g": 22, "why": "Doubling the chicken pushes protein near 48g while keeping carbs low — a lean-bulk-friendly plate."}
+      ]
+    },
+    "smart_swaps": [
+      {"instead_of": "Sausage Shmuffin w/ egg & cheese (490 cal)", "get": "Turkey Sausage, Egg White & Cheese Shmuffin (~280 cal)", "saves": "-210 cal, -18g fat", "goal": "lose_weight"},
+      {"instead_of": "6\" Turkey Sub, full mayo (520 cal)", "get": "6\" Turkey Sub on Wheat, mustard/no mayo (320 cal)", "saves": "-200 cal, -22g fat", "goal": "lose_weight"},
+      {"instead_of": "Grilled Chicken Salad w/ ranch + croutons (~450 cal)", "get": "Grilled Chicken Salad w/ fat-free Italian (311 cal)", "saves": "-140 cal, -14g fat", "goal": "maintain"}
+    ],
+    "order_hacks": [
+      "On any breakfast Shmuffin or flatbread, choose egg whites and turkey sausage instead of sausage/bacon — saves ~150-200 cal and a lot of fat.",
+      "Order subs on wheat with mustard, banana peppers, and extra veggies instead of mayo — mayo is the single biggest calorie add on an MTO sub.",
+      "Build it as an MTO Bowl (no bread) to cut ~200 carb-calories while keeping all the protein and toppings.",
+      "Default to grilled chicken or turkey over fried chicken, steak, or the loaded melts — and ask for fat-free Italian on salads."
+    ],
+    "treat": {"name": "Ham Shmuffin with Egg & Cheese", "calories": 230, "protein_g": 11, "carbs_g": 30, "fat_g": 7, "why": "That warm, melty breakfast-sandwich craving for just 230 cal — less than half of a 490-cal Sausage Shmuffin and a fraction of the loaded burrito bombs. The least-damaging way to scratch the itch."}
+  },
+  {
+    "chain": "Royal Farms",
+    "category": "Convenience / Gas Station",
+    "verdict": "Royal Farms is a fried-chicken destination first, so the honest play is to anchor on a single lean protein build (a couple of tenders or a turkey/grilled-style sub) and skip the western-fries-plus-large-soda combo that turns a 400-cal order into a 1,000+ bomb. Treat the famous fried chicken as the indulgence it is, eat it without the fried sides, and you can eat reasonably here.",
+    "best_picks": {
+      "lose_weight": [
+        {"name": "2 Classic Chicken Tenders (à la carte, no fries/roll)", "calories": 380, "protein_g": 44, "carbs_g": 8, "fat_g": 18, "why": "Two tenders ordered alone (not as the meal) is the most protein-dense low-cal chicken option; skip the fries and roll that turn the meal into 710 cal."},
+        {"name": "Fried Chicken Leg (1 piece)", "calories": 200, "protein_g": 11, "carbs_g": 4, "fat_g": 16, "why": "The smallest bone-in piece by calories; pair with a side salad or mashed potatoes instead of western fries for a sub-400-cal plate that still scratches the fried-chicken itch."}
+      ],
+      "maintain": [
+        {"name": "Chicken Tender Sub (whole)", "calories": 580, "protein_g": 25, "carbs_g": 42, "fat_g": 35, "why": "A real built sub in the maintain band; ask for lettuce/tomato and light sauce rather than mayo-heavy to keep the fat in check."},
+        {"name": "Mac & Cheese (large) as a meal", "calories": 640, "protein_g": 27, "carbs_g": 60, "fat_g": 31, "why": "Surprisingly balanced comfort side eaten as the main — solid protein for a meatless pick; stop here and skip the chicken add-on."}
+      ],
+      "build_muscle": [
+        {"name": "Spicy Buffalo Chicken Sub", "calories": 770, "protein_g": 38, "carbs_g": 73, "fat_g": 36, "why": "Highest realistic protein-per-order on the sub board (38g) with carbs to refuel; runs leaner than the Classic RoFo Buffalo (880 cal)."},
+        {"name": "Fried Chicken Breast (1 piece) + Mashed Potatoes (small)", "calories": 770, "protein_g": 37, "carbs_g": 48, "fat_g": 47, "why": "One bone-in breast delivers 32g protein; mashed potatoes (not western fries) keep carbs moderate for a post-lift refuel. A muscle-build pick, not a cutting pick."}
+      ]
+    },
+    "smart_swaps": [
+      {"instead_of": "Classic RoFo Buffalo Sub (880 cal)", "get": "Spicy Buffalo Chicken Sub (770 cal)", "saves": "-110 cal, -15g fat", "goal": "build_muscle"},
+      {"instead_of": "Western Fries, large (730 cal)", "get": "Mashed Potatoes, small (180 cal)", "saves": "-550 cal, -37g fat", "goal": "lose_weight"},
+      {"instead_of": "3-Piece Tender Meal w/ fries & roll (920 cal)", "get": "2 Classic Tenders à la carte (380 cal)", "saves": "-540 cal, ~-32g fat", "goal": "lose_weight"}
+    ],
+    "order_hacks": [
+      "Order chicken pieces or tenders À LA CARTE, not as a 'meal' — the meal adds western fries and a dinner roll that tack on 300-500 cal of fried starch.",
+      "Swap western fries (small 490 / large 730 cal) for mashed potatoes (small 180 cal) or a side salad — the biggest single calorie save on the menu.",
+      "On subs, ask for lettuce/tomato/onion and go light on mayo and creamy sauces — the sauce and bread, not the chicken, drive most of the fat.",
+      "Pick the leg or a single tender over the fried breast when you want the fried-chicken taste for the fewest calories; one breast (590 cal) is nearly 3x a leg (200 cal)."
+    ],
+    "treat": {"name": "Fried Chicken Breast (1 piece)", "calories": 590, "protein_g": 32, "carbs_g": 17, "fat_g": 44, "why": "Royal Farms' fried chicken is the whole reason to stop — this bone-in breast is a genuine indulgence, not everyday food. Solo (no large western fries, no soda) it's the least-damaging way to have the signature item: still 32g protein, and you avoid turning one piece into a 1,300-cal tray. Savor it on a cheat day and skip the fried sides."}
+  },
+  {
+    "chain": "QuikTrip",
+    "category": "Convenience / Gas Station",
+    "verdict": "QT Kitchens is made-to-order, which is the healthy eater's advantage — you control the bread size, protein, and sauce, so a half-size sub on wheat with a lean meat is a genuinely solid 350-450 cal meal. Anchor on a HALF sub (the whole is essentially two meals) or a grilled-chicken item and skip the ranch-and-bacon flatbreads.",
+    "best_picks": {
+      "lose_weight": [
+        {"name": "The Gardener Half Sub (wheat)", "calories": 320, "protein_g": 13, "carbs_g": 36, "fat_g": 14, "why": "Lowest-calorie real sub on the board and veggie-forward; the half on wheat is filling for the calories. Add turkey or ham for more protein if you want."},
+        {"name": "Turkey Half Sub (wheat)", "calories": 370, "protein_g": 16, "carbs_g": 35, "fat_g": 6, "why": "Leanest meat sub by fat (just 6g) at a low calorie count — order it loaded with veggies and mustard instead of mayo to keep it that lean."}
+      ],
+      "maintain": [
+        {"name": "Roast Beef Half Sub (wheat)", "calories": 450, "protein_g": 30, "carbs_g": 35, "fat_g": 8, "why": "30g protein for only 8g fat and 450 cal — one of the best protein-to-calorie ratios in the whole case, right in the maintain band."},
+        {"name": "Chicken & Cheese Flatbread", "calories": 410, "protein_g": 24, "carbs_g": 37, "fat_g": 19, "why": "A balanced grab-and-go hot item; far leaner than the Chicken, Bacon & Ranch flatbread (570 cal) while still hot-pressed and satisfying."}
+      ],
+      "build_muscle": [
+        {"name": "Roast Beef Whole Sub (wheat)", "calories": 900, "protein_g": 60, "carbs_g": 70, "fat_g": 15, "why": "60g protein at only 15g fat — the standout muscle-build order in QT Kitchens. Doubles as two meals or one big post-lift refuel with clean macros."},
+        {"name": "Whole Wheat Turkey Sub", "calories": 740, "protein_g": 47, "carbs_g": 70, "fat_g": 11, "why": "47g protein for just 11g fat and 740 cal — exceptionally lean for the protein load, ideal to bulk without the fat of a meat-stack or BLT."}
+      ]
+    },
+    "smart_swaps": [
+      {"instead_of": "Chicken, Bacon & Ranch Flatbread (570 cal)", "get": "Chicken & Cheese Flatbread (410 cal)", "saves": "-160 cal, -14g fat", "goal": "maintain"},
+      {"instead_of": "Double BLT Half Sub, wheat (540 cal)", "get": "Turkey Half Sub, wheat (370 cal)", "saves": "-170 cal, -31g fat", "goal": "lose_weight"},
+      {"instead_of": "The Ultimate Breakfast Burrito (900 cal)", "get": "Chicken Breakfast Taco (310 cal)", "saves": "-590 cal, -45g fat", "goal": "lose_weight"}
+    ],
+    "order_hacks": [
+      "Order a HALF sub, not a whole — a whole QT sub is essentially two meals (whole roast beef 900 cal vs. half 450 cal). Half on wheat is the default lean move.",
+      "Choose wheat bread and lean meats (turkey, ham, roast beef) — they run far lower in fat than the BLT, 3-Meat Stack, or Big Italian.",
+      "Skip mayo and creamy sauces; ask for mustard plus extra lettuce, tomato, onion, and peppers to bulk the sub without adding calories.",
+      "For breakfast, a single taco (chicken 310 cal) beats the burritos and scrambles — The Ultimate burrito is 900 cal."
+    ],
+    "treat": {"name": "Chicken, Bacon & Ranch Flatbread", "calories": 570, "protein_g": 31, "carbs_g": 37, "fat_g": 33, "why": "The hot, melty bacon-ranch flatbread is QT's crave-worthy indulgence, and at 570 cal with 31g protein it's far less damaging than the cheat-day bombs (Ultimate burrito 900 cal, Double BLT whole sub 1,080 cal). Satisfies the salty-fatty craving while still delivering real protein."}
+  },
+  {
+    "chain": "Casey's General Store",
+    "category": "Convenience / Gas Station",
+    "verdict": "Yes, the pizza is the draw, but it's a calorie/fat trap by the slice-pile — eat healthy here by anchoring on a made-to-order sub built on lean meat (grilled chicken, turkey) instead of the pie. Order the sub, add a single slice if you must crave it, and you're in great shape.",
+    "best_picks": {
+      "lose_weight": [
+        {"name": "Grilled Chicken Sub (regular)", "calories": 325, "protein_g": 22, "carbs_g": 41, "fat_g": 7, "why": "Leanest hot sub on the board — high protein, only ~7g fat keeps you full for ~325 cal. The smartest single order at Casey's."},
+        {"name": "Ham, Egg & Cheese Croissant", "calories": 347, "protein_g": 17, "carbs_g": 31, "fat_g": 18, "why": "Lowest-cal hot breakfast that still brings real protein; skip the sausage version (507 cal) and you save big."}
+      ],
+      "maintain": [
+        {"name": "Turkey & Cheese Sub (regular)", "calories": 461, "protein_g": 35, "carbs_g": 46, "fat_g": 15, "why": "Balanced ~460 cal with a huge 35g protein hit and moderate fat — a textbook maintenance lunch."},
+        {"name": "Bacon, Egg & Cheese Croissant + a fruit/water side", "calories": 374, "protein_g": 18, "carbs_g": 30, "fat_g": 20, "why": "Sits comfortably mid-range; pair with fruit/water to land in the 400-600 maintain window without a pizza spike."}
+      ],
+      "build_muscle": [
+        {"name": "Turkey & Cheese Sub (regular)", "calories": 461, "protein_g": 35, "carbs_g": 46, "fat_g": 15, "why": "Highest verified protein single item (35g) for a reasonable calorie load — the muscle-builder's anchor order."},
+        {"name": "Grilled Chicken Sub + Ham & Cheese Classic add-on", "calories": 555, "protein_g": 47, "carbs_g": 71, "fat_g": 11, "why": "Stack a 325-cal grilled chicken sub with the 230-cal/25g-protein Ham & Cheese Classic for ~47g protein at very low fat."}
+      ]
+    },
+    "smart_swaps": [
+      {"instead_of": "Italian Sub (521 cal)", "get": "Grilled Chicken Sub (325 cal)", "saves": "-196 cal, -17g fat", "goal": "lose_weight"},
+      {"instead_of": "Sausage, Egg & Cheese Croissant (507 cal)", "get": "Ham, Egg & Cheese Croissant (347 cal)", "saves": "-160 cal, ~-12g fat", "goal": "lose_weight"},
+      {"instead_of": "3 slices Large Sausage Pizza (~984 cal)", "get": "Turkey & Cheese Sub (461 cal)", "saves": "-523 cal, ~-30g fat", "goal": "maintain"}
+    ],
+    "order_hacks": [
+      "Anchor on a made-to-order sub with grilled chicken or turkey — it's leaner and far more protein-dense than pizza slices, which pile up fast at ~250-330 cal each.",
+      "If you crave pizza, buy ONE slice as a side to a sub — never order a personal/whole pie to eat solo (a few slices blows past 800-1000 cal).",
+      "At breakfast pick ham over sausage on the croissant (saves ~160 cal) and skip the hash-brown side; egg + lean ham still gives you ~17g protein.",
+      "Ask for light cheese / hold the oil & mayo on subs — that's where most of the fat hides; the lean meat and bread are the cheap part calorie-wise."
+    ],
+    "treat": {"name": "One slice Large Pepperoni Pizza (1/12)", "calories": 266, "protein_g": 13, "carbs_g": 27, "fat_g": 11, "why": "Casey's signature crave fix without the damage — a single slice is ~266 cal with 13g protein, versus 800-1300 cal if you let a few slices pile up. Pair it with a side salad or grilled chicken sub and the indulgence is basically free."}
+  },
+  {
+    "chain": "7-Eleven",
+    "category": "Convenience / Gas Station",
+    "verdict": "7-Eleven is genuinely easy to eat healthy at if you ignore the roller grill and head to the cold case — hard-boiled eggs, fresh wraps/subs and salads are the play. Anchor on a high-protein cold pick (eggs, turkey, chicken Caesar no-dressing) and treat the taquitos as the splurge, not the meal.",
+    "best_picks": {
+      "lose_weight": [
+        {"name": "Cage-Free Hard Boiled Eggs (2-pack)", "calories": 120, "protein_g": 12, "carbs_g": 0, "fat_g": 8, "why": "Best low-cal/high-protein-per-calorie item in the store — 12g protein, zero carbs for 120 cal. Add fruit or string cheese for a complete light meal."},
+        {"name": "Chicken Caesar Salad (no dressing)", "calories": 190, "protein_g": 17, "carbs_g": 17, "fat_g": 8, "why": "Skip the packet and it's a 190-cal, 17g-protein lunch; the dressing alone nearly triples it to ~390 cal, so keep it off or use half."}
+      ],
+      "maintain": [
+        {"name": "Southwest Turkey Sandwich", "calories": 560, "protein_g": 19, "carbs_g": 48, "fat_g": 28, "why": "A filling grab-and-go sandwich at the top of the maintain band; pair with water and skip chips and it's a solid one-stop lunch."},
+        {"name": "Hard Boiled Eggs (2-pack) + Chicken Caesar Salad (no dressing)", "calories": 310, "protein_g": 29, "carbs_g": 17, "fat_g": 16, "why": "Stacking two cold-case staples lands at ~310 cal with 29g protein — leaves room for fruit and still stays mid-range."}
+      ],
+      "build_muscle": [
+        {"name": "2x Hard Boiled Eggs (4 eggs) + Chicken Caesar Salad (no dressing)", "calories": 430, "protein_g": 41, "carbs_g": 17, "fat_g": 24, "why": "Two egg packs plus the lean salad clears ~41g protein for ~430 cal — the highest-protein realistic whole-food build at 7-Eleven."},
+        {"name": "Chicken Salad & Bacon Wrap", "calories": 550, "protein_g": 20, "carbs_g": 58, "fat_g": 25, "why": "Single-item 20g protein with real carbs to refuel; calorie-dense but legit as a post-workout grab when you want one thing off the shelf."}
+      ]
+    },
+    "smart_swaps": [
+      {"instead_of": "Bacon & Cheese Egg Drop Sandwich (624 cal)", "get": "Chicken Caesar Salad, no dressing (190 cal)", "saves": "-434 cal, -28g fat", "goal": "lose_weight"},
+      {"instead_of": "Monterey Jack & Chicken Taquito (280 cal)", "get": "Hard Boiled Eggs 2-pack (120 cal)", "saves": "-160 cal, -6g fat", "goal": "lose_weight"},
+      {"instead_of": "Chicken Caesar Salad WITH dressing (390 cal)", "get": "Same salad, dressing on the side / skipped (190 cal)", "saves": "-200 cal, -20g fat", "goal": "maintain"}
+    ],
+    "order_hacks": [
+      "Walk past the roller grill to the cold/fresh case — hard-boiled eggs, fresh wraps and salads are far more protein-dense per calorie than taquitos and rollers (180-300 cal each, mostly fat).",
+      "On any salad, get the dressing on the side and use half — the Caesar packet alone roughly doubles or triples the salad's calories (190 to 390 cal).",
+      "Build a DIY protein box: a 2-pack of hard-boiled eggs (120 cal/12g) plus string cheese or a fruit cup beats a packaged breakfast sandwich on protein-per-calorie.",
+      "If you want the roller grill, choose a leaner single taquito (Buffalo Chicken ~180 cal) over two cheesier ones, and pair it with eggs for protein instead of a second taquito."
+    ],
+    "treat": {"name": "Monterey Jack & Chicken Taquito (single)", "calories": 280, "protein_g": 7, "carbs_g": 30, "fat_g": 14, "why": "The crave-worthy roller-grill classic for ~280 cal as a SINGLE — way less damage than a 624-cal egg-drop sandwich or a 550+ cal loaded wrap. One taquito + a 2-pack of eggs gives you the indulgence plus real protein."}
+  },
+  {
+    "chain": "Cumberland Farms",
+    "category": "Convenience / Gas Station",
+    "verdict": "You can eat genuinely well at Cumberland Farms if you anchor on the made-to-order deli: build a turkey, ham, or grilled-chicken sub on the smaller/wheat bread, lean on the egg-white breakfast options, and treat the fried sides and footlongs as the calorie traps. Lean-protein sub or wrap + skip the chips/Chill Zone lands a 400-550 cal, 30g+ protein meal.",
+    "best_picks": {
+      "lose_weight": [
+        {"name": "Veggie Burger", "calories": 270, "protein_g": 12, "carbs_g": 50, "fat_g": 2, "why": "Lowest-fat hot item on the menu (2g) and high-fiber (5g) so it's filling for the calories; great when you want hot food without the grease."},
+        {"name": "Grilled Chicken, Bacon & Cheese", "calories": 400, "protein_g": 39, "carbs_g": 35, "fat_g": 11, "why": "39g protein for only 400 cal is the best protein-per-calorie ratio in the deli case; keeps you full for hours without a calorie blowout."}
+      ],
+      "maintain": [
+        {"name": "Turkey Monterey Jack White Sub", "calories": 500, "protein_g": 34, "carbs_g": 52, "fat_g": 16, "why": "Balanced ~500 cal with 34g protein; a classic lean deli sub that hits maintenance macros cleanly."},
+        {"name": "Southwestern Turkey Wrap", "calories": 490, "protein_g": 31, "carbs_g": 55, "fat_g": 16, "why": "~490 cal, 31g protein and 5g fiber from the wrap and veggies; a well-rounded portable meal."}
+      ],
+      "build_muscle": [
+        {"name": "Deluxe Chicken Parmesan Sub", "calories": 500, "protein_g": 43, "carbs_g": 47, "fat_g": 13, "why": "43g protein for only 500 cal and 13g fat is the smartest high-protein build on the menu, far leaner than the footlong for the same protein."},
+        {"name": "Italian Footlong Sub", "calories": 890, "protein_g": 48, "carbs_g": 87, "fat_g": 36, "why": "Highest single-item protein on the menu at 48g; a real bulking option after hard training, though the 36g fat and high sodium make it an occasional big-meal pick."}
+      ]
+    },
+    "smart_swaps": [
+      {"instead_of": "Deluxe Italian Sub (710 cal)", "get": "Turkey Monterey Jack White Sub (500 cal)", "saves": "-210 cal, -16g fat", "goal": "lose_weight"},
+      {"instead_of": "Buffalo Chicken Wrap (710 cal)", "get": "Chicken Caesar Wrap (550 cal)", "saves": "-160 cal, -17g fat", "goal": "maintain"},
+      {"instead_of": "Mozzarella & Tomato Sandwich (710 cal)", "get": "Grilled Chicken, Bacon & Cheese (400 cal)", "saves": "-310 cal, -28g fat", "goal": "lose_weight"}
+    ],
+    "order_hacks": [
+      "Build subs on the white/wheat wedge or wrap rather than the footlong roll — the footlong nearly doubles calories and carbs for the same fillings.",
+      "Ask for extra lettuce, tomato, peppers and onions to bulk up the sandwich volume without adding calories, so it eats more filling.",
+      "Skip the Chill Zone frozen drinks (a 30oz is ~225 cal of pure sugar) and the fried sides (5-piece tenders are 550 cal); water or unsweetened coffee keeps the meal lean.",
+      "For breakfast, choose the Canadian Bacon, Egg Whites & Cheese English Muffin (220 cal, 13g protein) over a sausage/croissant build to save 150-350 calories."
+    ],
+    "treat": {"name": "Egg & Sausage French Toast Sandwich", "calories": 450, "protein_g": 18, "carbs_g": 30, "fat_g": 28, "why": "Scratches the indulgent sweet-and-savory breakfast craving for 450 cal, and at 18g protein it's far less damaging than a 520-cal sausage croissant or a 590-cal raspberry turnover from the pastry case."}
+  },
+  {
+    "chain": "Buc-ee's",
+    "category": "Convenience / Gas Station",
+    "verdict": "Buc-ee's is a snack minefield — the famous Beaver Nuggets and fudge are pure sugar bombs — but the BBQ pit and grab-and-go cases are a legitimately strong place to eat lean if you anchor on smoked meat and jerky. Anchor strategy: chopped brisket or turkey from the deli plus high-protein fresh jerky and hard-boiled eggs, and you walk out fueled instead of sugar-crashed.",
+    "best_picks": {
+      "lose_weight": [
+        {"name": "2 Hard-Boiled Eggs + Fresh Fruit Cup", "calories": 255, "protein_g": 13, "carbs_g": 25, "fat_g": 10, "why": "Eggs bring protein and fat to keep you full while the fruit cup adds fiber and volume; one of the only low-cal, whole-food combos in the building."},
+        {"name": "Peppered Turkey Jerky (1 oz)", "calories": 80, "protein_g": 18, "carbs_g": 2, "fat_g": 0, "why": "Nearly pure protein with almost zero fat or carbs — the most protein-dense, lowest-calorie filling snack at Buc-ee's, ideal to kill hunger on the road."}
+      ],
+      "maintain": [
+        {"name": "Chopped Brisket Sandwich", "calories": 550, "protein_g": 31, "carbs_g": 61, "fat_g": 20, "why": "The flagship lean anchor — real smoked brisket and 31g protein in a balanced ~550 cal sandwich; ask for light sauce to trim sugar."},
+        {"name": "Sausage & Cheese Kolache", "calories": 250, "protein_g": 9, "carbs_g": 26, "fat_g": 12, "why": "A single kolache is a reasonable ~250-cal handheld; pair with jerky or an egg to round it into a balanced 400-500 cal meal."}
+      ],
+      "build_muscle": [
+        {"name": "Sliced BBQ Brisket Sandwich", "calories": 688, "protein_g": 38, "carbs_g": 50, "fat_g": 36, "why": "Highest-protein hot item at ~38g from sliced brisket; the protein-dense choice when refueling after training."},
+        {"name": "Steakhouse Beef Jerky (2 oz)", "calories": 220, "protein_g": 26, "carbs_g": 8, "fat_g": 9, "why": "26g of clean protein in a portable 2-oz portion with minimal carbs — a high-protein anchor you can graze on."}
+      ]
+    },
+    "smart_swaps": [
+      {"instead_of": "Beaver Nuggets (1 cup, ~209 cal)", "get": "Peppered Turkey Jerky (1 oz, 80 cal)", "saves": "-129 cal, -7g fat", "goal": "lose_weight"},
+      {"instead_of": "Double Fudge Brownie (470 cal)", "get": "Sausage & Cheese Kolache (250 cal)", "saves": "-220 cal, real protein vs pure sugar", "goal": "maintain"},
+      {"instead_of": "Sliced Brisket Sandwich (688 cal)", "get": "Chopped Brisket Sandwich (550 cal)", "saves": "-138 cal, -16g fat", "goal": "lose_weight"}
+    ],
+    "order_hacks": [
+      "Hit the BBQ pit and grab-and-go case first, not the candy aisle — chopped brisket, turkey and hard-boiled eggs are the lean backbone of any Buc-ee's stop.",
+      "Buy ONE bag of jerky for protein and skip the Beaver Nuggets entirely; jerky is ~80-110 cal a serving of mostly protein vs the Nuggets' sugar-and-oil puff.",
+      "Ask for BBQ sauce on the side — the smoked meat is already flavorful and the sauce is where a lot of hidden sugar lives.",
+      "Grab a fresh fruit cup (~100 cal) as your 'treat' instead of the fudge slab, and you avoid a 200-470 cal sugar bomb."
+    ],
+    "treat": {"name": "Sausage & Cheese Kolache", "calories": 250, "protein_g": 9, "carbs_g": 26, "fat_g": 12, "why": "The most satisfying crave-worthy Buc-ee's bite that won't wreck your day — warm, savory, only ~250 cal with 9g of actual protein, versus a ~470-cal double-fudge brownie or a giant fudge slab that's pure sugar. A small scoop of Beaver Nuggets (~140 cal/oz) is the runner-up if you want the iconic sweet."}
+  }
+]

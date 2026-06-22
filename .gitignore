@@ -1,0 +1,23 @@
+# secrets & user data — NEVER commit
+gemini_key.txt
+.env
+*.db
+
+# logs
+_run_*.log
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# node / capacitor build artifacts
+node_modules/
+www/
+android/
+ios/
+.DS_Store
+pexels_key.txt
+data/foodimg_cache.json
+usda_key.txt

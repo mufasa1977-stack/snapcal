@@ -1,0 +1,20 @@
+# Cloudflare-style one-click deploy blueprint for Render (render.com).
+# Deploys the SnapCal API. Free tier sleeps (30s cold start) — use "starter" ($7/mo) for a live app.
+services:
+  - type: web
+    name: snapcal-api
+    runtime: python
+    plan: free               # $0 for testing (sleeps ~15min idle, 30s cold start). Bump to "starter" ($7/mo) to keep it warm for real users.
+    region: ohio             # closest US region to PA
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /
+    envVars:
+      - key: GEMINI_API_KEY      # set in the Render dashboard (Secret) — never committed
+        sync: false
+      - key: SNAPCAL_PEXELS_KEY  # set in the Render dashboard (Secret) — real per-dish photos
+        sync: false
+      - key: USDA_API_KEY        # set in the Render dashboard (Secret) — free api.data.gov key, removes the demo rate limit
+        sync: false
+      - key: CORS_ORIGINS        # extra web origins allowed to call the API (comma-separated)
+        value: https://xionprotech.com

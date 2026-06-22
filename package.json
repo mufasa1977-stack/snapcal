@@ -1,0 +1,20 @@
+{
+  "name": "snapcal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SnapCal — AI calorie tracker. Capacitor wrapper (iOS + Android) over the web frontend.",
+  "scripts": {
+    "build:www": "node build-www.mjs",
+    "sync": "npm run build:www && npx cap sync",
+    "open:android": "npm run sync && npx cap open android",
+    "open:ios": "npm run sync && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/ios": "^8.4.0",
+    "@revenuecat/purchases-capacitor": "^13.2.0",
+    "esbuild": "^0.28.1"
+  }
+}
