@@ -454,6 +454,13 @@
   .cd-dir-btn:active{opacity:.85}
   .scan-x{position:absolute;top:10px;right:10px;width:34px;height:34px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:22px;line-height:34px;text-align:center;cursor:pointer;z-index:6;padding:0;font-family:inherit;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);box-shadow:0 2px 8px rgba(0,0,0,.2)}
   .scan-x:active{background:rgba(0,0,0,.75)}
+  /* top quick-access bar — Coach Cal / Grocery / Meal Plan, no scrolling */
+  .quick-bar{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin:0 0 16px}
+  .quick-tab{display:flex;flex-direction:column;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px 6px 11px;cursor:pointer;font-family:inherit;box-shadow:var(--shadow);color:var(--ink);transition:transform .12s}
+  .quick-tab:active{transform:scale(.96)}
+  .quick-tab .qt-ic{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;color:#fff}
+  .quick-tab .qt-ic svg{width:21px;height:21px;display:block}
+  .quick-tab .qt-l{font-size:12px;font-weight:750;line-height:1.1;text-align:center;color:var(--ink)}
   a.nm-li{text-decoration:none;color:inherit}
   .store-list{margin-top:2px}
   .store-logo{background:#fff;overflow:hidden;position:relative}
@@ -674,6 +681,21 @@
       <div id="streakWrap"></div>
     </div>
 
+    <div class="quick-bar">
+      <button class="quick-tab" id="coachBtn" type="button">
+        <span class="qt-ic" style="background:linear-gradient(135deg,#60A5FA,#2563EB)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="2.5" y="9" width="8.6" height="5" rx="2.2"/><path fill-rule="evenodd" clip-rule="evenodd" d="M14 7a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm0 4.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg></span>
+        <span class="qt-l">Coach Cal</span>
+      </button>
+      <button class="quick-tab" id="groceryBtn" type="button">
+        <span class="qt-ic" style="background:linear-gradient(135deg,#34D399,#047857)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.5 3h2l2.5 12.5a2 2 0 0 0 2 1.5h8.5a2 2 0 0 0 2-1.6L21.5 8H6"></path></svg></span>
+        <span class="qt-l">Grocery</span>
+      </button>
+      <button class="quick-tab" id="mealplanBtn" type="button">
+        <span class="qt-ic" style="background:linear-gradient(135deg,#34D399,#0F766E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M3 9h18M8 2v4M16 2v4"></path></svg></span>
+        <span class="qt-l">Meal Plan</span>
+      </button>
+    </div>
+
     <div class="card ring-wrap">
       <div class="ring-box">
         <svg viewBox="0 0 200 200" aria-hidden="true">
@@ -746,24 +768,6 @@
       </div>
       <div id="nutriResult" style="margin-top:12px"></div>
     </div>
-
-    <button class="coach-cta" id="coachBtn" type="button">
-      <span class="coach-cta-ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="2.5" y="9" width="8.6" height="5" rx="2.2"/><path fill-rule="evenodd" clip-rule="evenodd" d="M14 7a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm0 4.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg></span>
-      <span class="coach-cta-tx"><b>Coach Cal &middot; what should I eat?</b><small>Goal-fit meal ideas to help you cut calories</small></span>
-      <span class="coach-cta-ar">&rsaquo;</span>
-    </button>
-
-    <button class="coach-cta" id="groceryBtn" type="button">
-      <span class="coach-cta-ic" style="background:linear-gradient(135deg,#34D399,#047857)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.5 3h2l2.5 12.5a2 2 0 0 0 2 1.5h8.5a2 2 0 0 0 2-1.6L21.5 8H6"></path></svg></span>
-      <span class="coach-cta-tx"><b>Healthy grocery list</b><small>Goal-fit list + which aisle it&rsquo;s in</small></span>
-      <span class="coach-cta-ar">&rsaquo;</span>
-    </button>
-
-    <button class="coach-cta" id="mealplanBtn" type="button">
-      <span class="coach-cta-ic" style="background:linear-gradient(135deg,#34D399,#0F766E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M3 9h18M8 2v4M16 2v4"></path></svg></span>
-      <span class="coach-cta-tx"><b>7-day meal planner</b><small>A goal-fit week &middot; builds your grocery list</small></span>
-      <span class="coach-cta-ar">&rsaquo;</span>
-    </button>
 
     <div class="sec-title">Meals</div>
     <div id="mealsList"></div>

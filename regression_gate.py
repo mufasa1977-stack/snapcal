@@ -483,6 +483,20 @@ def main():
               pp["hasLocal"] and pp["cal"] == 1850 and pp["pro"] == 140 and pp["weight"] == "165",
               "cal=" + str(pp["cal"]) + " pro=" + str(pp["pro"]) + " weight=" + str(pp["weight"]))
 
+        # TOP QUICK BAR: Coach Cal / Grocery / Meal Plan are top tabs (above the fold), single IDs, still wired
+        qb = page.evaluate("""() => {
+            var bar = document.querySelector('.quick-bar');
+            var ids = ['coachBtn','groceryBtn','mealplanBtn'];
+            var inBar = bar && ids.every(function(id){ var el=document.getElementById(id); return el && bar.contains(el); });
+            var noDup = ids.every(function(id){ return document.querySelectorAll('#'+id).length === 1; });
+            var aboveRing = false;
+            try { aboveRing = bar.compareDocumentPosition(document.querySelector('.ring-wrap')) & Node.DOCUMENT_POSITION_FOLLOWING ? true : false; } catch(e){}
+            return { bar: !!bar, inBar: !!inBar, noDup: noDup, aboveRing: aboveRing };
+        }""")
+        check("home: Coach Cal / Grocery / Meal Plan are top quick-tabs (above the ring, single IDs)",
+              qb["bar"] and qb["inBar"] and qb["noDup"] and qb["aboveRing"],
+              "bar=" + str(qb["bar"]) + " inBar=" + str(qb["inBar"]) + " noDup=" + str(qb["noDup"]) + " aboveRing=" + str(qb["aboveRing"]))
+
         # FOOD PHOTOS: pick images go through the real per-dish lookup, not the old mismatched category jpg
         fi = page.evaluate("""() => {
             var src = pickImg({name:'Filet Mignon'});
