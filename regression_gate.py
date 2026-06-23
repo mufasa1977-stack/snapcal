@@ -452,6 +452,23 @@ def main():
               prim["visible"] and prim["hasPrivacy"] and not prim["primedBefore"] and prim["primedAfter"] and prim["hidden"] and not prim["reshown"],
               "visible=%s privacy=%s primed:%s->%s hidden=%s reshown=%s" % (prim["visible"], prim["hasPrivacy"], prim["primedBefore"], prim["primedAfter"], prim["hidden"], prim["reshown"]))
 
+        # SCAN ESCAPE: a ✕ on the preview + result cards clears the scan -> back to home (first-tester bug: trapped on the result)
+        sx = page.evaluate("""() => {
+            var pcard = document.getElementById('previewCard'), rcard = document.getElementById('resultCard');
+            pcard.style.display='block'; rcard.style.display='block';
+            var pc = document.getElementById('previewClose'), rc = document.getElementById('resultClose');
+            var hasBtns = !!pc && !!rc;
+            if (rc) rc.click();
+            var resultHidden = getComputedStyle(rcard).display === 'none';
+            pcard.style.display='block';
+            if (pc) pc.click();
+            var previewHidden = getComputedStyle(pcard).display === 'none';
+            return { hasBtns: hasBtns, resultHidden: resultHidden, previewHidden: previewHidden };
+        }""")
+        check("scan: close (X) on preview + result cards clears the scan -> back to home (no trap)",
+              sx["hasBtns"] and sx["resultHidden"] and sx["previewHidden"],
+              "btns=" + str(sx["hasBtns"]) + " resultHidden=" + str(sx["resultHidden"]) + " previewHidden=" + str(sx["previewHidden"]))
+
         # FOOD PHOTOS: pick images go through the real per-dish lookup, not the old mismatched category jpg
         fi = page.evaluate("""() => {
             var src = pickImg({name:'Filet Mignon'});

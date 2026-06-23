@@ -452,6 +452,8 @@
   .locp-skip{display:block;width:100%;border:none;background:transparent;color:var(--ink3);font-weight:600;font-size:14px;padding:11px;margin-top:4px;cursor:pointer;font-family:inherit}
   .cd-dir-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin:12px 0 2px;border:none;background:var(--brand);color:#fff;font-weight:800;font-size:15px;border-radius:13px;padding:13px;text-decoration:none;box-sizing:border-box}
   .cd-dir-btn:active{opacity:.85}
+  .scan-x{position:absolute;top:10px;right:10px;width:34px;height:34px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:22px;line-height:34px;text-align:center;cursor:pointer;z-index:6;padding:0;font-family:inherit;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);box-shadow:0 2px 8px rgba(0,0,0,.2)}
+  .scan-x:active{background:rgba(0,0,0,.75)}
   a.nm-li{text-decoration:none;color:inherit}
   .store-list{margin-top:2px}
   .store-logo{background:#fff;overflow:hidden;position:relative}
@@ -809,13 +811,15 @@
     <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
     <input type="file" id="galInput" accept="image/*" hidden>
 
-    <div class="card" id="previewCard" style="margin-top:14px">
+    <div class="card" id="previewCard" style="margin-top:14px;position:relative">
+      <button class="scan-x" id="previewClose" type="button" aria-label="Close">&times;</button>
       <img id="previewImg" alt="Food preview">
       <div class="preview-fallback" id="previewFallback">Preview unavailable for this format — analysis still works.</div>
       <button class="btn btn-dark" id="analyzeBtn" type="button">Analyze</button>
     </div>
 
-    <div class="card" id="resultCard">
+    <div class="card" id="resultCard" style="position:relative">
+      <button class="scan-x" id="resultClose" type="button" aria-label="Close">&times;</button>
       <div class="sec-title" style="margin:0 0 8px">Detected food</div>
       <div id="resultItems"></div>
       <div class="total-row">
@@ -1334,6 +1338,10 @@ $("#camBtn").addEventListener("click", function(){ $("#camInput").click(); });
 $("#galBtn").addEventListener("click", function(){ $("#galInput").click(); });
 $("#camInput").addEventListener("change", onPick);
 $("#galInput").addEventListener("change", onPick);
+/* Clear ✕ on the scan cards — cancel a scan / back out of the result to the clean home (no trap) */
+function closeScan(){ resetScan(); switchTab("today"); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch(e){ window.scrollTo(0,0); } }
+$("#previewClose").addEventListener("click", closeScan);
+$("#resultClose").addEventListener("click", closeScan);
 
 function onPick(e){
   var f = e.target.files && e.target.files[0];
