@@ -469,6 +469,20 @@ def main():
               sx["hasBtns"] and sx["resultHidden"] and sx["previewHidden"],
               "btns=" + str(sx["hasBtns"]) + " resultHidden=" + str(sx["resultHidden"]) + " previewHidden=" + str(sx["previewHidden"]))
 
+        # PROFILE PERSISTENCE: calories/macros/weight saved on the DEVICE survive reopen + server redeploy
+        pp = page.evaluate("""() => {
+            localStorage.removeItem('snapcal_profile'); localStorage.removeItem('snapcal_weight');
+            profLocalSave({ daily_calories: 1850, protein_g: 140, carbs_g: 180, fat_g: 60 });
+            localStorage.setItem('snapcal_weight', '165');
+            var local = profLocalGet();                 // simulate a fresh reopen reading the device copy
+            var loaded = local ? profFrom(local) : null;
+            return { hasLocal: !!local, cal: loaded ? loaded.daily_calories : 0, pro: loaded ? loaded.protein_g : 0,
+                     weight: localStorage.getItem('snapcal_weight') };
+        }""")
+        check("profile persists on device (calories + macros + weight survive reopen / redeploy)",
+              pp["hasLocal"] and pp["cal"] == 1850 and pp["pro"] == 140 and pp["weight"] == "165",
+              "cal=" + str(pp["cal"]) + " pro=" + str(pp["pro"]) + " weight=" + str(pp["weight"]))
+
         # FOOD PHOTOS: pick images go through the real per-dish lookup, not the old mismatched category jpg
         fi = page.evaluate("""() => {
             var src = pickImg({name:'Filet Mignon'});

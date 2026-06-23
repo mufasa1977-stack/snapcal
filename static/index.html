@@ -2114,24 +2114,32 @@ function fillProfile(){
   $("#pFat").value = int(profile.fat_g);
 }
 
+/* Profile persistence — keep it on the user's DEVICE (localStorage) so it survives reopens AND
+   server redeploys (the server DB is ephemeral on the free/starter tier) AND stays per-device.
+   A good coach remembers: enter it once, never asked again. Device value always wins. */
+function profFrom(src){ return {
+  daily_calories: int(src.daily_calories) || 2000, protein_g: int(src.protein_g) || 150,
+  carbs_g: int(src.carbs_g) || 200, fat_g: int(src.fat_g) || 65 }; }
+function profLocalGet(){ try { return JSON.parse(localStorage.getItem("snapcal_profile") || "null"); } catch(e){ return null; } }
+function profLocalSave(p){ try { localStorage.setItem("snapcal_profile", JSON.stringify(p)); } catch(e){} }
+
 async function loadProfile(){
+  var local = profLocalGet();
+  if (local) profile = profFrom(local);              /* their saved profile — instant + reliable */
   try {
     var data = await api("/api/profile");
-    if (data) profile = {
-      daily_calories: int(data.daily_calories) || 2000,
-      protein_g: int(data.protein_g) || 150,
-      carbs_g: int(data.carbs_g) || 200,
-      fat_g: int(data.fat_g) || 65
-    };
-  } catch (e) {
-    toast(e.message, true);
-  }
+    if (data && !local) profile = profFrom(data);    /* no device copy yet -> seed from server */
+  } catch (e) { /* server down/redeployed — the device copy still has them covered */ }
   fillProfile();
   updatePremiumUI();
   try {
-    var wd = await api("/api/weights?days=365");
-    var ws = (wd && wd.weights) || [];
-    if (ws.length) $("#pWeight").value = ws[ws.length - 1].weight;
+    var lw = localStorage.getItem("snapcal_weight");
+    if (lw) { $("#pWeight").value = lw; }
+    else {
+      var wd = await api("/api/weights?days=365");
+      var ws = (wd && wd.weights) || [];
+      if (ws.length) $("#pWeight").value = ws[ws.length - 1].weight;
+    }
   } catch (e) { /* non-critical */ }
 }
 
@@ -2148,19 +2156,17 @@ $("#saveBtn").addEventListener("click", async function(){
   }
   var btn = this;
   btn.disabled = true;
+  profile = body;
+  profLocalSave(body);                /* persist on the device FIRST — survives reopen + server redeploys */
   try {
     await api("/api/profile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    profile = body;
-    toast("Saved");
-  } catch (e) {
-    toast(e.message, true);
-  } finally {
-    btn.disabled = false;
-  }
+  } catch (e) { /* server best-effort; it's already saved on the device */ }
+  toast("Saved");
+  btn.disabled = false;
 });
 
 /* ---------------- premium / paywall ---------------- */
@@ -3614,12 +3620,13 @@ $("#saveWeightBtn").addEventListener("click", async function(){
   var v = parseFloat($("#pWeight").value);
   if (!(v > 0)) { toast("Enter a valid weight", true); return; }
   var btn = this; btn.disabled = true;
+  try { localStorage.setItem("snapcal_weight", String(v)); } catch(e){}   /* persist on device — survives reopen + redeploys */
   try {
     await api("/api/weight", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ date: todayStr(), weight: v }) });
-    toast("Weight saved");
-  } catch (e) { toast(e.message, true); }
-  finally { btn.disabled = false; }
+  } catch (e) { /* server best-effort; saved on the device regardless */ }
+  toast("Weight saved");
+  btn.disabled = false;
 });
 async function loadWeights(){
   try {
@@ -3654,16 +3661,13 @@ function renderWeightChart(w){
   $("#todayDate").textContent = new Date().toLocaleDateString(undefined, {
     weekday: "long", month: "long", day: "numeric"
   });
+  var localP = profLocalGet();
+  if (localP) profile = profFrom(localP);            /* device copy survives reopens + redeploys */
   try {
     var data = await api("/api/profile");
-    if (data) profile = {
-      daily_calories: int(data.daily_calories) || 2000,
-      protein_g: int(data.protein_g) || 150,
-      carbs_g: int(data.carbs_g) || 200,
-      fat_g: int(data.fat_g) || 65
-    };
+    if (data && !localP) profile = profFrom(data);   /* first run on this device -> seed from server */
   } catch (e) {
-    /* server may still be booting; defaults keep the UI usable */
+    /* server may still be booting/redeployed; the device copy + defaults keep the UI usable */
   }
   fillProfile();
   updateScanHint();
