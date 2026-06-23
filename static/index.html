@@ -1394,6 +1394,34 @@ function makeThumb(file){
   });
 }
 
+/* Speed up Analyze: shrink the photo on the phone before upload (a food pic reads fine at ~1024px).
+   Turns a multi-MB camera photo into a few hundred KB -> faster upload AND faster AI vision.
+   Falls back to the original file if the browser can't decode it (e.g. some HEIC). */
+function downscaleForAnalysis(file){
+  return new Promise(function(resolve){
+    try {
+      if (!file || file.size < 400 * 1024) { resolve(file); return; }   /* already small -> send as-is */
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        var max = 1024;
+        var s = Math.min(max / img.width, max / img.height, 1);
+        if (s >= 1) { URL.revokeObjectURL(url); resolve(file); return; }
+        var w = Math.round(img.width * s), h = Math.round(img.height * s);
+        var c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        try {
+          c.toBlob(function(blob){ resolve(blob && blob.size < file.size ? blob : file); }, "image/jpeg", 0.72);
+        } catch (e) { resolve(file); }
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); resolve(file); };   /* can't decode -> original still works */
+      img.src = url;
+    } catch (e) { resolve(file); }
+  });
+}
+
 $("#analyzeBtn").addEventListener("click", async function(){
   if (!selectedFile) { toast("Pick a photo first", true); return; }
   if (!isPremium() && scansLeft() <= 0) { openPaywall(); return; }
@@ -1401,8 +1429,9 @@ $("#analyzeBtn").addEventListener("click", async function(){
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Analyzing your food…';
   try {
+    var sendImg = await downscaleForAnalysis(selectedFile);   /* shrink before upload -> faster analyze */
     var fd = new FormData();
-    fd.append("photo", selectedFile, selectedFile.name || "photo.jpg");
+    fd.append("photo", sendImg, "photo.jpg");
     fd.append("goal", goal);
     var data = await api("/api/analyze", { method: "POST", body: fd });
     analyzeResult = normalizeResult(data);

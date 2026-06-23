@@ -526,6 +526,7 @@ def analyze():
             ],
             config=genai.types.GenerateContentConfig(
                 response_mime_type="application/json",
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),  # skip the reasoning step -> faster analyze
             ),
         )
         result = normalize_analysis(parse_gemini_json(resp.text))
