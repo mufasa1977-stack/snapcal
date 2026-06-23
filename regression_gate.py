@@ -114,7 +114,7 @@ def main():
         page.on("console", on_console)
         page.on("pageerror", lambda e: errors.append(str(e)[:160]))
 
-        page.add_init_script("try{localStorage.setItem('snapcal_goal','lose_weight');}catch(e){}")
+        page.add_init_script("try{localStorage.setItem('snapcal_goal','lose_weight');localStorage.setItem('snapcal_c_snapcal_loc_primed','1');}catch(e){}")  # pre-prime location (lsGet/lsSet namespace keys with 'snapcal_c_') so geo checks aren't blocked by the one-time primer
         page.goto(BASE + "/?gate=1", wait_until="domcontentloaded", timeout=20000)
         page.evaluate("() => { window.premiumActive = true; try { goal = 'lose_weight'; } catch(e){} }")
         page.evaluate("() => switchTab('eatout')")
@@ -420,6 +420,26 @@ def main():
         check("nutrition: USDA facts card renders (food + calories + USDA source)",
               nu["input"] and nu["hasFood"] and nu["hasCals"] and nu["hasSource"] and nu["rows"] >= 3,
               "rows=" + str(nu["rows"]) + " source=" + str(nu["hasSource"]))
+
+        # LOCATION: one-time privacy primer -> explain once, set flag on Allow, never re-ask
+        prim = page.evaluate("""async () => {
+            localStorage.removeItem('snapcal_c_snapcal_loc_primed');
+            snapGeo(function(){}, function(){}, {});
+            var ov = document.getElementById('locPrimer');
+            var visible = !!ov && getComputedStyle(ov).display !== 'none';
+            var body = ov ? ((ov.querySelector('.locp-body')||{}).textContent || '') : '';
+            var hasPrivacy = /private/i.test(body) && /once/i.test(body) && /never shared/i.test(body);
+            var primedBefore = localStorage.getItem('snapcal_c_snapcal_loc_primed');
+            if (ov) ov.querySelector('.locp-allow').click();
+            var primedAfter = localStorage.getItem('snapcal_c_snapcal_loc_primed');
+            var hidden = ov ? getComputedStyle(ov).display === 'none' : false;
+            snapGeo(function(){}, function(){}, {});                 // primed now -> must NOT reshow
+            var reshown = ov ? getComputedStyle(ov).display !== 'none' : false;
+            return { visible: visible, hasPrivacy: hasPrivacy, primedBefore: primedBefore, primedAfter: primedAfter, hidden: hidden, reshown: reshown };
+        }""")
+        check("location: one-time primer (privacy + 'asked once') -> Allow sets flag, then never re-asks",
+              prim["visible"] and prim["hasPrivacy"] and not prim["primedBefore"] and prim["primedAfter"] and prim["hidden"] and not prim["reshown"],
+              "visible=%s privacy=%s primed:%s->%s hidden=%s reshown=%s" % (prim["visible"], prim["hasPrivacy"], prim["primedBefore"], prim["primedAfter"], prim["hidden"], prim["reshown"]))
 
         # FOOD PHOTOS: pick images go through the real per-dish lookup, not the old mismatched category jpg
         fi = page.evaluate("""() => {

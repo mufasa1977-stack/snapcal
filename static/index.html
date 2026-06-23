@@ -441,6 +441,15 @@
   .nf-row span:last-child{font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
   .nf-src{font-size:11.5px;color:var(--ink3);margin-top:11px;font-weight:600}
   .nf-empty{font-size:13.5px;color:var(--ink2);text-align:center;padding:6px;line-height:1.45}
+  .locp-overlay{position:fixed;inset:0;z-index:9999;background:rgba(15,20,30,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:22px}
+  .locp-card{background:var(--card);border-radius:20px;max-width:340px;width:100%;padding:26px 22px 18px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:locpIn .25s ease}
+  @keyframes locpIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+  .locp-ic{font-size:40px;line-height:1;margin-bottom:8px}
+  .locp-title{font-size:19px;font-weight:800;color:var(--ink);margin-bottom:8px}
+  .locp-body{font-size:14px;color:var(--ink2);line-height:1.5;margin-bottom:18px}
+  .locp-body b{color:var(--ink);font-weight:700}
+  .locp-allow{display:block;width:100%;border:none;background:var(--brand);color:#fff;font-weight:800;font-size:15px;border-radius:13px;padding:13px;cursor:pointer;font-family:inherit}
+  .locp-skip{display:block;width:100%;border:none;background:transparent;color:var(--ink3);font-weight:600;font-size:14px;padding:11px;margin-top:4px;cursor:pointer;font-family:inherit}
   a.nm-li{text-decoration:none;color:inherit}
   .store-list{margin-top:2px}
   .store-logo{background:#fff;overflow:hidden;position:relative}
@@ -1790,11 +1799,52 @@ function closeSheet(){ $("#sheet").classList.remove("show"); }
 var _chatMsgs = [], _voiceRec = null, _voiceListening = false;
 var _voiceSupported = ("webkitSpeechRecognition" in window) || ("SpeechRecognition" in window);
 var _chatNearby = [], _chatHasLoc = false, _chatLocTried = false, _ttsVoice = null, _chatRouteTo = "";
+/* ---------------- Location permission: explain ONCE, ask once, never nag ----------------
+   The browser remembers a granted site forever, so users are NEVER re-prompted after the first
+   allow. We add a one-time, plain-English primer the FIRST time a location feature is used, so
+   people understand WHY we ask and that it stays private — then hand off to the browser's own
+   one-time prompt. After that, snapGeo() goes straight through (the browser owns the state). */
+function showLocPrimer(onAllow, onDismiss){
+  var ov = document.getElementById("locPrimer");
+  if (!ov){
+    ov = document.createElement("div");
+    ov.id = "locPrimer"; ov.className = "locp-overlay";
+    ov.innerHTML =
+      '<div class="locp-card" role="dialog" aria-modal="true">' +
+        '<div class="locp-ic">📍</div>' +
+        '<div class="locp-title">Find healthy food near you</div>' +
+        '<div class="locp-body">SnapCal uses your location to show healthy restaurants and stores nearby — and along your drive. ' +
+        'Your location stays <b>private</b> — it’s used only to find nearby options, and it’s <b>never shared or sold</b>. ' +
+        'You’ll only be asked this once.</div>' +
+        '<button class="locp-allow" type="button">Allow location</button>' +
+        '<button class="locp-skip" type="button">Not now</button>' +
+      '</div>';
+    document.body.appendChild(ov);
+  }
+  ov.style.display = "flex";
+  function done(){ ov.style.display = "none"; }
+  ov.querySelector(".locp-allow").onclick = function(){ done(); if (onAllow) onAllow(); };
+  ov.querySelector(".locp-skip").onclick  = function(){ done(); if (onDismiss) onDismiss(); };
+}
+function snapGeo(onOk, onErr, opts){
+  var g = navigator.geolocation;
+  if (!g){ if (onErr) onErr({ code: 2, message: "unsupported" }); return; }
+  if (lsGet("snapcal_loc_primed")){                  /* explained once already + browser remembers the grant -> straight through, never re-ask */
+    g.getCurrentPosition(onOk, onErr, opts); return;
+  }
+  showLocPrimer(function(){                           /* first time only: they understand + agreed -> hand to the browser's own one-time prompt */
+    lsSet("snapcal_loc_primed", 1);
+    g.getCurrentPosition(onOk, onErr, opts);
+  }, function(){
+    if (onErr) onErr({ code: 1, message: "dismissed" });   /* "Not now": soft, no nag — they can tap any location feature again later */
+  });
+}
+
 /* Give Coach Cal real eyes: if a destination is saved, find food ALONG the drive; else just what's near now. */
 function loadChatNearby(){
   if (_chatLocTried || !navigator.geolocation) return;
   _chatLocTried = true;
-  navigator.geolocation.getCurrentPosition(function(pos){
+  snapGeo(function(pos){
     _chatHasLoc = true;
     var dest = null; try { dest = JSON.parse(localStorage.getItem("snapcal_dest") || "null"); } catch(e){}
     if (dest && dest.lat != null){
@@ -2798,7 +2848,7 @@ function renderCombined(modeBar){
 function loadCombined(){
   var listEl = document.getElementById("combinedList");
   if (!navigator.geolocation){ if (listEl) listEl.innerHTML = nearMeMsg("Turn on location to see restaurants &amp; stores near you."); return; }
-  navigator.geolocation.getCurrentPosition(async function(pos){
+  snapGeo(async function(pos){
     var center = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     if (listEl) listEl.innerHTML = '<div class="nearme-msg"><span class="spinner" style="display:inline-block;width:15px;height:15px;border:2px solid rgba(128,128,128,.25);border-top-color:var(--brand);border-radius:50%;vertical-align:-2px;animation:spin .7s linear infinite"></span> Finding restaurants &amp; stores near you&hellip;</div>';
     if (!nmMapObj) initNearMap(center, []);   /* INSTANT map of your area so it's NEVER a blank grey box during the lookup */
@@ -2945,7 +2995,7 @@ function loadStoresNearMe(){
   if (last) renderStores(last);   /* INSTANT: last stores now, refresh below */
   else body.innerHTML = '<div class="nearme-msg"><span class="spinner" style="display:inline-block;width:15px;height:15px;border:2px solid rgba(128,128,128,.25);border-top-color:var(--brand);border-radius:50%;vertical-align:-2px;animation:spin .7s linear infinite"></span> Finding grocery stores near you&hellip;</div>';
   if (!navigator.geolocation){ if (!last) body.innerHTML = nearMeMsg("Turn on location to find stores near you."); return; }
-  navigator.geolocation.getCurrentPosition(async function(pos){
+  snapGeo(async function(pos){
     var ck = "stores_" + pos.coords.latitude.toFixed(2) + "_" + pos.coords.longitude.toFixed(2);
     try {
       var data = await apiNearbyRetry("/api/nearby?kind=store&lat=" + pos.coords.latitude + "&lng=" + pos.coords.longitude);
@@ -3105,7 +3155,7 @@ function doNearMe(){
   else res.innerHTML = '<div class="nearme-msg"><span class="spinner" style="display:inline-block;width:15px;height:15px;border:2px solid rgba(128,128,128,.25);border-top-color:var(--brand);border-radius:50%;vertical-align:-2px;animation:spin .7s linear infinite"></span> Finding food around you…</div>';
   if (!navigator.geolocation){ if (!last) res.innerHTML = nearMeMsg("Location isn’t available here — search by name instead."); return; }
   if (btn) btn.classList.add("loading");
-  navigator.geolocation.getCurrentPosition(async function(pos){
+  snapGeo(async function(pos){
     var center = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     var ck = "near_" + pos.coords.latitude.toFixed(2) + "_" + pos.coords.longitude.toFixed(2);
     if (!last && !lsGet(ck)) renderNearMe({ center: center, loading: true });   /* INSTANT map on your location — NEVER block on the (slow/flaky) lookup; pins fill in when it returns */
