@@ -355,6 +355,17 @@ def main():
               cd["fits"] and cd["hasCurated"] and (cd["hasMeat"] is False) and (cd["wentToAi"] is False),
               "curated=" + str(cd["hasCurated"]) + " meat=" + str(cd["hasMeat"]) + " wentToAI=" + str(cd["wentToAi"]))
 
+        # "Take me there" -> one tap from picks to Google Maps directions to that chain
+        dirbtn = page.evaluate("""() => {
+            window._diet=''; window._allergies=[];
+            renderChainSheet({ chain:'Royal Farms', best_picks:{ lose_weight:[{name:'Grilled Chicken', calories:300, protein_g:30}] } });
+            var a = document.querySelector('#sheetBody .cd-dir-btn');
+            return { hasBtn: !!a, label: a ? a.textContent : '', href: a ? (a.getAttribute('href')||'') : '' };
+        }""")
+        check("eat-out: 'Take me there' button -> Google Maps directions to the chain",
+              dirbtn["hasBtn"] and ("Take me there" in dirbtn["label"]) and ("google.com/maps/dir" in dirbtn["href"]) and ("Royal%20Farms" in dirbtn["href"]),
+              "btn=" + str(dirbtn["hasBtn"]) + " href=" + str(dirbtn["href"]))
+
         # ASK COACH CAL: free-text "what should I get at <any restaurant>" returns a game plan
         ac = page.evaluate("""async () => {
             var cardHasInput = /askCoachInput/.test(askCoachCardHTML());

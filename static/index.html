@@ -450,6 +450,8 @@
   .locp-body b{color:var(--ink);font-weight:700}
   .locp-allow{display:block;width:100%;border:none;background:var(--brand);color:#fff;font-weight:800;font-size:15px;border-radius:13px;padding:13px;cursor:pointer;font-family:inherit}
   .locp-skip{display:block;width:100%;border:none;background:transparent;color:var(--ink3);font-weight:600;font-size:14px;padding:11px;margin-top:4px;cursor:pointer;font-family:inherit}
+  .cd-dir-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin:12px 0 2px;border:none;background:var(--brand);color:#fff;font-weight:800;font-size:15px;border-radius:13px;padding:13px;text-decoration:none;box-sizing:border-box}
+  .cd-dir-btn:active{opacity:.85}
   a.nm-li{text-decoration:none;color:inherit}
   .store-list{margin-top:2px}
   .store-logo{background:#fff;overflow:hidden;position:relative}
@@ -2980,6 +2982,8 @@ function storeTileHTML(name){
 }
 function prettyShop(s){ return ({supermarket:"Supermarket", convenience:"Convenience store", grocery:"Grocery", department_store:"Department store", wholesale:"Warehouse club", greengrocer:"Produce market"})[s] || "Store"; }
 function storeDirections(s){ return "https://www.google.com/maps/dir/?api=1&destination=" + (s.lat || 0) + "," + (s.lng || 0); }
+/* "Take me there" for a chain (no fixed coords) — Google routes from the user's current location to the NEAREST one. */
+function chainDirections(name){ return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(name); }
 var _storeMood = 1;   /* Stores meter (same idea as Eat Out): 0 = freshest grocery .. 3 = quick-stop convenience */
 /* Store "healthiness" tier: 1 = real grocery (supermarket/produce/natural) · 2 = big-box/warehouse · 3 = quick-stop convenience. */
 function storeTier(s){
@@ -3488,7 +3492,8 @@ $("#sheetBody").addEventListener("input", function(e){
 function renderChainSheet(r){
   _sheetR = r;
   var mood = moodFromGoal(goal);
-  var title = '<div class="sheet-h" style="display:flex;align-items:center;gap:11px">' + brandTile(r.chain, true) + '<span>' + esc(r.chain) + '</span></div>';
+  var title = '<div class="sheet-h" style="display:flex;align-items:center;gap:11px">' + brandTile(r.chain, true) + '<span>' + esc(r.chain) + '</span></div>' +
+    '<a class="cd-dir-btn" href="' + chainDirections(r.chain) + '" target="_blank" rel="noopener noreferrer">🧭 Take me there &nearr;</a>';
   var verdictHtml = (r.verdict ? '<div class="cd-verdict">' + esc(r.verdict) + '</div>' : '');
   var extras = '';
   var sw = r.smart_swaps || [];
