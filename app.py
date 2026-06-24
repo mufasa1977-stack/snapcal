@@ -305,12 +305,19 @@ def init_db():
             con.execute("ALTER TABLE meals ADD COLUMN detail_json TEXT")
         if "thumb" not in cols:
             con.execute("ALTER TABLE meals ADD COLUMN thumb TEXT")
+        if "uid" not in cols:
+            con.execute("ALTER TABLE meals ADD COLUMN uid TEXT")
         con.commit()
     finally:
         con.close()
 
 
 # ---------------------------------------------------------------- helpers
+
+def _uid():
+    """Per-device id the client sends on every request (X-Device-Id) — scopes each
+       user's diary so two testers never see each other's meals."""
+    return (request.headers.get("X-Device-Id") or "").strip() or "_shared"
 
 def _int(value, default=0):
     try:
@@ -1544,8 +1551,8 @@ def add_meal():
     try:
         cur = con.execute(
             """INSERT INTO meals(date, time, name, calories, protein_g, carbs_g, fat_g,
-                                 items_json, detail_json, thumb)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                 items_json, detail_json, thumb, uid)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(d.get("date", "")),
                 str(d.get("time", "")),
@@ -1557,6 +1564,7 @@ def add_meal():
                 items_json,
                 detail_json,
                 thumb,
+                _uid(),
             ),
         )
         con.commit()
@@ -1573,8 +1581,8 @@ def list_meals():
         rows = con.execute(
             """SELECT id, date, time, name, calories, protein_g, carbs_g, fat_g,
                       items_json, detail_json, thumb
-               FROM meals WHERE date = ? ORDER BY time, id""",
-            (day,),
+               FROM meals WHERE date = ? AND uid = ? ORDER BY time, id""",
+            (day, _uid()),
         ).fetchall()
     finally:
         con.close()
@@ -1587,7 +1595,7 @@ def list_meals():
 def delete_meal(meal_id):
     con = get_db()
     try:
-        con.execute("DELETE FROM meals WHERE id = ?", (meal_id,))
+        con.execute("DELETE FROM meals WHERE id = ? AND uid = ?", (meal_id, _uid()))
         con.commit()
     finally:
         con.close()
@@ -1611,10 +1619,10 @@ def history():
                       SUM(carbs_g)   AS carbs_g,
                       SUM(fat_g)     AS fat_g
                FROM meals
-               WHERE date >= ?
+               WHERE date >= ? AND uid = ?
                GROUP BY date
                ORDER BY date DESC""",
-            (cutoff,),
+            (cutoff, _uid()),
         ).fetchall()
     finally:
         con.close()
