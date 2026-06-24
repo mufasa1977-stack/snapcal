@@ -1423,7 +1423,7 @@ function _bindStepper(btn, dir){
   _bindStepper($("#calMinus"), -1);
   _bindStepper($("#calPlus"), 1);
 
-  var dragging = false, lastAng = 0, accDeg = 0, startGoal = 0;
+  var dragging = false, lastAng = 0, accDeg = 0, startGoal = 0, armed = false;
   function ctr(){ var r = box.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
   function ang(e){ var c = ctr(); return Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180 / Math.PI; }
   function dist(e){ var c = ctr(); return Math.hypot(e.clientX - c.x, e.clientY - c.y); }
@@ -1431,9 +1431,9 @@ function _bindStepper(btn, dir){
   box.addEventListener("pointerdown", function(e){
     if (e.target.closest(".cal-step")) return;   /* let the +/- buttons do their thing */
     if (dist(e) < 24) return;                     /* dead zone at the hub = no jitter */
-    dragging = true; accDeg = 0; startGoal = int(profile.daily_calories); lastAng = ang(e);
-    box.classList.add("dialing");
-    setGoalDot(lastAng);
+    /* deliberate: the green marker stays put at 12 o'clock; we do NOT jump it to your finger,
+       and nothing changes until you actually TURN the wheel past a threshold (below). */
+    dragging = true; accDeg = 0; armed = false; startGoal = int(profile.daily_calories); lastAng = ang(e);
     if (box.setPointerCapture) { try { box.setPointerCapture(e.pointerId); } catch(_){} }
   });
   box.addEventListener("pointermove", function(e){
@@ -1441,11 +1441,11 @@ function _bindStepper(btn, dir){
     var a = ang(e), d = a - lastAng;
     if (d > 180) d -= 360; else if (d < -180) d += 360;   /* unwrap across the top */
     accDeg += d; lastAng = a;
+    if (!armed){ if (Math.abs(accDeg) < 8) return; armed = true; box.classList.add("dialing"); }  /* a tap or tiny brush = no change */
     _adjustGoal(startGoal + accDeg * GOAL_SENS);
-    setGoalDot(a);
     e.preventDefault();
   });
-  function endDrag(){ if (!dragging) return; dragging = false; box.classList.remove("dialing"); _commitGoal(); }
+  function endDrag(){ if (!dragging) return; dragging = false; box.classList.remove("dialing"); if (armed) _commitGoal(); }
   box.addEventListener("pointerup", endDrag);
   box.addEventListener("pointercancel", endDrag);
 })();
