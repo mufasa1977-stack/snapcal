@@ -16,23 +16,23 @@
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
   :root{
-    --bg:#F1F0EB;
+    --bg:#EDE6D8;
     --card:#FFFFFF;
-    --ink:#16201C;
-    --ink2:#5B6661;
-    --ink3:#9AA3A0;
-    --line:#ECECE7;
-    --brand:#059669;
+    --ink:#1A211C;
+    --ink2:#49514A;
+    --ink3:#79806F;
+    --line:#ECE4D4;
+    --brand:#1E8C63;
     --accent:var(--brand);
-    --soft:#F6F6F2;
-    --track:#EDEDE8;
-    --pro:#F26D6D;
-    --carb:#E8A24C;
-    --fat:#5B8DEF;
-    --good:#16A34A;
-    --bad:#DC2626;
+    --soft:#F4EFE6;
+    --track:#ECE5D6;
+    --pro:#2FA877;
+    --carb:#D49A33;
+    --fat:#DB5F3C;
+    --good:#1E8C63;
+    --bad:#DB5F3C;
     --r:22px;
-    --shadow:0 10px 30px rgba(20,32,28,.09),0 2px 6px rgba(20,32,28,.04);
+    --shadow:0 16px 36px rgba(40,34,20,.13),0 3px 9px rgba(40,34,20,.06);
   }
   body.dark{
     --bg:#181C1A;
@@ -41,12 +41,18 @@
     --ink2:#A6AFAB;
     --ink3:#6E7873;
     --line:#323A36;
-    --brand:#10B981;
+    --brand:#6E8870;
     --soft:#20251F;
     --track:#2C322E;
     --shadow:0 6px 20px rgba(0,0,0,.4);
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* Accessibility: respect the OS "reduce motion" setting (vestibular safety + App Store review).
+     Gauges set their final stroke-dashoffset/text imperatively in JS, so collapsing durations
+     still lands them on the final value — only the animated sweep is skipped. */
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+  }
   html,body{height:100%}
   body{
     background:var(--bg);
@@ -78,10 +84,26 @@
   }
   /* ---------- ring (hero calorie gauge) ---------- */
   .ring-wrap{display:flex;flex-direction:column;align-items:center;padding:10px 0 6px}
-  .ring-box{position:relative;width:206px;height:206px}
+  .ring-box{position:relative;width:206px;height:206px;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;transition:transform .15s ease}
+  .ring-box::before{content:"";position:absolute;inset:-6px;border-radius:50%;z-index:-1;background:radial-gradient(circle at 32% 24%,#ffffff 0%,#eef2ef 30%,#d9e2dc 62%,#bccac3 100%);box-shadow:inset 0 -16px 32px rgba(20,45,32,.24),inset 0 13px 26px rgba(255,255,255,.95),0 26px 44px rgba(20,45,32,.30)}
+  body.dark .ring-box::before{background:radial-gradient(circle at 33% 27%,#3d453f 0%,#2f352f 38%,#242922 70%,#171b18 100%);box-shadow:inset 0 -12px 26px rgba(0,0,0,.5),inset 0 10px 22px rgba(255,255,255,.07),0 18px 32px rgba(0,0,0,.5)}
+  @keyframes orbFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  .ring-box.dialing{cursor:grabbing;transform:scale(1.03)}
+  .ring-box.dialing::before{filter:brightness(1.08) contrast(1.04)}
+  .ring-glint{fill:none;stroke:#fffaf0;stroke-width:15;stroke-linecap:round;stroke-dasharray:26 477;stroke-dashoffset:0;opacity:0;transform-origin:50% 50%;filter:drop-shadow(0 0 4px #ffffff) drop-shadow(0 0 11px rgba(255,240,205,.9))}
+  .ring-box.bling .ring-glint{animation:ringSweep .72s ease-in-out}
+  .ring-box.bling::before{animation:orbFlash .72s ease-out}
+  @keyframes ringSweep{0%{opacity:0;transform:rotate(-70deg)}18%{opacity:1}82%{opacity:1}100%{opacity:0;transform:rotate(310deg)}}
+  @keyframes orbFlash{0%{filter:brightness(1)}30%{filter:brightness(1.22) saturate(1.12)}100%{filter:brightness(1)}}
+  .ring-box.dialing svg{filter:drop-shadow(0 0 16px rgba(16,185,129,.5))}
+  .goal-dot{fill:var(--brand);stroke:#fff;stroke-width:3;opacity:0;transition:opacity .2s ease;filter:drop-shadow(0 1px 3px rgba(5,150,105,.55))}
+  .ring-box.dialing .goal-dot{opacity:1}
   .ring-box svg{width:206px;height:206px;display:block}
+  .cal-steps{display:flex;gap:18px;margin-top:9px;justify-content:center;pointer-events:auto}
+  .cal-step{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--soft);color:var(--ink);font-size:19px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;padding:0;box-shadow:0 1px 3px rgba(20,32,28,.10);transition:transform .1s,background .15s}
+  .cal-step:active{transform:scale(.88);background:var(--brand);border-color:var(--brand);color:#fff}
   .ring-bg,.ring-fg{fill:none;stroke-width:15}
-  .ring-bg{stroke:var(--track)}
+  .ring-bg{stroke:url(#goldTrack)}
   .ring-fg{
     stroke:url(#calGrad);
     stroke-linecap:round;
@@ -90,7 +112,7 @@
     transform:rotate(-90deg);
     transform-origin:50% 50%;
     transition:stroke-dashoffset 1s cubic-bezier(.34,1.1,.4,1),stroke .3s;
-    filter:drop-shadow(0 3px 8px rgba(5,150,105,.30));
+    filter:drop-shadow(0 0 5px rgba(16,185,129,.55)) drop-shadow(0 4px 9px rgba(5,150,105,.38));
   }
   .ring-fg.over{stroke:var(--bad);filter:none}
   .ring-fg.warn{stroke:#F59E0B;filter:drop-shadow(0 3px 8px rgba(245,158,11,.30))}
@@ -324,7 +346,7 @@
     padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:13px}
   .coach-cta:active{background:var(--soft)}
   .coach-cta-ic{flex:none;width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(135deg,#34D399,#059669);color:#fff;box-shadow:0 4px 12px rgba(5,150,105,.32)}
+    background:linear-gradient(135deg,#7E977F,#4F6651);color:#fff;box-shadow:0 4px 12px rgba(5,150,105,.32)}
   .coach-cta-ic svg{width:22px;height:22px;display:block}
   .coach-cta-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
   .coach-cta-tx b{font-size:14.5px;font-weight:700}
@@ -338,7 +360,7 @@
   .coach-meal-ph{flex:none;width:78px;height:78px;border-radius:12px;overflow:hidden;background:linear-gradient(135deg,#E9EEEB,#D6DDD9)}
   body.dark .coach-meal-ph{background:linear-gradient(135deg,#2C322E,#222724)}
   .coach-meal-ph img{width:100%;height:100%;object-fit:cover;display:block}
-  .coach-meal-ph.noimg{background:linear-gradient(135deg,var(--brand),#047857)}
+  .coach-meal-ph.noimg{background:linear-gradient(135deg,var(--brand),#4F6651)}
   .coach-meal-b{flex:1;min-width:0}
   .coach-meal-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
   .coach-meal-n{font-size:15px;font-weight:700}
@@ -363,7 +385,7 @@
   .eat-empty{text-align:center;color:var(--ink2);font-size:13.5px;line-height:1.5;padding:24px 16px;
     background:var(--card);border-radius:var(--r);box-shadow:var(--shadow)}
   .nearme-btn{width:100%;border:none;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:9px;
-    background:linear-gradient(135deg,#34D399,#059669);color:#fff;font-size:14.5px;font-weight:750;
+    background:linear-gradient(135deg,#7E977F,#4F6651);color:#fff;font-size:14.5px;font-weight:750;
     padding:13px 16px;border-radius:14px;margin:0 0 12px;box-shadow:0 6px 16px rgba(5,150,105,.28)}
   .nearme-btn svg{width:19px;height:19px}
   .nearme-btn:active{transform:scale(.98)}
@@ -456,9 +478,10 @@
   .scan-x:active{background:rgba(0,0,0,.75)}
   /* top quick-access bar — Coach Cal / Grocery / Meal Plan, no scrolling */
   .quick-bar{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin:0 0 16px}
-  .quick-tab{display:flex;flex-direction:column;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px 6px 11px;cursor:pointer;font-family:inherit;box-shadow:var(--shadow);color:var(--ink);transition:transform .12s}
-  .quick-tab:active{transform:scale(.96)}
-  .quick-tab .qt-ic{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;color:#fff}
+  .quick-bar-surface{}
+  .quick-tab{display:flex;flex-direction:column;align-items:center;gap:7px;background:linear-gradient(180deg,var(--card),var(--soft));border:1px solid var(--line);border-radius:16px;padding:13px 6px 11px;cursor:pointer;font-family:inherit;box-shadow:0 8px 18px rgba(20,45,32,.15),0 2px 5px rgba(20,45,32,.09),inset 0 1px 0 rgba(255,255,255,.65);color:var(--ink);transition:transform .12s,box-shadow .12s}
+  .quick-tab:active{transform:translateY(2px) scale(.97);box-shadow:0 3px 8px rgba(20,45,32,.16)}
+  .quick-tab .qt-ic{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 5px 12px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.45),inset 0 -3px 6px rgba(0,0,0,.14)}
   .quick-tab .qt-ic svg{width:21px;height:21px;display:block}
   .quick-tab .qt-l{font-size:12px;font-weight:750;line-height:1.1;text-align:center;color:var(--ink)}
   a.nm-li{text-decoration:none;color:inherit}
@@ -512,7 +535,7 @@
   .cd-pick-ph{flex:none;width:74px;height:74px;border-radius:11px;overflow:hidden;background:linear-gradient(135deg,#E9EEEB,#D6DDD9)}
   body.dark .cd-pick-ph{background:linear-gradient(135deg,#2C322E,#222724)}
   .cd-pick-ph img{width:100%;height:100%;object-fit:cover;display:block}
-  .cd-pick-ph.noimg{background:linear-gradient(135deg,var(--brand),#047857)}
+  .cd-pick-ph.noimg{background:linear-gradient(135deg,var(--brand),#4F6651)}
   .cd-pick-b{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
   .cd-pick,.coach-meal{cursor:pointer}
   .cd-meter{flex:0 0 100%;display:flex;align-items:center;gap:14px;margin-top:4px;padding-top:11px;border-top:1px solid var(--line);animation:cmIn .24s ease both}
@@ -526,7 +549,7 @@
   .cm-h{font-size:13.5px;font-weight:650;line-height:1.3}
   .cm-s{font-size:12px;color:var(--ink2);margin-top:3px;font-weight:600}
   .about-card{text-align:center}
-  .about-badge{width:52px;height:52px;border-radius:15px;margin:2px auto 12px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#34D399,#059669);color:#fff;box-shadow:0 6px 16px rgba(5,150,105,.3)}
+  .about-badge{width:52px;height:52px;border-radius:15px;margin:2px auto 12px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7E977F,#4F6651);color:#fff;box-shadow:0 6px 16px rgba(5,150,105,.3)}
   .about-badge svg{width:28px;height:28px;display:block}
   .about-h{font-size:18px;font-weight:800;letter-spacing:-.02em;margin-bottom:9px}
   .about-p{font-size:13.5px;color:var(--ink2);line-height:1.55;margin:0 auto 10px;max-width:42ch}
@@ -683,15 +706,35 @@
 
     <div class="quick-bar">
       <button class="quick-tab" id="coachBtn" type="button">
-        <span class="qt-ic" style="background:linear-gradient(135deg,#60A5FA,#2563EB)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="2.5" y="9" width="8.6" height="5" rx="2.2"/><path fill-rule="evenodd" clip-rule="evenodd" d="M14 7a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm0 4.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg></span>
+        <span class="qt-ic qt-ref" style="background:linear-gradient(135deg,#F1F3F6,#D7DCE3)"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:32px;height:32px">
+          <defs><clipPath id="refTorsoClip"><rect x="7.6" y="8" width="8.8" height="7.6" rx="2.6"/></clipPath></defs>
+          <circle cx="12" cy="5" r="2.7" fill="#F4C49A"/>
+          <path d="M9.2 5.1a2.8 2.8 0 0 1 5.6 0Z" fill="#1f1f1f"/>
+          <circle cx="14.7" cy="6.5" r="1.05" fill="#1f1f1f"/>
+          <g clip-path="url(#refTorsoClip)">
+            <rect x="7.6" y="8" width="8.8" height="7.6" fill="#fff"/>
+            <rect x="9.2" y="8" width="1.5" height="7.6" fill="#1f1f1f"/>
+            <rect x="12.3" y="8" width="1.5" height="7.6" fill="#1f1f1f"/>
+          </g>
+          <rect x="7.6" y="8" width="8.8" height="7.6" rx="2.6" fill="none" stroke="#1f1f1f" stroke-width=".7"/>
+          <rect x="5.9" y="8.7" width="1.8" height="5" rx=".9" fill="#F4C49A"/>
+          <rect x="16.3" y="8.7" width="1.8" height="5" rx=".9" fill="#F4C49A"/>
+          <rect x="8.2" y="15.2" width="7.6" height="3.9" rx="1.1" fill="#1f1f1f"/>
+          <rect x="9" y="18.8" width="2.1" height="2.6" fill="#1f1f1f"/>
+          <rect x="12.9" y="18.8" width="2.1" height="2.6" fill="#1f1f1f"/>
+          <path d="M8.3 21h3.2v1.1a.6.6 0 0 1-.6.6H8.9a.6.6 0 0 1-.6-.6Z" fill="#1f1f1f"/>
+          <path d="M12.5 21h3.2v1.1a.6.6 0 0 1-.6.6h-2a.6.6 0 0 1-.6-.6Z" fill="#1f1f1f"/>
+          <rect x="8.1" y="22.2" width="3.6" height=".7" rx=".35" fill="#fff" opacity=".9"/>
+          <rect x="12.3" y="22.2" width="3.6" height=".7" rx=".35" fill="#fff" opacity=".9"/>
+        </svg></span>
         <span class="qt-l">Coach Cal</span>
       </button>
       <button class="quick-tab" id="groceryBtn" type="button">
-        <span class="qt-ic" style="background:linear-gradient(135deg,#34D399,#047857)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.5 3h2l2.5 12.5a2 2 0 0 0 2 1.5h8.5a2 2 0 0 0 2-1.6L21.5 8H6"></path></svg></span>
+        <span class="qt-ic" style="background:linear-gradient(135deg,#7E977F,#4F6651)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.5 3h2l2.5 12.5a2 2 0 0 0 2 1.5h8.5a2 2 0 0 0 2-1.6L21.5 8H6"></path></svg></span>
         <span class="qt-l">Grocery</span>
       </button>
       <button class="quick-tab" id="mealplanBtn" type="button">
-        <span class="qt-ic" style="background:linear-gradient(135deg,#34D399,#0F766E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M3 9h18M8 2v4M16 2v4"></path></svg></span>
+        <span class="qt-ic" style="background:linear-gradient(135deg,#7E977F,#4F6651)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M3 9h18M8 2v4M16 2v4"></path></svg></span>
         <span class="qt-l">Meal Plan</span>
       </button>
     </div>
@@ -701,17 +744,30 @@
         <svg viewBox="0 0 200 200" aria-hidden="true">
           <defs>
             <linearGradient id="calGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#34D399"></stop>
-              <stop offset="55%" stop-color="#10B981"></stop>
-              <stop offset="100%" stop-color="#047857"></stop>
+              <stop offset="0%" stop-color="#7FCBA2"></stop>
+              <stop offset="55%" stop-color="#3FA877"></stop>
+              <stop offset="100%" stop-color="#1E8C63"></stop>
+            </linearGradient>
+            <linearGradient id="goldTrack" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#FFFFFF"></stop>
+              <stop offset="28%" stop-color="#ECEEEE"></stop>
+              <stop offset="55%" stop-color="#D2D6D6"></stop>
+              <stop offset="78%" stop-color="#B0B6B6"></stop>
+              <stop offset="100%" stop-color="#9AA0A0"></stop>
             </linearGradient>
           </defs>
           <circle class="ring-bg" cx="100" cy="100" r="80"></circle>
           <circle class="ring-fg" id="ringFg" cx="100" cy="100" r="80"></circle>
+          <circle class="ring-glint" id="ringGlint" cx="100" cy="100" r="80"></circle>
+          <circle class="goal-dot" id="goalDot" cx="100" cy="20" r="8"></circle>
         </svg>
         <div class="ring-center">
           <div class="big" id="ringBig">0</div>
           <div class="lbl" id="ringLbl">Calories remaining</div>
+          <div class="cal-steps">
+            <button class="cal-step" id="calMinus" type="button" aria-label="Lower daily goal">&minus;</button>
+            <button class="cal-step" id="calPlus" type="button" aria-label="Raise daily goal">+</button>
+          </div>
         </div>
       </div>
       <div class="ring-meta">
@@ -1301,6 +1357,98 @@ function renderToday(){
     '</div>';
   }).join("");
 }
+
+/* ---- calorie goal dial: rub around the ring to spin the daily goal, or tap +/- ---- */
+var GOAL_MIN = 800, GOAL_MAX = 6000, GOAL_SENS = 5; /* cal per degree of spin */
+var _goalCommitTimer = null;
+
+function _clampGoal(g){ return Math.max(GOAL_MIN, Math.min(GOAL_MAX, Math.round(g))); }
+
+function _showGoalEdit(){
+  var g = int(profile.daily_calories);
+  var big = $("#ringBig"); big.textContent = fmtNum(g); big.classList.remove("over");
+  $("#ringLbl").textContent = "Daily goal";
+  $("#metaGoal").textContent = fmtNum(g);
+}
+
+function _commitGoal(){
+  profLocalSave(profile);   /* device-local: survives reopen, no shared server state */
+  renderToday();            /* restore the live "remaining" display with the new goal */
+  _blingRing();             /* chrome "bling" glint the moment you land on a value */
+}
+function _blingRing(){
+  var box = document.querySelector(".ring-box");
+  if (!box) return;
+  box.classList.remove("bling"); void box.offsetWidth; box.classList.add("bling");
+  setTimeout(function(){ box.classList.remove("bling"); }, 760);
+}
+
+function _adjustGoal(newGoal){
+  profile.daily_calories = _clampGoal(newGoal);
+  _showGoalEdit();
+}
+
+function _bumpGoalCommit(){
+  if (_goalCommitTimer) clearTimeout(_goalCommitTimer);
+  _goalCommitTimer = setTimeout(_commitGoal, 1100);
+}
+
+/* accelerating +/- : the faster you tap or the longer you hold, the bigger each step (1 -> 5 -> 10 -> 20 -> 50) */
+var STEP_SEQ = [1, 1, 5, 5, 5, 10, 20, 50, 50];
+var _stepCount = 0, _stepIdle = null;
+function _stepSize(){ return STEP_SEQ[Math.min(_stepCount, STEP_SEQ.length - 1)]; }
+function _stepBump(){ _stepCount++; if (_stepIdle) clearTimeout(_stepIdle); _stepIdle = setTimeout(function(){ _stepCount = 0; }, 600); }
+function _bindStepper(btn, dir){
+  if (!btn) return;
+  var holdTimer = null, repeatTimer = null;
+  function fire(){ _adjustGoal(int(profile.daily_calories) + dir * _stepSize()); _stepBump(); _bumpGoalCommit(); }
+  function start(e){
+    e.preventDefault(); e.stopPropagation();
+    if (btn.setPointerCapture) { try { btn.setPointerCapture(e.pointerId); } catch(_){} }
+    fire();
+    holdTimer = setTimeout(function rep(){ fire(); repeatTimer = setTimeout(rep, Math.max(55, 200 - _stepCount * 14)); }, 360);
+  }
+  function stop(){ if (holdTimer) clearTimeout(holdTimer); if (repeatTimer) clearTimeout(repeatTimer); holdTimer = repeatTimer = null; }
+  btn.addEventListener("pointerdown", start);
+  btn.addEventListener("pointerup", stop);
+  btn.addEventListener("pointercancel", stop);
+}
+
+(function setupGoalDial(){
+  var box = document.querySelector(".ring-box");
+  if (!box) return;
+  var dot = document.querySelector("#goalDot");
+  function setGoalDot(deg){ if (!dot) return; var r = deg * Math.PI / 180; dot.setAttribute("cx", (100 + 80 * Math.cos(r)).toFixed(1)); dot.setAttribute("cy", (100 + 80 * Math.sin(r)).toFixed(1)); }
+
+  _bindStepper($("#calMinus"), -1);
+  _bindStepper($("#calPlus"), 1);
+
+  var dragging = false, lastAng = 0, accDeg = 0, startGoal = 0;
+  function ctr(){ var r = box.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+  function ang(e){ var c = ctr(); return Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180 / Math.PI; }
+  function dist(e){ var c = ctr(); return Math.hypot(e.clientX - c.x, e.clientY - c.y); }
+
+  box.addEventListener("pointerdown", function(e){
+    if (e.target.closest(".cal-step")) return;   /* let the +/- buttons do their thing */
+    if (dist(e) < 24) return;                     /* dead zone at the hub = no jitter */
+    dragging = true; accDeg = 0; startGoal = int(profile.daily_calories); lastAng = ang(e);
+    box.classList.add("dialing");
+    setGoalDot(lastAng);
+    if (box.setPointerCapture) { try { box.setPointerCapture(e.pointerId); } catch(_){} }
+  });
+  box.addEventListener("pointermove", function(e){
+    if (!dragging) return;
+    var a = ang(e), d = a - lastAng;
+    if (d > 180) d -= 360; else if (d < -180) d += 360;   /* unwrap across the top */
+    accDeg += d; lastAng = a;
+    _adjustGoal(startGoal + accDeg * GOAL_SENS);
+    setGoalDot(a);
+    e.preventDefault();
+  });
+  function endDrag(){ if (!dragging) return; dragging = false; box.classList.remove("dialing"); _commitGoal(); }
+  box.addEventListener("pointerup", endDrag);
+  box.addEventListener("pointercancel", endDrag);
+})();
 
 var MR_C = 2 * Math.PI * 28; /* mini-ring circumference, r=28 -> 175.93 */
 function renderMacro(key, eaten, goal){
