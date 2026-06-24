@@ -68,7 +68,7 @@
   }
   /* ---------- tabs ---------- */
   .tab{display:none}
-  .tab.active{display:block;animation:fadeUp .28s ease both}
+  .tab.active{display:block;animation:fadeUp .2s ease-out both}
   @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   /* ---------- header ---------- */
   .page-h{margin:8px 4px 16px}
@@ -1458,7 +1458,10 @@ function renderMacro(key, eaten, goal){
   if (ring) ring.style.strokeDashoffset = String(MR_C * (1 - frac));
   var c = $("#" + key + "Count");
   if (c) c.textContent = eaten + "g";
-  $("#" + key + "Val").textContent = "of " + goal + " g";
+  var remaining = Math.max(goal - eaten, 0);
+  $("#" + key + "Val").textContent = (eaten >= goal)
+    ? ("of " + goal + "g · goal hit ✓")
+    : ("of " + goal + "g · " + remaining + " to go");
 }
 
 $("#mealsList").addEventListener("click", async function(e){
