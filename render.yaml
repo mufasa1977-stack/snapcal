@@ -9,7 +9,15 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
     healthCheckPath: /
+    # PERSISTENT DISK — keeps snapcal.db (ALL user history) across every redeploy/update.
+    # Disks need a paid plan (not available on free): flip `plan: free` -> `plan: starter` above to enable.
+    disk:
+      name: snapcal-data
+      mountPath: /var/data
+      sizeGB: 1                  # ~$0.25/mo; SQLite for thousands of users fits easily
     envVars:
+      - key: SNAPCAL_DB_DIR      # app writes snapcal.db here so history SURVIVES redeploys
+        value: /var/data
       - key: GEMINI_API_KEY      # set in the Render dashboard (Secret) — never committed
         sync: false
       - key: SNAPCAL_PEXELS_KEY  # set in the Render dashboard (Secret) — real per-dish photos

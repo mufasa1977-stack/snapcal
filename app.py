@@ -23,7 +23,15 @@ except ImportError:
     CORS = None
 
 APP_DIR = Path(__file__).resolve().parent
-DB_PATH = APP_DIR / "snapcal.db"
+# DB lives on a PERSISTENT path so a redeploy/update never wipes user history. In prod set
+# SNAPCAL_DB_DIR to a mounted persistent disk (e.g. Render disk at /var/data); locally it falls
+# back to the app folder. Additive-only migrations + a stable file = history survives every update.
+_DB_DIR = Path(os.environ.get("SNAPCAL_DB_DIR", "")).expanduser() if os.environ.get("SNAPCAL_DB_DIR") else APP_DIR
+try:
+    _DB_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:  # noqa: BLE001 — fall back to the app dir if the configured path isn't writable
+    _DB_DIR = APP_DIR
+DB_PATH = _DB_DIR / "snapcal.db"
 RESTAURANTS_PATH = APP_DIR / "data" / "restaurants.json"  # curated "Eat Out" dataset
 RECIPES_PATH = APP_DIR / "data" / "recipes.json"  # curated recipe library (SnapCal Meals browser)
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"  # free OpenStreetMap places lookup (no API key / no billing)
@@ -43,6 +51,17 @@ CORS_ORIGINS = [
 
 PROFILE_DEFAULTS = {"daily_calories": 2000, "protein_g": 150, "carbs_g": 200, "fat_g": 65}
 MACRO_KEYS = ("calories", "protein_g", "carbs_g", "fat_g")
+
+# Provenance accuracy ladder (see ACCURACY_ENGINE.md). EXACT = read off a real label or a
+# published menu; VERIFIED = federal USDA data + a confirmed portion; ESTIMATE = AI photo guess.
+ACCURACY_TIERS = ("EXACT", "VERIFIED", "ESTIMATE")
+_TIER_DEFAULT_CONFIDENCE = {"EXACT": 99, "VERIFIED": 90, "ESTIMATE": 60}
+
+
+def _norm_tier(tier):
+    """Coerce any caller-supplied tier to one of the three canonical rungs (default ESTIMATE)."""
+    t = (str(tier or "")).strip().upper()
+    return t if t in ACCURACY_TIERS else "ESTIMATE"
 
 ALLOWED_MIMES = {
     "image/jpeg": "image/jpeg",
@@ -320,6 +339,14 @@ def init_db():
             con.execute("ALTER TABLE meals ADD COLUMN thumb TEXT")
         if "uid" not in cols:
             con.execute("ALTER TABLE meals ADD COLUMN uid TEXT")
+        # Provenance router: every logged food carries WHERE its number came from + how
+        # trustworthy it is. No competitor shows this; SnapCal is EXACT wherever exact exists.
+        if "source" not in cols:
+            con.execute("ALTER TABLE meals ADD COLUMN source TEXT")
+        if "accuracy_tier" not in cols:
+            con.execute("ALTER TABLE meals ADD COLUMN accuracy_tier TEXT")
+        if "confidence" not in cols:
+            con.execute("ALTER TABLE meals ADD COLUMN confidence INT")
         con.commit()
     finally:
         con.close()
@@ -433,8 +460,24 @@ def _swaps(value):
     return out
 
 
-def normalize_analysis(data):
-    """Coerce the model output into the exact contract schema."""
+def _allergens_in_text(text, al):
+    """Which of the user's active allergens this text trips (by name), e.g. ['dairy','fruit']."""
+    if not al:
+        return []
+    t = " " + str(text or "").lower() + " "
+    hits = []
+    for a in al:
+        for kw in _ALLERGEN_KW.get(a, [a]):
+            if kw in t:
+                hits.append(a)
+                break
+    return hits
+
+
+def normalize_analysis(data, allergies=None, diet=None):
+    """Coerce the model output into the exact contract schema. When the user has allergies/diet set,
+    filter unsafe SWAPS server-side (belt-and-suspenders with the prompt clause) and surface a clear
+    allergen WARNING naming any logged item that contains one of their allergens."""
     if not isinstance(data, dict):
         raise ValueError("Gemini returned non-object JSON")
 
@@ -465,6 +508,38 @@ def normalize_analysis(data):
     if satiety not in ("low", "medium", "high"):
         satiety = ""
 
+    al = _norm_allergies(allergies)
+    dt = _norm_diet(diet)
+
+    # Belt-and-suspenders: NEVER suggest a food the user is allergic to (or that breaks their diet),
+    # even if the model ignored the prompt clause. This is the bug fix — the scan used to suggest
+    # fruit/nuts to someone allergic to them. Drop any unsafe swap entirely.
+    swaps = _swaps(data.get("swaps"))
+    if al or dt:
+        # A swap's suggestion lives in its "to" field (with "from"/"why" as context) — check THAT,
+        # not the generic _pick_text which doesn't know swap keys (that miss let "Mixed berries" leak).
+        def _swap_text(s):
+            return " ".join(str(s.get(k, "")) for k in ("to", "from", "why"))
+        swaps = [s for s in swaps if not _allergy_unsafe(_swap_text(s), al) and not _diet_unsafe(_swap_text(s), dt)]
+
+    # Allergen WARNING: name any logged item that contains one of THIS user's allergens, so they're
+    # alerted before they eat it (e.g. logging yogurt while dairy-allergic). Deterministic, not the model.
+    allergen_warning = ""
+    triggered = []
+    if al:
+        for it in items:
+            for a in _allergens_in_text(it["name"] + " " + it.get("qty", ""), al):
+                triggered.append((a, it["name"]))
+        if triggered:
+            seen, parts = set(), []
+            for a, nm in triggered:
+                if a in seen:
+                    continue
+                seen.add(a)
+                parts.append(a + " (" + nm + ")")
+            allergen_warning = ("Heads up — this looks like it contains an allergen you flagged: "
+                                + "; ".join(parts) + ". Double-check the ingredients before eating.")
+
     return {
         "items": items,
         "total": total,
@@ -475,8 +550,9 @@ def normalize_analysis(data):
         "bad_flags": _flags(data.get("bad_flags")),
         "verdict": str(data.get("verdict") or ""),
         "coach_tip": str(data.get("coach_tip") or ""),
-        "swaps": _swaps(data.get("swaps")),
+        "swaps": swaps,
         "note": str(data.get("note") or ""),
+        "allergen_warning": allergen_warning,
     }
 
 
@@ -557,7 +633,10 @@ def analyze():
     goal = (request.form.get("goal") or "maintain").strip().lower()
     if goal not in GOAL_LABELS:
         goal = "maintain"
-    prompt = ANALYZE_PROMPT_TMPL.format(goal_desc=GOAL_LABELS[goal])
+    allergies = request.form.get("allergies") or ""
+    diet = request.form.get("diet") or ""
+    prompt = (ANALYZE_PROMPT_TMPL.format(goal_desc=GOAL_LABELS[goal])
+              + _allergy_clause(allergies) + _diet_clause(diet))
 
     try:
         from google import genai
@@ -573,7 +652,8 @@ def analyze():
                 thinking_config=genai.types.ThinkingConfig(thinking_budget=0),  # skip the reasoning step -> faster analyze
             ),
         )
-        result = normalize_analysis(parse_gemini_json(resp.text))
+        result = normalize_analysis(parse_gemini_json(resp.text), allergies=allergies, diet=diet)
+        result = _cross_check_calories(result)   # Rung 4b: blend AI grams x USDA density + confidence band
     except Exception:  # noqa: BLE001 — contract: any Gemini failure -> 502 JSON
         import traceback
         traceback.print_exc()  # full detail on the server console only
@@ -757,10 +837,14 @@ def _mealplan_ingredients(value):
     return out
 
 
-def normalize_mealplan(data):
-    """Coerce the meal-plan model output into the contract schema (<=7 days, fixed slot order)."""
+def normalize_mealplan(data, allergies=None, diet=None):
+    """Coerce the meal-plan model output into the contract schema (<=7 days, fixed slot order).
+    The prompt already forbids the user's allergens/diet; this adds a deterministic safety net that
+    FLAGS any meal that still trips one (non-destructive — we never leave a meal slot empty)."""
     if not isinstance(data, dict):
         data = {}
+    al = _norm_allergies(allergies)
+    dt = _norm_diet(diet)
     raw_days = data.get("days") if isinstance(data.get("days"), list) else []
     days = []
     for idx, rd in enumerate(raw_days[:7]):
@@ -781,15 +865,24 @@ def normalize_mealplan(data):
             name = str(m.get("name") or "").strip()
             if not name:
                 continue
-            meals.append({
+            ingredients = _mealplan_ingredients(m.get("ingredients"))
+            meal = {
                 "slot": slot,
                 "name": name[:80],
                 "calories": _int(m.get("calories")),
                 "protein_g": _int(m.get("protein_g")),
                 "carbs_g": _int(m.get("carbs_g")),
                 "fat_g": _int(m.get("fat_g")),
-                "ingredients": _mealplan_ingredients(m.get("ingredients")),
-            })
+                "ingredients": ingredients,
+            }
+            if al or dt:
+                ing_txt = " ".join(i.get("item", "") if isinstance(i, dict) else str(i) for i in ingredients)
+                hits = _allergens_in_text(name + " " + ing_txt, al)
+                if _diet_unsafe(name + " " + ing_txt, dt):
+                    hits = hits + [dt]
+                if hits:
+                    meal["allergen_warning"] = ", ".join(sorted(set(hits)))
+            meals.append(meal)
         if meals:
             days.append({"day": day_no, "meals": meals})
     return {"days": days}
@@ -824,7 +917,7 @@ def meal_plan():
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Couldn't build your meal plan right now. Try again in a moment."}), 502
-    return jsonify(normalize_mealplan(data))
+    return jsonify(normalize_mealplan(data, allergies=d.get("allergies"), diet=d.get("diet")))
 
 
 _restaurants_cache = None
@@ -1604,6 +1697,97 @@ def _pick_food(foods, q):
     return sorted(enumerate(foods), key=score)[0][1]
 
 
+# ---- Rung 4b: the HYBRID estimator (ACCURACY_ENGINE.md). The model is good at estimating GRAMS from a
+#      photo but bad at recalling calories; USDA gives authoritative kcal/100 g. Where we have both, blend
+#      the item's calories toward grams x density and report an honest confidence band. 76-83% less error.
+_DENSITY_CACHE = {}
+
+
+def _parse_grams(qty):
+    """Pull an edible gram weight out of a qty string ('approx. 150 g', '1 cup (240 g)'). None if absent/insane."""
+    if not qty:
+        return None
+    nums = re.findall(r"(\d+(?:\.\d+)?)\s*g\b", str(qty).lower())
+    if not nums:
+        return None
+    try:
+        g = float(nums[-1])   # last gram figure handles '1 cup (240 g)'
+    except ValueError:
+        return None
+    return g if 5 <= g <= 2000 else None
+
+
+def _usda_kcal_per_100g(name):
+    """Energy (kcal) per 100 g for a food name from USDA FDC, cached + bounded. None if unavailable/insane."""
+    key = (name or "").strip().lower()[:60]
+    if not key:
+        return None
+    if key in _DENSITY_CACHE:
+        return _DENSITY_CACHE[key]
+    val = None
+    try:
+        params = urllib.parse.urlencode({"query": name, "pageSize": 10,
+                                         "dataType": "Foundation,SR Legacy", "api_key": _usda_key()})
+        req = urllib.request.Request("https://api.nal.usda.gov/fdc/v1/foods/search?" + params,
+                                     headers={"User-Agent": "SnapCal/1.0"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            foods = (json.loads(r.read().decode("utf-8")).get("foods")) or []
+        if foods:
+            f = _pick_food(foods, name)
+            for n in f.get("foodNutrients", []):
+                if n.get("nutrientName") == "Energy" and (n.get("unitName") or "").upper() == "KCAL":
+                    v = n.get("value")
+                    if v is not None and 0 < float(v) <= 900:   # sane kcal/100 g
+                        val = float(v)
+                        break
+    except Exception:  # noqa: BLE001 — any failure: AI estimate simply stands, no crash
+        val = None
+    _DENSITY_CACHE[key] = val
+    return val
+
+
+def _cross_check_calories(result, density_fn=None):
+    """Blend each item's calories toward grams x USDA-density (the stronger signal) and attach a confidence
+    band (`total.band_pct`): tight (+/-12%) for USDA-cross-checked items, wide (+/-25%) for AI-only ones.
+    `density_fn` is injectable for tests. Bounded, cached, graceful — never blocks/crashes the scan."""
+    items = result.get("items") or []
+    if not items:
+        return result
+    fn = density_fn or _usda_kcal_per_100g
+    targets = [(i, it) for i, it in enumerate(items) if _parse_grams(it.get("qty"))]
+    densities = {}
+    if targets:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(6, len(targets))) as ex:
+            futs = {ex.submit(fn, it["name"]): i for i, it in targets}
+            for fut in futs:
+                try:
+                    densities[futs[fut]] = fut.result(timeout=4)
+                except Exception:  # noqa: BLE001
+                    densities[futs[fut]] = None
+    any_hybrid = False
+    for i, it in enumerate(items):
+        ai_kcal = _int(it.get("calories"))
+        grams = _parse_grams(it.get("qty"))
+        dens = densities.get(i)
+        if grams and dens:
+            usda_kcal = int(round(grams * dens / 100.0))
+            it["calories"] = int(round(0.4 * ai_kcal + 0.6 * usda_kcal)) if ai_kcal else usda_kcal
+            it["kcal_source"] = "hybrid"
+            any_hybrid = True
+        else:
+            it["kcal_source"] = "ai"
+    total = result.get("total") or {}
+    total["calories"] = sum(_int(it.get("calories")) for it in items)
+    wcal = total["calories"] or 1
+    total["band_pct"] = round(sum(_int(it.get("calories")) * (0.12 if it.get("kcal_source") == "hybrid" else 0.25)
+                                  for it in items) / wcal, 3)
+    result["total"] = total
+    if any_hybrid:
+        result["accuracy_note"] = "Calories cross-checked against USDA federal data for a tighter estimate."
+    return result
+
+
 @app.get("/api/nutrition")
 def nutrition():
     """Real per-food nutrition facts from USDA FoodData Central — federal, peer-reviewed data, not an AI guess.
@@ -1638,7 +1822,8 @@ def nutrition():
             continue   # skip the kJ duplicate, keep kcal
         nutrients[label] = round(val, 1)
     out = {"food": f.get("description", q), "fdcId": f.get("fdcId"), "dataType": f.get("dataType"),
-           "serving": "per 100 g (3.5 oz)", "source": "USDA FoodData Central", "nutrients": nutrients}
+           "serving": "per 100 g (3.5 oz)", "source": "USDA FoodData Central",
+           "accuracy_tier": "VERIFIED", "nutrients": nutrients}
     _NUTRITION_CACHE[ck] = out
     return jsonify(out)
 
@@ -1699,9 +1884,79 @@ def barcode():
         "sat_fat_g": num("saturated-fat" + sfx),
         "sodium_mg": (round(sodium * 1000) if sodium is not None else None),
         "source": "Open Food Facts",
+        "accuracy_tier": "EXACT",
     }
     _BARCODE_CACHE[code] = out
     return jsonify(out)
+
+
+_MENU_INDEX = None
+
+
+def _build_menu_index():
+    """Flatten the curated Eat-Out dataset into one searchable list of chain menu items, each with
+    EXACT published macros. This is Rung 2 of the accuracy ladder (ACCURACY_ENGINE.md): eating out
+    becomes tap-to-log the chain's REAL number, not an AI photo guess. Deduped by (chain, item)."""
+    global _MENU_INDEX
+    if _MENU_INDEX is not None:
+        return _MENU_INDEX
+    items, seen = [], set()
+    for r in _load_restaurants().get("restaurants", []):
+        chain = (r.get("chain") or "").strip()
+        emoji = r.get("emoji") or ""
+        for picks in (r.get("best_picks") or {}).values():
+            for it in (picks or []):
+                name = (it.get("name") or "").strip()
+                if not name:
+                    continue
+                key = (chain.lower(), name.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                items.append({
+                    "chain": chain,
+                    "emoji": emoji,
+                    "name": name,
+                    "calories": _int(it.get("calories")),
+                    "protein_g": _int(it.get("protein_g")),
+                    "carbs_g": _int(it.get("carbs_g")),
+                    "fat_g": _int(it.get("fat_g")),
+                    "source": "Published menu — " + chain if chain else "Published menu",
+                    "accuracy_tier": "EXACT",
+                })
+    _MENU_INDEX = items
+    return _MENU_INDEX
+
+
+@app.get("/api/menu")
+def menu():
+    """Restaurant-exact lookup. Match a query against chain names + menu items and return items with
+    their EXACT published macros (tier=EXACT), so a user eating out logs the real number in one tap.
+    `?q=` searches both chain and item; optional `?chain=` narrows to one chain. No key, all-local."""
+    q = (request.args.get("q") or "").strip().lower()
+    chain_f = (request.args.get("chain") or "").strip().lower()
+    idx = _build_menu_index()
+    terms = [t for t in re.split(r"\s+", q) if t]
+
+    def score(it):
+        chain_l, name_l = it["chain"].lower(), it["name"].lower()
+        if chain_f and chain_f not in chain_l:
+            return -1
+        if not terms:
+            return 1  # browse mode (chain filter or all)
+        hay = chain_l + " " + name_l
+        if not all(t in hay for t in terms):
+            return -1
+        s = sum(2 if t in name_l else 1 for t in terms)
+        if name_l.startswith(terms[0]) or chain_l.startswith(terms[0]):
+            s += 3
+        return s
+
+    scored = [(score(it), it) for it in idx]
+    hits = sorted([(s, it) for s, it in scored if s >= 0], key=lambda x: -x[0])
+    results = [it for _, it in hits[:25]]
+    chains = sorted({it["chain"] for it in idx if it["chain"]})
+    return jsonify({"results": results, "count": len(results), "chains": chains})
 
 
 @app.post("/api/meals")
@@ -1724,12 +1979,19 @@ def add_meal():
     if not isinstance(thumb, str) or not thumb.startswith("data:image"):
         thumb = None
 
+    # Provenance: stamp where this number came from + how trustworthy it is.
+    tier = _norm_tier(d.get("accuracy_tier"))
+    source = (str(d.get("source") or "")).strip() or "AI photo estimate"
+    confidence = d.get("confidence")
+    confidence = _int(confidence) if confidence is not None else _TIER_DEFAULT_CONFIDENCE[tier]
+
     con = get_db()
     try:
         cur = con.execute(
             """INSERT INTO meals(date, time, name, calories, protein_g, carbs_g, fat_g,
-                                 items_json, detail_json, thumb, uid)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                 items_json, detail_json, thumb, uid,
+                                 source, accuracy_tier, confidence)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(d.get("date", "")),
                 str(d.get("time", "")),
@@ -1742,6 +2004,9 @@ def add_meal():
                 detail_json,
                 thumb,
                 _uid(),
+                source,
+                tier,
+                confidence,
             ),
         )
         con.commit()
@@ -1757,7 +2022,7 @@ def list_meals():
     try:
         rows = con.execute(
             """SELECT id, date, time, name, calories, protein_g, carbs_g, fat_g,
-                      items_json, detail_json, thumb
+                      items_json, detail_json, thumb, source, accuracy_tier, confidence
                FROM meals WHERE date = ? AND uid = ? ORDER BY time, id""",
             (day, _uid()),
         ).fetchall()

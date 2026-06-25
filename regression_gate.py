@@ -95,6 +95,53 @@ def main():
         print("FATAL: SnapCal server not reachable at " + BASE)
         return 2
 
+    # ---- allergy/diet SAFETY (in-process, no Gemini/browser): the scan must NEVER suggest an allergen,
+    #      must WARN when a logged food contains one, and the meal plan must FLAG leaked allergens.
+    #      Added 2026-06-25 after the scan suggested fruit to a fruit-allergic user. ----
+    try:
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location("snapapp_gate", os.path.join(os.path.dirname(__file__), "app.py"))
+        _m = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_m)
+        scan = _m.normalize_analysis(
+            {"items": [{"name": "White rice", "calories": 200}], "total": {"calories": 200},
+             "coach_tip": "Add fruit.",
+             "swaps": [{"from": "rice", "to": "Mixed berries", "why": "fiber"},
+                       {"from": "rice", "to": "Quinoa", "why": "protein"}]},
+            allergies=["fruit", "tree nuts"], diet="")
+        check("allergy-safe scan: allergen swap dropped, safe swap kept",
+              all("berr" not in s["to"].lower() for s in scan["swaps"]) and any("quinoa" in s["to"].lower() for s in scan["swaps"]),
+              "kept=" + str([s["to"] for s in scan["swaps"]]))
+        warn = _m.normalize_analysis({"items": [{"name": "Greek yogurt with honey", "calories": 150}], "total": {"calories": 150}, "swaps": []},
+                                     allergies=["dairy"])["allergen_warning"]
+        check("allergy-safe scan: logged allergen (yogurt/dairy) raises a WARNING",
+              "dairy" in warn.lower() and "yogurt" in warn.lower(), warn[:60])
+        clean = _m.normalize_analysis({"items": [{"name": "rice", "calories": 200}], "total": {"calories": 200},
+                                       "swaps": [{"from": "a", "to": "Mixed berries", "why": "x"}]}, allergies=[], diet="")
+        check("allergy-safe scan: no allergies set -> behavior unchanged (no warning, swap kept)",
+              clean["allergen_warning"] == "" and len(clean["swaps"]) == 1)
+        mp = _m.normalize_mealplan({"days": [{"day": 1, "meals": [
+            {"slot": "breakfast", "name": "Mixed berry smoothie", "ingredients": ["strawberries", "milk"]},
+            {"slot": "lunch", "name": "Grilled chicken salad", "ingredients": ["chicken", "lettuce"]}]}]},
+            allergies=["fruit"])
+        bk, ln = mp["days"][0]["meals"][0], mp["days"][0]["meals"][1]
+        check("allergy-safe meal plan: leaked allergen flagged, safe meal not flagged",
+              bool(bk.get("allergen_warning")) and "allergen_warning" not in ln,
+              "breakfast flag=" + str(bk.get("allergen_warning")))
+        # Rung 4b: hybrid estimator blends AI grams x USDA density + tightens the confidence band
+        _dens = {"grilled chicken breast": 165.0, "white rice": 130.0}
+        hyb = _m._cross_check_calories(
+            {"items": [{"name": "Grilled chicken breast", "qty": "200 g", "calories": 400},
+                       {"name": "Side salad", "qty": "1 bowl", "calories": 90}],
+             "total": {"calories": 490}},
+            density_fn=lambda n: _dens.get(n.strip().lower()))
+        i0, i1 = hyb["items"][0], hyb["items"][1]
+        check("accuracy Rung 4b: AI grams x USDA density blends calories + tightens band, AI-only stays",
+              i0["kcal_source"] == "hybrid" and i0["calories"] == 358 and i1["kcal_source"] == "ai"
+              and 0 < hyb["total"]["band_pct"] < 0.25,
+              "chicken=%scal(%s) salad=%s band=%s" % (i0["calories"], i0["kcal_source"], i1["kcal_source"], hyb["total"]["band_pct"]))
+    except Exception as e:  # noqa: BLE001
+        check("allergy-safe scan + meal plan (in-process)", False, "exception: " + str(e)[:120])
+
     from playwright.sync_api import sync_playwright
     errors = []
 
@@ -512,6 +559,31 @@ def main():
         }""")
         check("food photos: /api/foodimg resolves to an image (real or fallback)",
               st["ok"] and ("image" in st["type"]), "ok=" + str(st["ok"]) + " type=" + st["type"])
+
+        # provenance router (ACCURACY_ENGINE.md): restaurant-EXACT menu lookup returns real macros
+        mn = page.evaluate("""async () => {
+            try { var r = await fetch('/api/menu?q=quarter%20pounder'); var d = await r.json();
+                  var h = (d.results||[])[0]||{};
+                  return { count: d.count, chains: (d.chains||[]).length, tier: h.accuracy_tier, cal: h.calories, name: h.name }; }
+            catch(e){ return { count:-1, err:e.message }; }
+        }""")
+        check("provenance: /api/menu returns chain-EXACT items with macros",
+              mn["count"] >= 1 and mn.get("tier") == "EXACT" and int(mn.get("cal") or 0) > 0 and mn["chains"] >= 30,
+              "count=%s chains=%s tier=%s %s=%scal" % (mn["count"], mn.get("chains"), mn.get("tier"), mn.get("name"), mn.get("cal")))
+        # provenance round-trips through the diary: tier stored + returned, photo defaults to ESTIMATE
+        pv = page.evaluate("""async () => {
+            var H = { 'Content-Type':'application/json', 'X-Device-Id':'gate_prov' };
+            var day = '2099-01-01';
+            await fetch('/api/meals', {method:'POST', headers:H, body: JSON.stringify({date:day, name:'Exact item', calories:520, source:'Published menu', accuracy_tier:'EXACT'})});
+            await fetch('/api/meals', {method:'POST', headers:H, body: JSON.stringify({date:day, name:'Photo item', calories:600})});
+            var r = await fetch('/api/meals?date='+day, {headers:H}); var d = await r.json();
+            var byName = {}; (d.meals||[]).forEach(function(m){ byName[m.name]=m; });
+            return { exact: (byName['Exact item']||{}).accuracy_tier, est: (byName['Photo item']||{}).accuracy_tier,
+                     estConf: (byName['Photo item']||{}).confidence };
+        }""")
+        check("provenance: logged meals carry tier (EXACT stored, photo defaults ESTIMATE)",
+              pv.get("exact") == "EXACT" and pv.get("est") == "ESTIMATE",
+              "exact=%s photo=%s conf=%s" % (pv.get("exact"), pv.get("est"), pv.get("estConf")))
 
         # 10. no JS errors
         check("no JS console / page errors", len(errors) == 0,

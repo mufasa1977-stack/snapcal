@@ -25,8 +25,13 @@ you want to own it). That's it. I (Claude) do everything after that.
 ## Notes / honest caveats
 - **Free tier sleeps** after ~15 min idle (≈30s cold start on the next visit). Fine for testing. For real
   users, bump `plan: free` → `plan: starter` ($7/mo) in `render.yaml` to keep it always warm.
-- **Database:** `snapcal.db` (SQLite) is ephemeral on the free tier — it resets on each redeploy. Fine for
-  testing; for real users add a Render persistent disk or move to Postgres (a later step, not needed now).
+- **Database / user history:** `render.yaml` now declares a **persistent disk** (`/var/data`) and the app
+  reads `SNAPCAL_DB_DIR`, so `snapcal.db` lives on it — **history survives every redeploy/update.** Disks need
+  a paid plan, so it activates once `plan: free` → `plan: starter`. On the **free tier (no disk)** the app
+  falls back to its folder and the DB is still ephemeral — fine for throwaway testing, NOT for real users. So
+  before onboarding real users, set `plan: starter`. Migrations are additive-only (guarded
+  `ALTER TABLE ADD COLUMN`) so schema changes never drop rows. Verified: meal logged → server restarted
+  (simulated redeploy) → meal + provenance tier still present.
 - This does NOT replace the native app plan — background GPS / instant location still needs the App Store /
   Play app. This just gives a rock‑solid always‑on web link to test and share today.
 

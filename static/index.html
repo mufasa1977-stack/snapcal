@@ -1362,6 +1362,7 @@ async function addBarcodeToToday(d){
       body: JSON.stringify({
         date: todayStr(), time: nowTime(), name: nm,
         calories: int(d.calories), protein_g: int(d.protein_g), carbs_g: int(d.carbs_g), fat_g: int(d.fat_g),
+        source: d.source || "Open Food Facts", accuracy_tier: d.accuracy_tier || "EXACT",
         items_json: JSON.stringify([{ name: nm, calories: int(d.calories), protein_g: int(d.protein_g), carbs_g: int(d.carbs_g), fat_g: int(d.fat_g) }]),
         detail_json: JSON.stringify({ verified: true, source: d.source, serving: d.serving, barcode: d.code })
       }) });
@@ -1451,6 +1452,27 @@ async function loadStreak(){
   } catch (e) { /* non-critical */ }
 }
 
+/* Provenance badge — shows WHERE a logged number came from + how trustworthy it is.
+   EXACT = real label / published menu; VERIFIED = USDA federal data; ESTIMATE = AI photo guess.
+   No competitor surfaces this; it is SnapCal's "trust the number" differentiator. */
+function provBadge(m){
+  var tier = (m && m.accuracy_tier ? String(m.accuracy_tier) : "").toUpperCase();
+  var spec = {
+    EXACT:    { t: "Exact",    c: "#15803D", bg: "rgba(34,197,94,.14)",  d: "M20 6 9 17l-5-5" },
+    VERIFIED: { t: "Verified", c: "#1D4ED8", bg: "rgba(59,130,246,.14)", d: "M9 12l2 2 4-4 M12 3l7 4v5c0 4.4-3 7-7 9-4-2-7-4.6-7-9V7z" },
+    ESTIMATE: { t: "Estimate", c: "#B45309", bg: "rgba(245,158,11,.16)", d: "M12 8v5 M12 16h.01 M12 3l9 16H3z" }
+  }[tier];
+  if (!spec) return "";
+  var title = tier === "EXACT" ? "Exact number from " + esc(m.source || "a verified label")
+            : tier === "VERIFIED" ? "USDA federal data — " + esc(m.source || "")
+            : "AI photo estimate — tap to correct anytime";
+  return '<span class="prov" title="' + title + '" style="display:inline-flex;align-items:center;gap:3px;'
+    + 'margin-left:6px;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;'
+    + 'vertical-align:1px;color:' + spec.c + ';background:' + spec.bg + '">'
+    + '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.4" '
+    + 'stroke-linecap="round" stroke-linejoin="round"><path d="' + spec.d + '"/></svg>' + spec.t + '</span>';
+}
+
 function renderToday(){
   var eaten = int(todayData.totals.calories);
   var goal = Math.max(int(profile.daily_calories), 1);
@@ -1483,6 +1505,7 @@ function renderToday(){
     return;
   }
   list.innerHTML = todayData.meals.map(function(m){
+    var prov = provBadge(m);
     var thumb = m.thumb
       ? '<img class="meal-thumb" src="' + m.thumb + '" alt="">'
       : '<div class="meal-ph"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7a3 3 0 0 0 3 3v10M6 2v6M9 2v6M18 2c-1.6 0-3 1.8-3 5s1.4 4 3 4v9"/></svg></div>';
@@ -1490,7 +1513,7 @@ function renderToday(){
       thumb +
       '<div class="meal-info">' +
         '<div class="meal-name">' + esc(m.name) + '</div>' +
-        '<div class="meal-sub">' + esc(m.time || "") + ' &middot; P ' + int(m.protein_g) + 'g &middot; C ' + int(m.carbs_g) + 'g &middot; F ' + int(m.fat_g) + 'g</div>' +
+        '<div class="meal-sub">' + esc(m.time || "") + ' &middot; P ' + int(m.protein_g) + 'g &middot; C ' + int(m.carbs_g) + 'g &middot; F ' + int(m.fat_g) + 'g' + prov + '</div>' +
       '</div>' +
       '<div class="meal-kcal">' + fmtNum(m.calories) + ' Cal</div>' +
       '<button class="meal-del" type="button" data-id="' + int(m.id) + '" aria-label="Delete meal">&times;</button>' +
@@ -1724,6 +1747,9 @@ $("#analyzeBtn").addEventListener("click", async function(){
     var fd = new FormData();
     fd.append("photo", sendImg, "photo.jpg");
     fd.append("goal", goal);
+    /* allergies + diet so the scan's swaps/tips NEVER suggest an allergen, and a logged allergen gets flagged */
+    fd.append("allergies", (typeof allergyLabels === "function" ? allergyLabels() : []).join(","));
+    fd.append("diet", (typeof dietLabel === "function" ? dietLabel(_diet) : ""));
     var data = await api("/api/analyze", { method: "POST", body: fd });
     analyzeResult = normalizeResult(data);
     analyzeResult.mults = analyzeResult.items.map(function(){ return 1; });
@@ -1764,7 +1790,8 @@ function normalizeResult(data){
     trans_fat_g: int(t.trans_fat_g), cholesterol_mg: int(t.cholesterol_mg),
     potassium_mg: int(t.potassium_mg), calcium_mg: int(t.calcium_mg), iron_mg: int(t.iron_mg),
     vitamin_a_dv: int(t.vitamin_a_dv), vitamin_c_dv: int(t.vitamin_c_dv),
-    vitamin_d_dv: int(t.vitamin_d_dv), est_weight_g: int(t.est_weight_g)
+    vitamin_d_dv: int(t.vitamin_d_dv), est_weight_g: int(t.est_weight_g),
+    band_pct: (typeof t.band_pct === "number" ? t.band_pct : 0)   /* Rung 4b: server confidence band */
   };
   var grade = String(data.quality_grade || "").toUpperCase();
   if (["A","B","C","D"].indexOf(grade) < 0) grade = "";
@@ -1779,7 +1806,8 @@ function normalizeResult(data){
     verdict: String(data.verdict || ""),
     coach_tip: String(data.coach_tip || ""),
     swaps: Array.isArray(data.swaps) ? data.swaps.filter(function(s){ return s && s.from && s.to; }).slice(0, 3).map(function(s){ return { from: String(s.from), to: String(s.to), why: String(s.why || "") }; }) : [],
-    note: String(data.note || "")
+    note: String(data.note || ""),
+    allergen_warning: String(data.allergen_warning || "")
   };
 }
 
@@ -1954,7 +1982,8 @@ function effectiveResult(r){
     trans_fat_g: sc("trans_fat_g"), cholesterol_mg: sc("cholesterol_mg"),
     potassium_mg: sc("potassium_mg"), calcium_mg: sc("calcium_mg"), iron_mg: sc("iron_mg"),
     vitamin_a_dv: sc("vitamin_a_dv"), vitamin_c_dv: sc("vitamin_c_dv"), vitamin_d_dv: sc("vitamin_d_dv"),
-    est_weight_g: sc("est_weight_g")
+    est_weight_g: sc("est_weight_g"),
+    band_pct: (r.total && typeof r.total.band_pct === "number") ? r.total.band_pct : 0   /* scale-invariant ratio */
   };
   return {
     items: items, total: t, health_score: r.health_score, quality_grade: r.quality_grade,
@@ -1986,7 +2015,11 @@ function scanConfidence(eff){
   /* Honest confidence from what we know: a single/few items reads more reliably than a busy
      mixed plate. Portion is the dominant error source for ANY photo estimate (research-backed). */
   var n = (eff.items || []).length, cal = eff.total.calories || 0, level, pct;
-  if (n <= 1){ level = "High"; pct = 0.12; }
+  if (eff.total.band_pct && eff.total.band_pct > 0){
+    /* Rung 4b: USDA-cross-checked items tighten the band — trust the server's computed spread */
+    pct = eff.total.band_pct;
+    level = pct <= 0.15 ? "High" : (pct <= 0.22 ? "Medium" : "Lower");
+  } else if (n <= 1){ level = "High"; pct = 0.12; }
   else if (n <= 3){ level = "Medium"; pct = 0.20; }
   else { level = "Lower"; pct = 0.28; }
   return { level: level, pct: pct, lo: Math.max(0, Math.round(cal * (1 - pct) / 10) * 10), hi: Math.round(cal * (1 + pct) / 10) * 10 };
@@ -1999,8 +2032,30 @@ function goExactNumbers(){
     var b = document.getElementById("barcodeBtn"); if (b) b.scrollIntoView({ behavior: "smooth", block: "center" });
   }, 70);
 }
+/* Allergen warning banner — pinned to the top of the scan result when a logged food contains one of
+   the user's flagged allergens (e.g. logging yogurt while dairy-allergic). Safety > aesthetics: red, loud. */
+function renderAllergenWarning(msg){
+  var card = $("#resultCard"); if (!card) return;
+  var el = document.getElementById("allergenWarn");
+  if (!msg){ if (el) el.remove(); return; }
+  if (!el){
+    el = document.createElement("div");
+    el.id = "allergenWarn";
+    el.setAttribute("role", "alert");
+    el.style.cssText = "display:flex;gap:8px;align-items:flex-start;margin:0 0 12px;padding:11px 13px;"
+      + "border-radius:12px;background:rgba(220,38,38,.10);border:1px solid rgba(220,38,38,.40);"
+      + "color:#B91C1C;font-size:13px;font-weight:600;line-height:1.35";
+    card.insertBefore(el, card.firstChild);
+  }
+  el.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
+    + 'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:1px">'
+    + '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'
+    + '<path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>' + esc(msg) + '</span>';
+}
+
 function renderScanCard(){
   var eff = effectiveResult(analyzeResult);
+  renderAllergenWarning(analyzeResult && analyzeResult.allergen_warning);
   $("#resultItems").innerHTML = buildEditableItemsHTML(eff);
   $("#totalKcal").textContent = "~" + fmtNum(eff.total.calories) + " Cal";
   $("#totalMacros").innerHTML = "P " + eff.total.protein_g + "g &middot; C " + eff.total.carbs_g + "g &middot; F " + eff.total.fat_g + "g";
@@ -2056,7 +2111,8 @@ $("#addBtn").addEventListener("click", async function(){
       fat_g: eff.total.fat_g,
       items_json: JSON.stringify(eff.items),
       detail_json: JSON.stringify(eff),
-      thumb: thumb
+      thumb: thumb,
+      source: "AI photo estimate", accuracy_tier: "ESTIMATE"
     };
     await api("/api/meals", {
       method: "POST",
