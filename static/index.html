@@ -2062,6 +2062,14 @@ function voiceRender(role, text){
   var d = document.createElement("div");
   d.className = "vmsg vmsg-" + (role === "user" ? "user" : "coach");
   d.textContent = text;
+  if (role === "coach"){
+    var b = document.createElement("button");
+    b.type = "button"; b.setAttribute("aria-label", "Hear it in Coach Cal's voice");
+    b.style.cssText = "margin-left:8px;background:none;border:none;color:inherit;opacity:.55;cursor:pointer;padding:2px;line-height:0;vertical-align:middle";
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+    b.addEventListener("click", function(e){ e.stopPropagation(); speak(text); });
+    d.appendChild(b);
+  }
   log.appendChild(d); log.scrollTop = log.scrollHeight;
 }
 function openVoice(){
@@ -2079,7 +2087,22 @@ function closeVoice(){
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e){}
   var w = $("#voiceWrap"); if (w){ w.classList.remove("show"); w.setAttribute("aria-hidden", "true"); }
 }
+/* Coach Cal's real voice (Gemini TTS via /api/tts, cached server-side). Falls back to the
+   device's built-in voice if the network/endpoint hiccups, so he always talks. */
+var _calAudio = null;
 function speak(text){
+  text = (text || "").trim(); if (!text) return;
+  try { if (_calAudio){ _calAudio.pause(); _calAudio = null; } } catch(e){}
+  try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e){}
+  try {
+    var a = new Audio("/api/tts?voice=Charon&text=" + encodeURIComponent(text.slice(0, 700)));
+    _calAudio = a;
+    a.onerror = function(){ _speakFallback(text); };
+    var p = a.play();
+    if (p && p.catch) p.catch(function(){ _speakFallback(text); });
+  } catch(e){ _speakFallback(text); }
+}
+function _speakFallback(text){
   try {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();

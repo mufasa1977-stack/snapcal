@@ -16,7 +16,7 @@ import urllib.request
 from datetime import date, timedelta
 from pathlib import Path
 
-from flask import Flask, jsonify, request, redirect
+from flask import Flask, jsonify, request, redirect, Response
 try:
     from flask_cors import CORS  # only needed for the hosted native-app backend
 except ImportError:
@@ -1325,6 +1325,65 @@ def chat():
         return jsonify({"error": "Coach Cal can't talk right now — try again in a moment."}), 502
     reply = reply.replace("**", "").replace("*", "").strip()[:700]
     return jsonify({"reply": reply or "I'm here — what can I help you with?"})
+
+
+# ---- Coach Cal's VOICE: Gemini TTS, cached by text so common/repeated lines cost nothing after the 1st play ----
+TTS_MODEL = "gemini-2.5-flash-preview-tts"
+TTS_VOICE_DEFAULT = "Charon"
+TTS_VOICES_OK = {"Charon", "Orus", "Puck", "Kore", "Fenrir", "Aoede", "Leda", "Achird", "Iapetus", "Zephyr"}
+_TTS_CACHE = {}
+
+
+def _pcm16_to_wav(pcm, rate=24000):
+    import io
+    import wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(rate)
+        wf.writeframes(pcm)
+    return buf.getvalue()
+
+
+@app.get("/api/tts")
+def tts():
+    """Speak a Coach Cal line (Gemini TTS). Cached by (voice,text) so repeated/common lines are free after the 1st call."""
+    text = (request.args.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "text_required"}), 400
+    voice = (request.args.get("voice") or TTS_VOICE_DEFAULT).strip()
+    if voice not in TTS_VOICES_OK:
+        voice = TTS_VOICE_DEFAULT
+    text = text[:700]
+    import hashlib
+    ckey = hashlib.sha1((voice + "|" + text).encode("utf-8")).hexdigest()
+    cached = _TTS_CACHE.get(ckey)
+    if cached is not None:
+        return Response(cached, mimetype="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
+    try:
+        from google import genai  # noqa: F401
+        from google.genai import types
+        client = get_gemini_client()
+        resp = client.models.generate_content(
+            model=TTS_MODEL, contents=text,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice))),
+            ),
+        )
+        data = resp.candidates[0].content.parts[0].inline_data.data
+        if isinstance(data, str):
+            import base64
+            data = base64.b64decode(data)
+        wav = _pcm16_to_wav(data)
+    except Exception:  # noqa: BLE001
+        return jsonify({"error": "Coach Cal can't speak right now."}), 502
+    if len(_TTS_CACHE) > 800:
+        _TTS_CACHE.clear()
+    _TTS_CACHE[ckey] = wav
+    return Response(wav, mimetype="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/api/geocode")
