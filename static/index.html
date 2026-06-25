@@ -665,6 +665,49 @@
   .meal-ph{display:flex;align-items:center;justify-content:center;color:var(--ink3);font-size:20px}
   .h-meal-thumb{width:42px;height:42px;border-radius:9px;object-fit:cover;flex:none;background:var(--track)}
   .sheet-thumb{width:100%;max-height:200px;object-fit:cover;border-radius:14px;margin:2px 0 14px;display:block;background:var(--track)}
+  /* ---------- SnapCal Meals (recipe browser) ---------- */
+  .meals-tabs{display:flex;gap:5px;background:var(--soft);border:1px solid var(--line);border-radius:13px;padding:4px;margin:6px 2px 14px}
+  .meals-tab{flex:1;text-align:center;border:none;background:none;font-family:inherit;font-size:13.5px;font-weight:750;color:var(--ink3);padding:9px 6px;border-radius:10px;cursor:pointer;transition:.15s}
+  .meals-tab.on{background:var(--card);color:var(--ink);box-shadow:0 2px 7px rgba(20,45,32,.13)}
+  .meals-search{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 15px;margin:0 2px 16px;box-shadow:0 4px 12px rgba(20,45,32,.07)}
+  .meals-search svg{flex:none;width:18px;height:18px;color:var(--ink3)}
+  .meals-search input{border:none;background:none;outline:none;font-family:inherit;font-size:15px;color:var(--ink);width:100%}
+  .meals-hero{position:relative;border-radius:18px;overflow:hidden;margin:0 2px 20px;box-shadow:var(--shadow);cursor:pointer;background:var(--brand);border:none;width:calc(100% - 4px);display:block;padding:0;font-family:inherit}
+  .meals-hero img{width:100%;height:128px;object-fit:cover;display:block}
+  .meals-hero-ov{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;text-align:left;padding:0 18px;background:linear-gradient(90deg,rgba(13,38,26,.86),rgba(13,38,26,.34))}
+  .meals-hero-k{font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:rgba(255,255,255,.82)}
+  .meals-hero-t{font-family:"Fraunces",serif;font-size:21px;font-weight:600;color:#fff;margin-top:3px;line-height:1.08}
+  .meals-hero-s{font-size:12.5px;color:rgba(255,255,255,.9);margin-top:5px}
+  .meals-hero-go{position:absolute;right:15px;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.95);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700}
+  .meals-lbl{font-size:13.5px;font-weight:800;color:var(--ink);margin:0 2px 12px;letter-spacing:-.01em}
+  .cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin:0 2px}
+  .cat-tile{background:var(--card);border:1px solid var(--line);border-radius:15px;overflow:hidden;cursor:pointer;box-shadow:0 6px 16px rgba(20,45,32,.10);transition:transform .12s,box-shadow .12s;text-align:left;padding:0;font-family:inherit}
+  .cat-tile:active{transform:translateY(2px) scale(.97);box-shadow:0 3px 9px rgba(20,45,32,.13)}
+  .cat-tile-img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--track)}
+  .cat-tile-b{padding:8px 9px 10px}
+  .cat-tile-n{font-size:12.5px;font-weight:750;color:var(--ink);line-height:1.16;letter-spacing:-.01em}
+  .cat-tile-c{font-size:11px;font-weight:750;color:var(--brand);margin-top:3px}
+  .rc-card{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:15px;padding:10px;margin-bottom:10px;cursor:pointer;box-shadow:0 5px 14px rgba(20,45,32,.08);transition:transform .1s;width:100%;text-align:left;font-family:inherit}
+  .rc-card:active{transform:scale(.99)}
+  .rc-img{width:76px;height:76px;border-radius:12px;object-fit:cover;flex:none;background:var(--track)}
+  .rc-b{flex:1;min-width:0}
+  .rc-n{font-size:14.5px;font-weight:750;color:var(--ink);line-height:1.2;letter-spacing:-.01em}
+  .rc-m{font-size:12px;color:var(--ink2);margin-top:4px}
+  .rc-m b{color:var(--ink);font-weight:800}
+  .rc-tags{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+  .rc-tag{font-size:10px;font-weight:750;color:var(--ink3);background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:2px 6px;letter-spacing:.01em}
+  .rd-hero{width:100%;height:190px;object-fit:cover;border-radius:16px;margin-bottom:14px;background:var(--track);display:block}
+  .rd-macros{display:flex;gap:8px;margin-bottom:6px}
+  .rd-macro{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 6px;text-align:center;box-shadow:0 3px 9px rgba(20,45,32,.07)}
+  .rd-macro b{display:block;font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+  .rd-macro span{font-size:10px;font-weight:750;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em}
+  .rd-sec{font-size:13px;font-weight:800;color:var(--ink);margin:18px 2px 8px}
+  .rd-ing{display:flex;justify-content:space-between;gap:10px;padding:9px 2px;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink)}
+  .rd-ing em{color:var(--ink3);font-weight:650;font-style:normal}
+  .rd-step{display:flex;gap:11px;padding:9px 2px;font-size:14px;color:var(--ink);line-height:1.45;align-items:flex-start}
+  .rd-step b{flex:none;width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .rd-tip{background:linear-gradient(135deg,var(--soft),var(--card));border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--ink2);margin:16px 0 6px;line-height:1.45}
+  .rd-tip b{color:var(--brand)}
   /* ---------- streak ---------- */
   .streak{display:inline-flex;align-items:center;gap:6px;background:var(--card);box-shadow:var(--shadow);
     border-radius:999px;padding:7px 13px;font-size:13px;font-weight:700;margin-top:10px}
@@ -2752,28 +2795,204 @@ var MP_SLOT_ORDER = ["breakfast", "lunch", "snack", "dinner"];
 var MP_SLOT_LABEL = { breakfast: "Breakfast", lunch: "Lunch", snack: "Snack", dinner: "Dinner" };
 var _mealPlan = null;
 
-async function openMealPlanSheet(){
-  if (!isPremium()) { openPaywall(); return; }
+/* ============ SnapCal Meals — recipe browser (Wellos-grade) ============ */
+var MEALS_CATS = [
+  {key:"high-protein", label:"High Protein",       cover:"grilled chicken quinoa bowl"},
+  {key:"low-carb",     label:"Low Carb",           cover:"salmon asparagus plate"},
+  {key:"mediterranean",label:"Mediterranean",      cover:"greek chicken bowl"},
+  {key:"vegan",        label:"Vegan",              cover:"colorful buddha bowl"},
+  {key:"vegetarian",   label:"Vegetarian",         cover:"vegetable stir fry"},
+  {key:"quick",        label:"Quick & Easy",       cover:"avocado toast egg"},
+  {key:"batch",        label:"Batch & Prep",       cover:"meal prep containers"},
+  {key:"breakfast",    label:"Breakfast",          cover:"berry protein oatmeal"},
+  {key:"asian",        label:"Asian Inspired",     cover:"teriyaki salmon rice bowl"},
+  {key:"comfort",      label:"Whole-Food Comfort", cover:"turkey chili bowl"},
+  {key:"snacks",       label:"Snacks & Treats",    cover:"greek yogurt berry parfait"},
+  {key:"indian",       label:"Indian Inspired",    cover:"chana masala chickpea curry"}
+];
+var _recipes = [], _recipeCats = [], _recipesLoaded = false, _recipesLoading = false, _mealsView = "browse", _lastSearch = "";
+
+function recipeImg(s){ return "/api/foodimg?dish=" + encodeURIComponent(String(s||"healthy food").slice(0,48)); }
+function recipeCatMap(){ var m={}; (_recipeCats.length?_recipeCats:MEALS_CATS).forEach(function(c){ m[c.key]=c; }); return m; }
+function catLabel(key){ var c=recipeCatMap()[key]; return c?c.label:key; }
+
+/* diet + allergy filter so a vegan / allergic user only ever sees safe recipes */
+function recipeDietOK(diet){
+  var d=(dietLabel(_diet)||"").toLowerCase(); diet=(diet||"omnivore").toLowerCase();
+  if (d.indexOf("vegan")>-1) return diet==="vegan";
+  if (d.indexOf("vegetarian")>-1) return diet==="vegan"||diet==="vegetarian";
+  if (d.indexOf("pescat")>-1) return diet==="vegan"||diet==="vegetarian"||diet==="pescatarian";
+  return true;
+}
+function recipeAllergenSafe(r){
+  var mine=(allergyLabels()||[]).map(function(a){return String(a).toLowerCase();}); if(!mine.length) return true;
+  var has=(r.allergens||[]).map(function(a){return String(a).toLowerCase();});
+  for (var i=0;i<mine.length;i++){ for (var j=0;j<has.length;j++){ if (has[j].indexOf(mine[i])>-1||mine[i].indexOf(has[j])>-1) return false; } }
+  return true;
+}
+function filterRecipes(list){ return (list||[]).filter(function(r){ return recipeDietOK(r.diet)&&recipeAllergenSafe(r); }); }
+function recipesInCat(key){ return filterRecipes(_recipes.filter(function(r){ return r.cat===key; })); }
+
+function ensureRecipes(){
+  if (_recipesLoaded||_recipesLoading) return Promise.resolve();
+  _recipesLoading=true;
+  return api("/api/recipes").then(function(d){
+    _recipes=(d&&d.recipes)||[]; _recipeCats=(d&&d.categories)||[]; _recipesLoaded=true; _recipesLoading=false;
+    if (_mealsView==="browse") renderMealsBrowse(); else if (_mealsView==="search") renderSearchResults(_lastSearch);
+  }).catch(function(){ _recipesLoading=false; });
+}
+
+function openMealPlanSheet(){ _mealsView="browse"; openSheet(); $(".sheet-card").scrollTop=0; renderMealsBrowse(); ensureRecipes(); }
+
+var SPIN = '<span class="spinner" style="display:inline-block;border-color:rgba(128,128,128,.25);border-top-color:var(--brand);vertical-align:middle"></span> ';
+
+function renderMealsBrowse(){
+  _mealsView="browse";
   var info = GOAL_INFO[goal] || GOAL_INFO.maintain;
-  openSheet(); $(".sheet-card").scrollTop = 0;
-  var ck = "mp_" + goal, cached = lsGet(ck);
-  if (cached && cached.days && cached.days.length) { _mealPlan = cached; renderMealPlanSheet(cached, info); }   /* instant from cache */
-  else $("#sheetBody").innerHTML =
-    '<div class="sheet-h">7-day meal planner</div>' +
-    '<div class="sheet-sub">Building your ' + info.emoji + ' ' + esc(info.label) + ' week&hellip;</div>' +
-    '<div class="empty" style="box-shadow:none"><span class="spinner" style="display:inline-block;border-color:rgba(128,128,128,.25);border-top-color:var(--brand);vertical-align:middle"></span> Coach Cal is planning&hellip;</div>';
+  var cats = _recipeCats.length ? _recipeCats : MEALS_CATS;
+  var grid = cats.map(function(c){
+    var n = (typeof c.count==="number") ? recipesInCat(c.key).length : (_recipesLoaded?recipesInCat(c.key).length:0);
+    var cnt = _recipesLoaded ? (n + (n===1?" recipe":" recipes")) : "&hellip;";
+    return '<button class="cat-tile" data-cat="'+c.key+'" type="button">'+
+      '<img class="cat-tile-img" loading="lazy" src="'+recipeImg(c.cover)+'" alt="">'+
+      '<div class="cat-tile-b"><div class="cat-tile-n">'+esc(c.label)+'</div><div class="cat-tile-c">'+cnt+'</div></div></button>';
+  }).join("");
+  var html =
+    '<div class="sheet-h">SnapCal Meals</div>'+
+    '<div class="sheet-sub">Goal-fit recipes, picked for your '+info.emoji+' '+esc(info.label)+' plan.</div>'+
+    '<div class="meals-tabs"><button class="meals-tab on" data-mtab="browse" type="button">Browse</button>'+
+    '<button class="meals-tab" data-mtab="search" type="button">Search</button></div>'+
+    '<button class="meals-hero" id="planHero" type="button">'+
+      '<img src="'+recipeImg("healthy meal prep week colorful")+'" alt="">'+
+      '<div class="meals-hero-ov"><div class="meals-hero-k">Coach Cal</div>'+
+      '<div class="meals-hero-t">Your 7-day plan</div>'+
+      '<div class="meals-hero-s">A full week, built around your goal &amp; macros</div></div>'+
+      '<div class="meals-hero-go">&rsaquo;</div></button>'+
+    '<div class="meals-lbl">Browse by category</div>'+
+    '<div class="cat-grid">'+grid+'</div>'+
+    '<div class="coach-foot" style="margin-top:18px">Flexible ideas, not medical advice. Filtered for your diet &amp; allergies.</div>';
+  $("#sheetBody").innerHTML=html; $(".sheet-card").scrollTop=0;
+  $("#planHero").addEventListener("click", openPlanView);
+  $("#sheetBody").querySelectorAll(".cat-tile").forEach(function(b){ b.addEventListener("click", function(){ renderCategory(b.dataset.cat); }); });
+  $("#sheetBody").querySelectorAll(".meals-tab").forEach(function(t){ t.addEventListener("click", function(){ if(t.dataset.mtab==="search") renderSearch(""); }); });
+}
+
+function dietTagHTML(diet){
+  diet=(diet||"").toLowerCase();
+  if(diet==="vegan") return '<span class="rc-tag">Vegan</span>';
+  if(diet==="vegetarian") return '<span class="rc-tag">Vegetarian</span>';
+  if(diet==="pescatarian") return '<span class="rc-tag">Pescatarian</span>';
+  return '';
+}
+function recipeCardHTML(r){
+  return '<button class="rc-card" data-id="'+esc(r.id)+'" type="button">'+
+    '<img class="rc-img" loading="lazy" src="'+recipeImg(r.photo||r.name)+'" alt="">'+
+    '<div class="rc-b"><div class="rc-n">'+esc(r.name)+'</div>'+
+    '<div class="rc-m"><b>'+fmtNum(int(r.calories))+'</b> Cal &middot; P '+int(r.protein_g)+'g &middot; C '+int(r.carbs_g)+'g &middot; F '+int(r.fat_g)+'g</div>'+
+    '<div class="rc-tags">'+(r.minutes?'<span class="rc-tag">'+int(r.minutes)+' min</span>':'')+dietTagHTML(r.diet)+'</div></div></button>';
+}
+function bindRecipeCards(from){
+  $("#sheetBody").querySelectorAll(".rc-card").forEach(function(b){ b.addEventListener("click", function(){ renderRecipe(b.dataset.id, from); }); });
+}
+
+function renderCategory(key){
+  _mealsView="category";
+  var list = recipesInCat(key);
+  var dietOn = (allergyLabels().length || (dietLabel(_diet) && dietLabel(_diet).toLowerCase().indexOf("none")<0));
+  var html = '<button class="sheet-back" id="mealsBack" type="button">&lsaquo; All meals</button>'+
+    '<div class="sheet-h">'+esc(catLabel(key))+'</div>'+
+    '<div class="sheet-sub">'+(list.length+(list.length===1?' recipe':' recipes'))+' that fit your goal'+(dietOn?' &amp; diet':'')+'.</div>';
+  if (!list.length){
+    html += '<div class="empty">'+(_recipesLoaded?'No recipes here match your diet/allergies yet — try another category.':SPIN+'Loading recipes&hellip;')+'</div>';
+  } else { html += list.map(recipeCardHTML).join(""); }
+  $("#sheetBody").innerHTML=html; $(".sheet-card").scrollTop=0;
+  $("#mealsBack").addEventListener("click", renderMealsBrowse);
+  bindRecipeCards("category");
+}
+
+function renderSearch(q){
+  _mealsView="search"; _lastSearch=q||"";
+  var html = '<button class="sheet-back" id="mealsBack" type="button">&lsaquo; All meals</button>'+
+    '<div class="meals-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>'+
+    '<input id="mealsSearchIn" type="search" placeholder="Search '+(_recipesLoaded?_recipes.length:"500+")+' recipes" autocomplete="off"></div>'+
+    '<div id="mealsResults"></div>';
+  $("#sheetBody").innerHTML=html; $(".sheet-card").scrollTop=0;
+  $("#mealsBack").addEventListener("click", renderMealsBrowse);
+  var inp=$("#mealsSearchIn"); inp.value=_lastSearch;
+  inp.addEventListener("input", function(){ _lastSearch=inp.value; renderSearchResults(inp.value); });
+  renderSearchResults(_lastSearch);
+  try{ inp.focus(); }catch(e){}
+}
+function renderSearchResults(q){
+  q=String(q||"").trim().toLowerCase();
+  var box=$("#mealsResults"); if(!box) return;
+  if (!_recipesLoaded){ box.innerHTML='<div class="empty">'+SPIN+'Loading recipes&hellip;</div>'; return; }
+  var base=filterRecipes(_recipes);
+  var list = !q ? base.slice(0,24) : base.filter(function(r){
+    if (String(r.name).toLowerCase().indexOf(q)>-1) return true;
+    if (catLabel(r.cat).toLowerCase().indexOf(q)>-1) return true;
+    return (r.ingredients||[]).some(function(i){ return String(i.name).toLowerCase().indexOf(q)>-1; });
+  }).slice(0,40);
+  if (!list.length){ box.innerHTML='<div class="empty">No recipes match &ldquo;'+esc(q)+'&rdquo;. Try &ldquo;chicken&rdquo;, &ldquo;vegan&rdquo;, or a category.</div>'; return; }
+  box.innerHTML = (!q?'<div class="meals-lbl" style="margin-top:2px">Popular right now</div>':'') + list.map(recipeCardHTML).join("");
+  box.querySelectorAll(".rc-card").forEach(function(b){ b.addEventListener("click", function(){ renderRecipe(b.dataset.id, "search"); }); });
+}
+
+function renderRecipe(id, from){
+  var r=_recipes.filter(function(x){return x.id===id;})[0];
+  if(!r){ renderMealsBrowse(); return; }
+  _mealsView="recipe";
+  var backLabel = (from==="search") ? "Search" : catLabel(r.cat);
+  var secs={}; (r.ingredients||[]).forEach(function(i){ var s=i.section||"Other"; (secs[s]=secs[s]||[]).push(i); });
+  var ingHTML = Object.keys(secs).map(function(s){
+    return '<div class="rd-sec">'+esc(s)+'</div>'+secs[s].map(function(i){
+      return '<div class="rd-ing"><span>'+esc(i.name)+'</span><em>'+esc(i.qty||"")+'</em></div>'; }).join("");
+  }).join("");
+  var stepsHTML=(r.steps||[]).map(function(st,i){ return '<div class="rd-step"><b>'+(i+1)+'</b><span>'+esc(st)+'</span></div>'; }).join("");
+  var html='<button class="sheet-back" id="mealsBack" type="button">&lsaquo; '+esc(backLabel)+'</button>'+
+    '<img class="rd-hero" loading="lazy" src="'+recipeImg(r.photo||r.name)+'" alt="">'+
+    '<div class="sheet-h">'+esc(r.name)+'</div>'+
+    '<div class="sheet-sub">'+(r.minutes?int(r.minutes)+' min &middot; ':'')+'fits your '+esc((GOAL_INFO[goal]||GOAL_INFO.maintain).label.toLowerCase())+' goal</div>'+
+    '<div class="rd-macros">'+
+      '<div class="rd-macro"><b>'+fmtNum(int(r.calories))+'</b><span>Cal</span></div>'+
+      '<div class="rd-macro"><b>'+int(r.protein_g)+'g</b><span>Protein</span></div>'+
+      '<div class="rd-macro"><b>'+int(r.carbs_g)+'g</b><span>Carbs</span></div>'+
+      '<div class="rd-macro"><b>'+int(r.fat_g)+'g</b><span>Fat</span></div></div>'+
+    (ingHTML?'<div class="rd-sec" style="margin-top:18px">Ingredients</div>'+ingHTML:'')+
+    (stepsHTML?'<div class="rd-sec" style="margin-top:18px">Method</div>'+stepsHTML:'')+
+    (r.tip?'<div class="rd-tip"><b>Coach Cal:</b> '+esc(r.tip)+'</div>':'')+
+    '<div class="mp-build"><button class="btn btn-dark" id="rcGroceryBtn" type="button" style="margin-top:6px">'+
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.5 3h2l2.5 12.5a2 2 0 0 0 2 1.5h8.5a2 2 0 0 0 2-1.6L21.5 8H6"></path></svg>'+
+      'Add ingredients to grocery list</button></div>';
+  $("#sheetBody").innerHTML=html; $(".sheet-card").scrollTop=0;
+  $("#mealsBack").addEventListener("click", function(){ if(from==="search") renderSearch(_lastSearch||""); else renderCategory(r.cat); });
+  var g=$("#rcGroceryBtn"); if(g) g.addEventListener("click", function(){ buildGroceryFromPlan({days:[{meals:[{ingredients:r.ingredients}]}]}); });
+}
+
+async function openPlanView(){
+  if (!isPremium()) { openPaywall(); return; }
+  _mealsView="plan";
+  var info = GOAL_INFO[goal] || GOAL_INFO.maintain;
+  $(".sheet-card").scrollTop=0;
+  var ck="mp_"+goal, cached=lsGet(ck);
+  if (cached && cached.days && cached.days.length) { _mealPlan=cached; renderMealPlanSheet(cached, info); }
+  else {
+    $("#sheetBody").innerHTML =
+      '<button class="sheet-back" id="mealsBack" type="button">&lsaquo; All meals</button>'+
+      '<div class="sheet-h">Your 7-day plan</div>'+
+      '<div class="sheet-sub">Building your '+info.emoji+' '+esc(info.label)+' week&hellip;</div>'+
+      '<div class="empty" style="box-shadow:none">'+SPIN+'Coach Cal is planning&hellip;</div>';
+    var bk=$("#mealsBack"); if(bk) bk.addEventListener("click", renderMealsBrowse);
+  }
   try {
-    var data = await api("/api/mealplan", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        goal: goal,
-        daily_calories: int(profile.daily_calories),
-        daily_protein_g: int(profile.protein_g),
-        allergies: allergyLabels(),
-        diet: dietLabel(_diet)
-      }) });
-    if (data && data.days && data.days.length) { _mealPlan = data; lsSet(ck, data); renderMealPlanSheet(data, info); }   /* refresh */
+    var data = await api("/api/mealplan", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ goal:goal, daily_calories:int(profile.daily_calories), daily_protein_g:int(profile.protein_g), allergies:allergyLabels(), diet:dietLabel(_diet) }) });
+    if (data && data.days && data.days.length) { _mealPlan=data; lsSet(ck, data); renderMealPlanSheet(data, info); }
   } catch (e) {
-    if (!cached) $("#sheetBody").innerHTML = '<div class="sheet-h">7-day meal planner</div><div class="empty">' + esc(e.message) + '</div>';
+    if (!cached) {
+      $("#sheetBody").innerHTML='<button class="sheet-back" id="mealsBack" type="button">&lsaquo; All meals</button><div class="sheet-h">Your 7-day plan</div><div class="empty">'+esc(e.message)+'</div>';
+      var b2=$("#mealsBack"); if(b2) b2.addEventListener("click", renderMealsBrowse);
+    }
   }
 }
 
@@ -2781,11 +3000,13 @@ function renderMealPlanSheet(data, info){
   data = data || {};
   info = info || GOAL_INFO[goal] || GOAL_INFO.maintain;
   var days = Array.isArray(data.days) ? data.days : [];
-  var html = '<div class="sheet-h">7-day meal planner</div>' +
+  var html = '<button class="sheet-back" id="mealsBack" type="button">&lsaquo; All meals</button>' +
+    '<div class="sheet-h">Your 7-day plan</div>' +
     '<div class="sheet-sub">' + info.emoji + ' ' + esc(info.label) + ' &middot; tap a day to see the meals</div>';
   if (!days.length){
     html += '<div class="empty">No plan right now — try again in a moment.</div>';
     $("#sheetBody").innerHTML = html; $(".sheet-card").scrollTop = 0;
+    var mbE = $("#mealsBack"); if (mbE) mbE.addEventListener("click", renderMealsBrowse);
     return;
   }
   html += days.map(function(d, i){
@@ -2821,6 +3042,7 @@ function renderMealPlanSheet(data, info){
 
   $("#sheetBody").innerHTML = html; $(".sheet-card").scrollTop = 0;
 
+  var mbP = $("#mealsBack"); if (mbP) mbP.addEventListener("click", renderMealsBrowse);
   $("#sheetBody").querySelectorAll(".mp-day-h").forEach(function(btn){
     btn.addEventListener("click", function(){ btn.closest(".mp-day").classList.toggle("open"); });
   });

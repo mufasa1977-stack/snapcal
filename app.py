@@ -25,6 +25,7 @@ except ImportError:
 APP_DIR = Path(__file__).resolve().parent
 DB_PATH = APP_DIR / "snapcal.db"
 RESTAURANTS_PATH = APP_DIR / "data" / "restaurants.json"  # curated "Eat Out" dataset
+RECIPES_PATH = APP_DIR / "data" / "recipes.json"  # curated recipe library (SnapCal Meals browser)
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"  # free OpenStreetMap places lookup (no API key / no billing)
 # Key: prefer the GEMINI_API_KEY env var (hosting / paid tier); fall back to the
 # local key file so `python app.py` still works during development.
@@ -808,6 +809,26 @@ def _load_restaurants():
 def restaurants():
     """Serve the curated fast-food healthy-order guide (cached + client-cacheable)."""
     return jsonify(_load_restaurants())
+
+
+_recipes_cache = None
+
+
+def _load_recipes():
+    """Load the curated recipe library once (built by gen_recipes.py -> data/recipes.json)."""
+    global _recipes_cache
+    if _recipes_cache is None:
+        try:
+            _recipes_cache = json.loads(RECIPES_PATH.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — ship empty so the browser still renders category tiles
+            _recipes_cache = {"categories": [], "recipes": []}
+    return _recipes_cache
+
+
+@app.get("/api/recipes")
+def recipes():
+    """Serve the curated SnapCal Meals recipe library (categories + recipes) for the in-app browser."""
+    return jsonify(_load_recipes())
 
 
 def _norm_name(s):
