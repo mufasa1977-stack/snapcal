@@ -845,6 +845,19 @@
         <input id="nutriInput" type="text" placeholder="e.g. large egg, banana, grilled chicken breast" autocomplete="off" style="flex:1;min-width:0;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:11px;padding:11px 12px;font-size:14px;font-family:inherit">
         <button id="nutriBtn" type="button" style="flex:0 0 auto;border:none;background:var(--brand);color:#fff;font-weight:800;border-radius:11px;padding:11px 16px;cursor:pointer;font-family:inherit">Look up</button>
       </div>
+      <button id="barcodeBtn" type="button" style="width:100%;margin-top:9px;border:1.5px solid var(--brand);background:var(--soft);color:var(--brand);font-weight:800;border-radius:11px;padding:11px 12px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 5v14M7 5v14M11 5v14M14.5 5v14M18 5v14M21 5v14"></path></svg>
+        Scan a barcode for exact numbers
+      </button>
+      <div id="barcodePanel" style="display:none;margin-top:10px">
+        <video id="bcVideo" playsinline muted style="display:none;width:100%;max-height:230px;object-fit:cover;border-radius:12px;background:#000;margin-bottom:9px"></video>
+        <div style="display:flex;gap:8px">
+          <input id="bcInput" type="text" inputmode="numeric" placeholder="Barcode number (UPC / EAN)" autocomplete="off" style="flex:1;min-width:0;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:11px;padding:11px 12px;font-size:14px;font-family:inherit">
+          <button id="bcLookup" type="button" style="flex:0 0 auto;border:none;background:var(--brand);color:#fff;font-weight:800;border-radius:11px;padding:11px 16px;cursor:pointer;font-family:inherit">Look up</button>
+        </div>
+        <button id="bcCamera" type="button" style="display:none;width:100%;margin-top:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;border-radius:11px;padding:10px;cursor:pointer;font-family:inherit">📷 Use camera to scan</button>
+        <div id="bcHint" style="font-size:11.5px;color:var(--ink3);margin-top:8px;text-align:center"></div>
+      </div>
       <div id="nutriResult" style="margin-top:12px"></div>
     </div>
 
@@ -1280,6 +1293,92 @@ function lookupNutrition(){
 }
 if ($("#nutriBtn")) $("#nutriBtn").addEventListener("click", lookupNutrition);
 if ($("#nutriInput")) $("#nutriInput").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); lookupNutrition(); } });
+
+/* ---------------- barcode -> VERIFIED label data (Open Food Facts, free, no key) ---------------- */
+var _bcStream = null, _bcRAF = null;
+function bcEl(id){ return document.getElementById(id); }
+function toggleBarcodePanel(){
+  var pan = bcEl("barcodePanel"); if (!pan) return;
+  var show = pan.style.display === "none";
+  pan.style.display = show ? "block" : "none";
+  if (show){
+    var cam = bcEl("bcCamera");
+    if (cam && ("BarcodeDetector" in window)) cam.style.display = "block";
+    var hint = bcEl("bcHint");
+    if (hint) hint.textContent = ("BarcodeDetector" in window)
+      ? "Point your camera at the barcode, or type the number under the bars."
+      : "Type the barcode number under the bars (live camera scan needs Chrome on Android).";
+    var inp = bcEl("bcInput"); if (inp) try{ inp.focus(); }catch(e){}
+  } else { stopBarcodeCamera(); }
+}
+function lookupBarcode(code){
+  code = String(code || "").replace(/\D/g, "");
+  var res = $("#nutriResult");
+  if (code.length < 8){ if (res) res.innerHTML = '<div class="nf-card"><div class="nf-empty">That doesn’t look like a full barcode — enter all the digits under the bars.</div></div>'; return; }
+  if (res) res.innerHTML = '<div class="empty" style="box-shadow:none;padding:12px"><span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(128,128,128,.25);border-top-color:var(--brand);border-radius:50%;vertical-align:-2px;animation:spin .7s linear infinite"></span> Checking the verified barcode database&hellip;</div>';
+  api("/api/barcode?code=" + encodeURIComponent(code)).then(renderBarcodeResult).catch(function(){
+    if (res) res.innerHTML = '<div class="nf-card"><div class="nf-empty">Couldn’t reach the barcode database right now — try again in a moment.</div></div>';
+  });
+}
+function renderBarcodeResult(d){
+  var res = $("#nutriResult"); if (!res) return;
+  if (!d || d.found === false || d.calories == null){
+    res.innerHTML = '<div class="nf-card"><div class="nf-empty">No verified match for that barcode yet. Try the food search above, or snap a photo to estimate it.</div></div>';
+    return;
+  }
+  res.innerHTML = '<div class="nf-card">' +
+    '<div class="nf-food">' + esc(d.name) + (d.brand ? ' <span style="color:var(--ink3);font-weight:600">&middot; ' + esc(d.brand) + '</span>' : '') + '</div>' +
+    '<div class="nf-serv">Per ' + esc(d.serving) + ' &middot; <b style="color:var(--brand)">✓ Verified label data</b></div>' +
+    nfRow("Calories", d.calories, "kcal") + nfRow("Protein", d.protein_g, "g") + nfRow("Carbs", d.carbs_g, "g") +
+    nfRow("Fiber", d.fiber_g, "g") + nfRow("Sugar", d.sugar_g, "g") + nfRow("Fat", d.fat_g, "g") +
+    nfRow("Saturated fat", d.sat_fat_g, "g") + nfRow("Sodium", d.sodium_mg, "mg") +
+    '<div class="nf-src">Source: ' + esc(d.source) + ' &middot; exact barcode data, not an estimate</div>' +
+    '<button id="bcAdd" type="button" class="btn btn-dark" style="margin-top:12px">Add to today</button>' +
+  '</div>';
+  var add = bcEl("bcAdd"); if (add) add.addEventListener("click", function(){ addBarcodeToToday(d); });
+}
+async function addBarcodeToToday(d){
+  try{
+    var nm = (d.name || "Food") + (d.brand ? " (" + d.brand + ")" : "");
+    await api("/api/meals", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: todayStr(), time: nowTime(), name: nm,
+        calories: int(d.calories), protein_g: int(d.protein_g), carbs_g: int(d.carbs_g), fat_g: int(d.fat_g),
+        items_json: JSON.stringify([{ name: nm, calories: int(d.calories), protein_g: int(d.protein_g), carbs_g: int(d.carbs_g), fat_g: int(d.fat_g) }]),
+        detail_json: JSON.stringify({ verified: true, source: d.source, serving: d.serving, barcode: d.code })
+      }) });
+    toast("✓ Added " + (d.name || "food") + " to your log");
+    var pan = bcEl("barcodePanel"); if (pan) pan.style.display = "none";
+    var inp = bcEl("bcInput"); if (inp) inp.value = "";
+    switchTab("today");
+  } catch (e){ toast(e.message || "Couldn't add it", true); }
+}
+async function startBarcodeCamera(){
+  var h = bcEl("bcHint");
+  if (!("BarcodeDetector" in window)){ if (h) h.textContent = "Camera scan needs Chrome on Android — type the number instead."; return; }
+  try{
+    var det = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_a","upc_e","code_128"] });
+    var v = bcEl("bcVideo");
+    _bcStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    v.srcObject = _bcStream; v.style.display = "block"; await v.play();
+    if (h) h.textContent = "Hold the barcode steady in the frame…";
+    var tick = async function(){
+      if (!_bcStream) return;
+      try{ var codes = await det.detect(v); if (codes && codes.length){ stopBarcodeCamera(); lookupBarcode(codes[0].rawValue); return; } }catch(e){}
+      _bcRAF = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (e){ if (h) h.textContent = "Couldn’t open the camera — type the barcode number instead."; stopBarcodeCamera(); }
+}
+function stopBarcodeCamera(){
+  if (_bcRAF){ cancelAnimationFrame(_bcRAF); _bcRAF = null; }
+  if (_bcStream){ _bcStream.getTracks().forEach(function(t){ t.stop(); }); _bcStream = null; }
+  var v = bcEl("bcVideo"); if (v){ v.style.display = "none"; try{ v.srcObject = null; }catch(e){} }
+}
+if (bcEl("barcodeBtn")) bcEl("barcodeBtn").addEventListener("click", toggleBarcodePanel);
+if (bcEl("bcLookup")) bcEl("bcLookup").addEventListener("click", function(){ lookupBarcode(bcEl("bcInput").value); });
+if (bcEl("bcInput")) bcEl("bcInput").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); lookupBarcode(bcEl("bcInput").value); } });
+if (bcEl("bcCamera")) bcEl("bcCamera").addEventListener("click", startBarcodeCamera);
 
 /* ---------------- tabs ---------------- */
 function switchTab(name){

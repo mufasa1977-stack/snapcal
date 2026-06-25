@@ -1607,6 +1607,67 @@ def nutrition():
     return jsonify(out)
 
 
+_BARCODE_CACHE = {}
+
+
+@app.get("/api/barcode")
+def barcode():
+    """Look up a packaged food by its UPC/EAN barcode against Open Food Facts — a free, open,
+    VERIFIED label database (no API key, no billing, like our OSM/USDA calls). This is the
+    'trust the number' answer to AI-photo guesses: exact label data with a confidence you can
+    stand behind, not an estimate. Returns {found:false} cleanly when a code isn't in the DB."""
+    code = re.sub(r"\D", "", (request.args.get("code") or ""))
+    if not (8 <= len(code) <= 14):
+        return jsonify({"error": "bad_barcode"}), 400
+    if code in _BARCODE_CACHE:
+        return jsonify(_BARCODE_CACHE[code])
+    fields = "product_name,brands,serving_size,nutrition_data_per,nutriments,image_front_small_url"
+    url = "https://world.openfoodfacts.org/api/v2/product/" + code + ".json?fields=" + fields
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "SnapCal/1.0 (barcode nutrition)"})
+        with urllib.request.urlopen(req, timeout=12) as r:
+            d = json.loads(r.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return jsonify({"error": "lookup_failed"}), 502
+    if d.get("status") != 1 and not d.get("product"):
+        out = {"found": False, "code": code}
+        _BARCODE_CACHE[code] = out
+        return jsonify(out)
+    p = d.get("product") or {}
+    n = p.get("nutriments") or {}
+
+    def num(key):
+        try:
+            return round(float(n.get(key)), 1)
+        except Exception:  # noqa: BLE001
+            return None
+
+    serving = (p.get("serving_size") or "").strip()
+    has_serv = num("energy-kcal_serving") is not None
+    per = serving if (has_serv and serving) else "100 g"
+    sfx = "_serving" if has_serv else "_100g"
+    sodium = num("sodium" + sfx)
+    out = {
+        "found": True,
+        "code": code,
+        "name": (p.get("product_name") or "").strip() or "Packaged food",
+        "brand": (p.get("brands") or "").split(",")[0].strip(),
+        "serving": per,
+        "image": p.get("image_front_small_url") or "",
+        "calories": num("energy-kcal" + sfx),
+        "protein_g": num("proteins" + sfx),
+        "carbs_g": num("carbohydrates" + sfx),
+        "fat_g": num("fat" + sfx),
+        "fiber_g": num("fiber" + sfx),
+        "sugar_g": num("sugars" + sfx),
+        "sat_fat_g": num("saturated-fat" + sfx),
+        "sodium_mg": (round(sodium * 1000) if sodium is not None else None),
+        "source": "Open Food Facts",
+    }
+    _BARCODE_CACHE[code] = out
+    return jsonify(out)
+
+
 @app.post("/api/meals")
 def add_meal():
     d = request.get_json(silent=True)
