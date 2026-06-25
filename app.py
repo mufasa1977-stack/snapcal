@@ -82,6 +82,18 @@ read off a nutrition label, plus key micronutrients — all estimated from what 
 The user's current goal is: {goal_desc}.
 Tailor "verdict" and "coach_tip" to THAT goal.
 
+METHOD — estimate like a registered dietitian, because consumer apps systematically UNDER-count:
+1. SCALE: find a reference object in the photo to judge real size — a dinner plate is ~27 cm across,
+   a fork ~18 cm, a standard 12-oz can ~12 cm tall, an adult hand ~18 cm. Use it to gauge true portion.
+2. GRAMS FIRST: for EACH item, estimate its edible WEIGHT IN GRAMS from that scale and its visible
+   volume; then derive calories and macros from that gram weight and the food's typical nutrient density
+   — do not guess macros directly. Put the gram estimate in "qty" (e.g. "approx. 150 g").
+3. COUNT THE HIDDEN CALORIES — this is the #1 source of error: cooking oil/butter, dressings, sauces,
+   gravy, melted cheese, spreads, and sugary drinks are usually present even when not obvious. INCLUDE
+   them. Restaurant and home-cooked dishes typically carry 100-400 kcal of added fats/oils people forget.
+4. WHEN PORTION OR HIDDEN INGREDIENTS ARE UNCERTAIN, lean slightly HIGHER, never lower, and say why in
+   "note". Under-counting breaks the user's results; an honest, slightly-high estimate protects them.
+
 Respond with STRICT JSON only (no markdown, no code fences), exactly matching this schema:
 {{
   "items": [
