@@ -502,6 +502,30 @@ def index():
     return app.send_static_file("index.html")
 
 
+@app.get("/manifest.webmanifest")
+def manifest():
+    resp = app.send_static_file("manifest.webmanifest")
+    resp.headers["Content-Type"] = "application/manifest+json"
+    return resp
+
+
+@app.get("/sw.js")
+def service_worker():
+    resp = app.send_static_file("sw.js")
+    resp.headers["Content-Type"] = "application/javascript"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.get("/.well-known/assetlinks.json")
+def assetlinks():
+    # Digital Asset Links — proves the Play app (com.xionprotech.snapcal) owns this domain (TWA).
+    resp = app.send_static_file(".well-known/assetlinks.json")
+    resp.headers["Content-Type"] = "application/json"
+    return resp
+
+
 @app.post("/api/analyze")
 def analyze():
     f = request.files.get("photo")

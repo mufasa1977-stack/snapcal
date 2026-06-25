@@ -1,0 +1,18 @@
+{
+  "name": "SnapCal — AI Calorie Coach",
+  "short_name": "SnapCal",
+  "description": "Scan your food, track calories and macros, and get real-world coaching from Coach Cal — including what to order when you eat out.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EDE6D8",
+  "theme_color": "#1E8C63",
+  "categories": ["health", "fitness", "lifestyle", "food"],
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
