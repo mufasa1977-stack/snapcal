@@ -753,6 +753,7 @@
   .mv-ex-cue{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:5px}
   .mv-ex-meta{font-size:11.5px;color:var(--ink3);margin-top:6px}
   .mv-ex-easier{display:block;margin-top:3px}
+  select.sel{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:30px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2379806F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center}
   /* ---------- streak ---------- */
   .streak{display:inline-flex;align-items:center;gap:6px;background:var(--card);box-shadow:var(--shadow);
     border-radius:999px;padding:7px 13px;font-size:13px;font-weight:700;margin-top:10px}
@@ -1033,7 +1034,45 @@
   <section id="tab-profile" class="tab">
     <div class="page-h">
       <h1>Profile</h1>
-      <div class="sub">Daily goals &amp; appearance</div>
+      <div class="sub">You, your goals &amp; settings</div>
+    </div>
+    <div class="card">
+      <div class="goal-title">🧍 About you</div>
+      <div class="goal-desc" style="margin:4px 2px 12px">Tell me a few things and I'll calculate your daily calorie + macro targets — no guessing.</div>
+      <label class="field-lbl" style="margin-top:0">Sex</label>
+      <div class="goal-seg" id="pSexSeg" style="margin:0">
+        <button type="button" data-sex="male"><span>Male</span></button>
+        <button type="button" data-sex="female"><span>Female</span></button>
+      </div>
+      <div class="p-grid" style="margin-top:12px">
+        <div class="p-cell"><label class="field-lbl" for="pAge">Age</label><input class="txt" id="pAge" type="number" inputmode="numeric" min="13" max="100" placeholder="years"></div>
+        <div class="p-cell"><label class="field-lbl" for="pActivity">Activity</label>
+          <select class="txt sel" id="pActivity">
+            <option value="sedentary">Sedentary (desk job)</option>
+            <option value="light">Lightly active</option>
+            <option value="moderate">Moderately active</option>
+            <option value="very">Very active</option>
+            <option value="extra">Extra active</option>
+          </select>
+        </div>
+        <div class="p-cell"><label class="field-lbl">Height</label>
+          <div style="display:flex;gap:6px">
+            <input class="txt" id="pHeightFt" type="number" inputmode="numeric" min="3" max="8" placeholder="ft">
+            <input class="txt" id="pHeightIn" type="number" inputmode="numeric" min="0" max="11" placeholder="in">
+          </div>
+        </div>
+        <div class="p-cell"><label class="field-lbl" for="pCurWeight">Current weight (lb)</label><input class="txt" id="pCurWeight" type="number" inputmode="decimal" min="50" placeholder="lb"></div>
+        <div class="p-cell"><label class="field-lbl" for="pGoalWeight">Goal weight (lb)</label><input class="txt" id="pGoalWeight" type="number" inputmode="decimal" min="50" placeholder="lb"></div>
+      </div>
+      <label class="field-lbl">Goal</label>
+      <div class="goal-seg goal-grid" id="pGoalSeg">
+        <button type="button" data-pg="lose"><span class="ge">🔥</span><span>Lose fat</span></button>
+        <button type="button" data-pg="recomp"><span class="ge">💪</span><span>Lose + tone</span></button>
+        <button type="button" data-pg="maintain"><span class="ge">⚖️</span><span>Maintain</span></button>
+        <button type="button" data-pg="gain"><span class="ge">📈</span><span>Build</span></button>
+      </div>
+      <button class="btn btn-dark" id="calcTargetsBtn" type="button" style="margin-top:14px">Calculate my targets</button>
+      <div id="calcResult" style="margin-top:12px"></div>
     </div>
     <div class="card">
       <div class="goal-title">🌓 Appearance</div>
@@ -1632,6 +1671,71 @@ function renderMoveDeskBreaks(){
   $(".sheet-card").scrollTop = 0;
 }
 if ($("#moveOpenBtn")) $("#moveOpenBtn").addEventListener("click", openMoveSheet);
+
+/* ---------------- About You -> auto-calculated targets (Mifflin-St Jeor) ---------------- */
+var _pSex = "male", _pGoalDir = "lose";
+var ACT_MULT = { sedentary: 1.2, light: 1.375, moderate: 1.55, very: 1.725, extra: 1.9 };
+function _segSet(wrapId, attr, val){
+  var w = $("#" + wrapId); if (!w) return;
+  w.querySelectorAll("button").forEach(function(b){ b.classList.toggle("active", b.dataset[attr] === val); });
+}
+function calcTargets(){
+  var age = int($("#pAge").value), ft = int($("#pHeightFt").value), inch = int($("#pHeightIn").value);
+  var wlb = parseFloat($("#pCurWeight").value) || 0, goalLb = parseFloat($("#pGoalWeight").value) || 0;
+  var act = ($("#pActivity").value) || "sedentary";
+  if (!age || !ft || !wlb){ toast("Add your age, height, and current weight", true); return; }
+  var kg = wlb * 0.45359, cm = (ft * 12 + inch) * 2.54;
+  var bmr = 10 * kg + 6.25 * cm - 5 * age + (_pSex === "female" ? -161 : 5);
+  var tdee = bmr * (ACT_MULT[act] || 1.2);
+  var cal;
+  if (_pGoalDir === "maintain") cal = tdee;
+  else if (_pGoalDir === "gain") cal = tdee + Math.min(0.12 * tdee, 350);
+  else { var pct = (_pGoalDir === "recomp") ? 0.18 : 0.20; cal = tdee * (1 - pct); var fl = (_pSex === "female") ? 1200 : 1500; if (cal < fl) cal = fl; }
+  cal = Math.round(cal / 10) * 10;
+  var proLb = goalLb > 0 ? goalLb : wlb * 0.7;                     /* heavy-user-safe: goal weight, not 344 */
+  var protein = Math.round(proLb * (_pGoalDir === "maintain" ? 0.8 : 1.0));
+  var goalKg = (goalLb > 0 ? goalLb : wlb) * 0.45359;
+  var fat = Math.round(Math.max(0.25 * cal / 9, 0.8 * goalKg));   /* hormonal-health floor */
+  var carb = Math.round((cal - protein * 4 - fat * 9) / 4); if (carb < 0) carb = 0;
+  $("#pCal").value = cal; $("#pPro").value = protein; $("#pCarb").value = carb; $("#pFat").value = fat;
+  var diff = tdee - cal, rate = Math.abs(diff) * 7 / 3500;
+  var rateTxt = (_pGoalDir === "maintain") ? "maintenance pace"
+    : (rate.toFixed(1) + " lb/week " + (diff > 0 ? "loss" : "gain") + " · moderate, muscle-protecting");
+  $("#calcResult").innerHTML = '<div class="mv-note" style="margin:0"><b>Your daily plan:</b> ' + fmtNum(cal) + ' Cal &middot; ' +
+    protein + 'g protein &middot; ' + carb + 'g carbs &middot; ' + fat + 'g fat<br><span style="color:var(--ink3)">&asymp; ' + rateTxt +
+    '. High protein keeps your muscle as the fat comes off. Filled in below — tweak anything, then <b>Save</b>.</span></div>';
+  saveAboutYou();
+  if ($("#saveBtn")) $("#saveBtn").click();                       /* persist the computed targets */
+  try{ $("#calcResult").scrollIntoView({ behavior: "smooth", block: "nearest" }); }catch(e){}
+}
+function saveAboutYou(){
+  try {
+    localStorage.setItem("snapcal_about", JSON.stringify({
+      sex: _pSex, age: int($("#pAge").value), ft: int($("#pHeightFt").value), inch: int($("#pHeightIn").value),
+      cur: parseFloat($("#pCurWeight").value) || 0, goalw: parseFloat($("#pGoalWeight").value) || 0,
+      activity: $("#pActivity").value, goal_dir: _pGoalDir
+    }));
+  } catch (e){}
+}
+function loadAboutYou(){
+  var b = {}; try { b = JSON.parse(localStorage.getItem("snapcal_about") || "{}"); } catch (e){}
+  if (b.sex) _pSex = b.sex; _segSet("pSexSeg", "sex", _pSex);
+  if (b.goal_dir) _pGoalDir = b.goal_dir; _segSet("pGoalSeg", "pg", _pGoalDir);
+  if (b.age) $("#pAge").value = b.age;
+  if (b.ft) $("#pHeightFt").value = b.ft;
+  if (b.inch) $("#pHeightIn").value = b.inch;
+  if (b.activity) $("#pActivity").value = b.activity;
+  if (b.goalw) $("#pGoalWeight").value = b.goalw;
+  if (b.cur && !$("#pCurWeight").value) $("#pCurWeight").value = b.cur;
+}
+if ($("#pSexSeg")) $("#pSexSeg").querySelectorAll("button").forEach(function(btn){
+  btn.addEventListener("click", function(){ _pSex = btn.dataset.sex; _segSet("pSexSeg", "sex", _pSex); saveAboutYou(); });
+});
+if ($("#pGoalSeg")) $("#pGoalSeg").querySelectorAll("button").forEach(function(btn){
+  btn.addEventListener("click", function(){ _pGoalDir = btn.dataset.pg; _segSet("pGoalSeg", "pg", _pGoalDir); saveAboutYou(); });
+});
+if ($("#calcTargetsBtn")) $("#calcTargetsBtn").addEventListener("click", calcTargets);
+loadAboutYou();
 
 async function loadStreak(){
   try {
