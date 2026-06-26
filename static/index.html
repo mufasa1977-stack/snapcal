@@ -725,6 +725,14 @@
   .conf-honest{font-size:12px;color:var(--ink3);line-height:1.42;margin:8px 0 0}
   .conf-cta{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;margin-top:10px;border:1.5px solid var(--brand);background:var(--soft);color:var(--brand);font-weight:800;border-radius:11px;padding:10px;cursor:pointer;font-family:inherit;font-size:13px}
   .conf-cta:active{transform:scale(.98)}
+  /* water tracking */
+  .water-glasses{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0}
+  .water-drop{width:30px;height:34px;padding:0;border:none;background:none;cursor:pointer;flex:none}
+  .water-drop svg{width:26px;height:32px;display:block;margin:0 auto;transition:transform .1s}
+  .water-drop:active svg{transform:scale(.84)}
+  .water-foot{display:flex;align-items:center;justify-content:space-between;margin-top:11px}
+  .water-count{font-size:13.5px;font-weight:750;color:var(--ink2)}
+  .water-steps{display:flex;gap:14px}
   /* ---------- streak ---------- */
   .streak{display:inline-flex;align-items:center;gap:6px;background:var(--card);box-shadow:var(--shadow);
     border-radius:999px;padding:7px 13px;font-size:13px;font-weight:700;margin-top:10px}
@@ -851,6 +859,19 @@
           </div>
           <div class="mring-k">Fat</div>
           <div class="mring-g" id="fatVal">of 0 g</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="waterCard">
+      <div class="goal-title">💧 Water</div>
+      <div class="goal-desc" style="margin:4px 2px 9px">Tap a glass as you drink — aim for 8 a day.</div>
+      <div class="water-glasses" id="waterGlasses"></div>
+      <div class="water-foot">
+        <span class="water-count" id="waterCount">0 of 8 glasses</span>
+        <div class="water-steps">
+          <button class="cal-step" id="waterMinus" type="button" aria-label="one less glass">&minus;</button>
+          <button class="cal-step" id="waterPlus" type="button" aria-label="one more glass">+</button>
         </div>
       </div>
     </div>
@@ -1430,10 +1451,40 @@ async function loadToday(){
     };
     renderToday();
     loadStreak();
+    loadWater();
   } catch (e) {
     toast(e.message, true);
   }
 }
+
+/* ---------------- water tracking ---------------- */
+var _water = { glasses: 0, goal: 8 };
+function waterDropSVG(filled){
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6c4 5 6.4 8 6.4 11.4a6.4 6.4 0 1 1-12.8 0C5.6 10.6 8 7.6 12 2.6Z" fill="' +
+    (filled ? 'var(--brand)' : 'none') + '" stroke="' + (filled ? 'var(--brand)' : 'var(--line)') + '" stroke-width="1.7"/></svg>';
+}
+function renderWater(){
+  var host = $("#waterGlasses"); if (!host) return;
+  var goal = _water.goal || 8, g = _water.glasses || 0, n = Math.max(goal, g);
+  var html = "";
+  for (var i = 1; i <= n; i++)
+    html += '<button class="water-drop" data-g="' + i + '" type="button" aria-label="glass ' + i + '">' + waterDropSVG(i <= g) + '</button>';
+  host.innerHTML = html;
+  $("#waterCount").textContent = g + " of " + goal + " glasses" + (g >= goal ? " ✓" : "");
+  host.querySelectorAll(".water-drop").forEach(function(b){
+    b.addEventListener("click", function(){ var v = int(b.dataset.g); setWater(v === _water.glasses ? v - 1 : v); });
+  });
+}
+function setWater(g){
+  g = Math.max(0, Math.min(40, g));
+  _water.glasses = g; renderWater();
+  api("/api/water", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: todayStr(), glasses: g }) }).catch(function(){});
+}
+function loadWater(){
+  api("/api/water").then(function(d){ if (d){ _water.glasses = int(d.glasses); _water.goal = int(d.goal) || 8; renderWater(); } }).catch(function(){});
+}
+if ($("#waterPlus")) $("#waterPlus").addEventListener("click", function(){ setWater(_water.glasses + 1); });
+if ($("#waterMinus")) $("#waterMinus").addEventListener("click", function(){ setWater(_water.glasses - 1); });
 
 async function loadStreak(){
   try {

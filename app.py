@@ -331,6 +331,12 @@ def init_db():
                    weight REAL
                )"""
         )
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS water(
+                   date TEXT PRIMARY KEY,
+                   glasses INTEGER NOT NULL DEFAULT 0
+               )"""
+        )
         # Migration: store the full rich breakdown per meal so History can show it.
         cols = [r[1] for r in con.execute("PRAGMA table_info(meals)").fetchall()]
         if "detail_json" not in cols:
@@ -2144,6 +2150,44 @@ def set_weight():
     finally:
         con.close()
     return jsonify({"ok": True})
+
+
+WATER_GOAL = 8  # glasses/day default (1 glass ≈ 250 ml / 8 oz)
+
+
+@app.get("/api/water")
+def get_water():
+    """Today's water count (glasses) + the daily goal. Simple per-day counter, like weights."""
+    today = date.today().isoformat()
+    con = get_db()
+    try:
+        row = con.execute("SELECT glasses FROM water WHERE date = ?", (today,)).fetchone()
+    finally:
+        con.close()
+    return jsonify({"date": today, "glasses": (int(row["glasses"]) if row else 0), "goal": WATER_GOAL})
+
+
+@app.post("/api/water")
+def set_water():
+    d = request.get_json(silent=True)
+    if not isinstance(d, dict) or not d.get("date"):
+        return jsonify({"error": "'date' and 'glasses' are required."}), 400
+    try:
+        g = int(d.get("glasses"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "glasses must be an integer."}), 400
+    g = max(0, min(40, g))
+    con = get_db()
+    try:
+        con.execute(
+            """INSERT INTO water(date, glasses) VALUES (?, ?)
+               ON CONFLICT(date) DO UPDATE SET glasses = excluded.glasses""",
+            (str(d.get("date")), g),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return jsonify({"ok": True, "glasses": g, "goal": WATER_GOAL})
 
 
 # ---------------------------------------------------------------- errors
