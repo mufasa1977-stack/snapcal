@@ -1615,7 +1615,7 @@ function renderMoveHome(){
     ? '<div class="coach-foot">More levels coming: ' + r.more_tiers_coming.map(esc).join(" &middot; ") + '</div>' : "";
   $("#sheetBody").innerHTML =
     '<div class="sheet-h">Move</div>' +
-    '<div class="sheet-sub">Low-impact workouts + desk breaks, built for your level — no gym, joint-friendly.</div>' +
+    '<div class="sheet-sub">Workouts built for your level — joint-friendly at home, plus a gym strength track.</div>' +
     safety + stop + '<div class="meals-lbl">Choose your level</div>' + tierCards + deskBtn + coming;
   $("#sheetBody").querySelectorAll(".mv-tier").forEach(function(b){
     b.addEventListener("click", function(){ var g = b.dataset.go; if (g === "__desk") renderMoveDeskBreaks(); else renderMoveTier(g); });
@@ -1634,6 +1634,7 @@ function renderMoveTier(id){
     '<div class="sheet-sub">' + esc(t.tagline || "") + '</div>' +
     (t.audience ? '<div class="mv-note">' + esc(t.audience) + '</div>' : "") +
     (t.weekly ? '<div class="mv-note"><b>Weekly:</b> ' + esc(t.weekly) + '</div>' : "") +
+    (t.notes && t.notes.length ? t.notes.map(function(n){ return '<div class="mv-note">' + esc(n) + '</div>'; }).join("") : "") +
     '<div class="meals-lbl">Sessions</div>' + sessions;
   $("#mvBack").addEventListener("click", renderMoveHome);
   $("#sheetBody").querySelectorAll(".mv-sess").forEach(function(b){ b.addEventListener("click", function(){ renderMoveSession(id, b.dataset.sess); }); });

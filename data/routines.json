@@ -68,6 +68,56 @@
           "cooldown": "Standing supported calf stretch + seated hamstring stretch, 20 sec each."
         }
       ]
+    },
+    {
+      "id": "iron",
+      "name": "Iron — Upper Body & Core",
+      "emoji": "🏋️",
+      "tagline": "Gym strength to build muscle while you lose fat. Upper body + core, knee-safe.",
+      "audience": "For when you're ready to lift. This builds and protects muscle so you lose FAT and stay solid — not skinny. Every move is upper-body or core, done seated, machine-based, or standing-supported to keep your knees safe: no squats, lunges, running, or jumping. Start lighter than you think and own the form first.",
+      "intensity": "Moderate strength",
+      "equipment": ["Dumbbells", "A bench or sturdy chair", "Machines if you have them (chest press, lat pulldown, seated row, cable)", "A resistance band subs for any cable move"],
+      "weekly": "2-3 non-consecutive days/week (e.g. Mon/Thu, or Mon/Wed/Fri). Leave at least a day between sessions that hit the same muscles. Keep your daily walks + desk-breaks going on top.",
+      "notes": [
+        "Why this matters: lifting + high protein is your recomposition engine — you lose FAT while keeping and building muscle, so you finish solid, not saggy. This is your best defense against loose skin.",
+        "Form before weight, always. Start light, own the movement, and leave 1-2 reps 'in the tank' each set. Add a little weight only once every set is clean at the top of the rep range.",
+        "Knee-safe by design: upper-body and core only, seated/machine/supported. Breathe OUT on the effort — never hold your breath."
+      ],
+      "sessions": [
+        {
+          "id": "iron_push", "name": "Push — Chest, Shoulders & Triceps", "minutes": 30,
+          "exercises": [
+            { "name": "Machine Chest Press (or Dumbbell Bench Press)", "rx": "3 sets × 8-12", "rest": "60-90 sec", "cue": "Seated, handles at chest height. Press smoothly to nearly-straight arms (don't lock hard), squeeze the chest, lower under control for 2-3 sec. Shoulders down and back.", "easier": "Lighter weight, or wall/incline push-ups for 2 sets of as many as stay clean." },
+            { "name": "Seated Dumbbell Shoulder Press", "rx": "3 sets × 8-12", "rest": "60-90 sec", "cue": "Back supported, dumbbells at ear height, press up and slightly together, lower to the ears. Brace your core, don't arch the low back.", "easier": "Lighter dumbbells, one arm at a time, or a seated band overhead press." },
+            { "name": "Incline Dumbbell Press or Machine Chest Fly", "rx": "2-3 sets × 10-12", "rest": "60 sec", "cue": "Slight incline to hit the upper chest. Press/squeeze with control — feel the chest work, not the shoulders.", "easier": "Lighter weight, fewer sets, or a band chest squeeze." },
+            { "name": "Cable or Band Triceps Pushdown", "rx": "3 sets × 12-15", "rest": "45-60 sec", "cue": "Elbows pinned to your sides, push down to straight arms, squeeze the triceps, return slow. Only the forearms move.", "easier": "Lighter band, or seated overhead dumbbell extension." },
+            { "name": "Seated Overhead Dumbbell Triceps Extension", "rx": "2 sets × 12", "rest": "45 sec", "cue": "One dumbbell in both hands overhead, lower behind your head with elbows pointing up, press back up. Slow and controlled.", "easier": "Lighter weight, or a band triceps press." }
+          ],
+          "cooldown": "Doorway chest stretch 20-30 sec, overhead triceps stretch 20 sec/arm, slow shoulder rolls."
+        },
+        {
+          "id": "iron_pull", "name": "Pull — Back & Biceps", "minutes": 30,
+          "exercises": [
+            { "name": "Lat Pulldown (or Band Pulldown)", "rx": "3 sets × 8-12", "rest": "60-90 sec", "cue": "Pull the bar to your upper chest by driving the elbows down and back, squeeze the shoulder blades, return slow. Lead with the back, not the arms.", "easier": "Lighter weight, or a seated band pulldown / supported single-arm row." },
+            { "name": "Seated Cable Row (or Dumbbell Bench Row)", "rx": "3 sets × 8-12", "rest": "60-90 sec", "cue": "Tall chest, pull the handle to your belly, squeeze the shoulder blades together, control it back out. Don't rock with the low back.", "easier": "Lighter weight, one arm at a time braced on a bench or your thigh." },
+            { "name": "Machine Reverse Fly or Band Pull-Apart", "rx": "2-3 sets × 12-15", "rest": "45-60 sec", "cue": "Arms out to the sides, squeeze the shoulder blades, lead with the pinkies. Great for posture after a desk day.", "easier": "Lighter band, smaller range." },
+            { "name": "Seated Dumbbell Biceps Curl", "rx": "3 sets × 10-12", "rest": "45-60 sec", "cue": "Elbows at your sides, curl without swinging, squeeze at the top, lower for a slow count of three.", "easier": "Lighter dumbbells, alternate arms, or band curls." },
+            { "name": "Cable or Band Face Pull", "rx": "2 sets × 15", "rest": "45 sec", "cue": "Pull toward your forehead with elbows high, squeeze the rear shoulders. This is your posture move — undoes desk slump.", "easier": "Lighter band, seated." }
+          ],
+          "cooldown": "Seated lat stretch (reach overhead and lean) 20 sec/side, cross-body shoulder stretch 20 sec/arm, biceps wall stretch 20 sec/arm."
+        },
+        {
+          "id": "iron_core", "name": "Core & Abs — Strong Middle", "minutes": 22,
+          "exercises": [
+            { "name": "Seated Cable Crunch or Machine Crunch", "rx": "3 sets × 12-15", "rest": "45-60 sec", "cue": "Curl your ribs toward your hips — round the spine, don't just bend at the hips. Exhale hard at the bottom and feel the abs squeeze.", "easier": "Band crunch anchored above you, or a seated lean-back hold." },
+            { "name": "Seated Knee Raises (chair or captain's chair)", "rx": "3 sets × 10-15", "rest": "45 sec", "cue": "Sit tall, grip the seat, lift both knees toward your chest with control, lower slow without flopping. Lower abs do the work.", "easier": "One knee at a time, smaller lift, or braced seated marches." },
+            { "name": "Standing Cable/Band Pallof Press (anti-rotation)", "rx": "2 sets × 10/side", "rest": "45 sec", "cue": "Band at chest height from the side, press straight out and resist the pull that wants to twist you. Brace the abs hard — builds a stable, protective core.", "easier": "Stand closer to the anchor (less resistance), fewer reps." },
+            { "name": "Incline or Counter Plank", "rx": "3 holds × 15-30 sec", "rest": "45 sec", "cue": "Hands on a sturdy counter or bench, body in one straight line, squeeze glutes and abs, breathe. No sagging hips — the higher your hands, the easier. No floor needed.", "easier": "Hands on a higher surface or the wall, shorter holds." },
+            { "name": "Standing Band Wood-Chop (gentle)", "rx": "2 sets × 10/side", "rest": "45 sec", "cue": "Band low to one side, pull diagonally up and across with braced abs, control it back. Smooth, no jerking — obliques and rotation strength.", "easier": "Lighter band, smaller range, or do the Pallof press instead." }
+          ],
+          "cooldown": "Standing side-bend stretch 20 sec/side, gentle seated cat-cow ×5, deep breathing ×5."
+        }
+      ]
     }
   ],
   "desk_breaks": {
