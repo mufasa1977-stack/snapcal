@@ -34,6 +34,7 @@ except Exception:  # noqa: BLE001 — fall back to the app dir if the configured
 DB_PATH = _DB_DIR / "snapcal.db"
 RESTAURANTS_PATH = APP_DIR / "data" / "restaurants.json"  # curated "Eat Out" dataset
 RECIPES_PATH = APP_DIR / "data" / "recipes.json"  # curated recipe library (SnapCal Meals browser)
+ROUTINES_PATH = APP_DIR / "data" / "routines.json"  # curated exercise routines (Move module)
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"  # free OpenStreetMap places lookup (no API key / no billing)
 # Key: prefer the GEMINI_API_KEY env var (hosting / paid tier); fall back to the
 # local key file so `python app.py` still works during development.
@@ -964,6 +965,26 @@ def _load_recipes():
 def recipes():
     """Serve the curated SnapCal Meals recipe library (categories + recipes) for the in-app browser."""
     return jsonify(_load_recipes())
+
+
+_routines_cache = None
+
+
+def _load_routines():
+    """Load the curated exercise routines once (data/routines.json — the Move module)."""
+    global _routines_cache
+    if _routines_cache is None:
+        try:
+            _routines_cache = json.loads(ROUTINES_PATH.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — ship empty so the UI degrades gracefully
+            _routines_cache = {"tiers": [], "desk_breaks": {}}
+    return _routines_cache
+
+
+@app.get("/api/routines")
+def routines():
+    """Serve the curated exercise routines (tiers + desk-break track + safety) for the Move module."""
+    return jsonify(_load_routines())
 
 
 def _norm_name(s):

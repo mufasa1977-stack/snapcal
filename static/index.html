@@ -733,6 +733,26 @@
   .water-foot{display:flex;align-items:center;justify-content:space-between;margin-top:11px}
   .water-count{font-size:13.5px;font-weight:750;color:var(--ink2)}
   .water-steps{display:flex;gap:14px}
+  /* Move module */
+  .mv-safety{background:linear-gradient(135deg,var(--soft),var(--card));border:1px solid var(--line);border-radius:12px;padding:11px 13px;font-size:12.5px;color:var(--ink2);line-height:1.45;margin:2px 2px 10px}
+  .mv-stop{border:1px solid #F3D9CE;background:#FBEEE7;border-radius:12px;padding:10px 13px;font-size:12px;color:#9A4A28;line-height:1.45;margin:0 2px 14px}
+  body.dark .mv-stop{background:rgba(192,83,46,.14);border-color:rgba(192,83,46,.32);color:#E89A7E}
+  .mv-tier{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:9px;cursor:pointer;box-shadow:0 4px 12px rgba(20,45,32,.07);font-family:inherit}
+  .mv-tier:active{transform:scale(.99)}
+  .mv-tier-e{font-size:24px;flex:none;line-height:1}
+  .mv-tier-b{flex:1;min-width:0;display:flex;flex-direction:column}
+  .mv-tier-n{font-size:15px;font-weight:750;color:var(--ink)}
+  .mv-tier-t{font-size:12px;color:var(--ink2);margin-top:2px}
+  .mv-chev{color:var(--ink3);font-size:22px;font-weight:700;flex:none}
+  .mv-sess{justify-content:space-between}
+  .mv-note{font-size:12.5px;color:var(--ink2);background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin:0 2px 12px;line-height:1.45}
+  .mv-ex{border-top:1px solid var(--line);padding:12px 2px}
+  .mv-ex-h{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+  .mv-ex-n{font-size:14.5px;font-weight:700;color:var(--ink)}
+  .mv-ex-rx{font-size:12.5px;font-weight:800;color:var(--brand);flex:none;white-space:nowrap}
+  .mv-ex-cue{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:5px}
+  .mv-ex-meta{font-size:11.5px;color:var(--ink3);margin-top:6px}
+  .mv-ex-easier{display:block;margin-top:3px}
   /* ---------- streak ---------- */
   .streak{display:inline-flex;align-items:center;gap:6px;background:var(--card);box-shadow:var(--shadow);
     border-radius:999px;padding:7px 13px;font-size:13px;font-weight:700;margin-top:10px}
@@ -874,6 +894,12 @@
           <button class="cal-step" id="waterPlus" type="button" aria-label="one more glass">+</button>
         </div>
       </div>
+    </div>
+
+    <div class="card" id="moveCard">
+      <div class="goal-title">🏃 Move</div>
+      <div class="goal-desc" style="margin:4px 2px 10px">Low-impact workouts + desk-break stretches, built for your level. No gym, joint-friendly.</div>
+      <button class="btn btn-dark" id="moveOpenBtn" type="button" style="margin-top:0">Start moving</button>
     </div>
 
     <div class="card">
@@ -1532,6 +1558,88 @@ if ($("#qaAddBtn")) $("#qaAddBtn").addEventListener("click", async function(){
   } catch (e){ toast(e.message || "Couldn't add it", true); }
   finally { btn.disabled = false; }
 });
+
+/* ---------------- Move module (low-impact workouts + desk breaks) ---------------- */
+var _routines = null;
+function openMoveSheet(){
+  openSheet(); $(".sheet-card").scrollTop = 0;
+  if (_routines){ renderMoveHome(); return; }
+  $("#sheetBody").innerHTML = '<div class="sheet-h">Move</div><div class="empty">' + SPIN + 'Loading your plan&hellip;</div>';
+  api("/api/routines").then(function(d){ _routines = d || {}; renderMoveHome(); })
+    .catch(function(){ $("#sheetBody").innerHTML = '<div class="sheet-h">Move</div><div class="empty">Couldn’t load your routines — try again in a moment.</div>'; });
+}
+function _mvTier(id){ return ((_routines && _routines.tiers) || []).filter(function(t){ return t.id === id; })[0]; }
+function renderMoveHome(){
+  var r = _routines || {}, tiers = r.tiers || [], db = r.desk_breaks || {};
+  var safety = '<div class="mv-safety"><b>Move safely.</b> ' + esc(r.clearance || "Have a quick word with your doctor before starting a new routine.") + '</div>';
+  var stop = (r.stop_signs && r.stop_signs.length)
+    ? '<div class="mv-stop"><b>Stop &amp; rest if you feel:</b> ' + r.stop_signs.map(esc).join(" &middot; ") + '. ' + esc(r.stop_note || "") + '</div>' : '';
+  function tierBtn(id, emoji, name, tag){
+    return '<button class="mv-tier" data-go="' + esc(id) + '" type="button"><span class="mv-tier-e">' + (emoji || "💪") + '</span>' +
+      '<span class="mv-tier-b"><span class="mv-tier-n">' + esc(name) + '</span><span class="mv-tier-t">' + esc(tag || "") + '</span></span><span class="mv-chev">&rsaquo;</span></button>';
+  }
+  var tierCards = tiers.map(function(t){ return tierBtn(t.id, t.emoji, t.name, t.tagline); }).join("");
+  var deskBtn = (db.snacks && db.snacks.length) ? tierBtn("__desk", db.emoji, db.name || "Desk-Break Snacks", db.tagline) : "";
+  var coming = (r.more_tiers_coming && r.more_tiers_coming.length)
+    ? '<div class="coach-foot">More levels coming: ' + r.more_tiers_coming.map(esc).join(" &middot; ") + '</div>' : "";
+  $("#sheetBody").innerHTML =
+    '<div class="sheet-h">Move</div>' +
+    '<div class="sheet-sub">Low-impact workouts + desk breaks, built for your level — no gym, joint-friendly.</div>' +
+    safety + stop + '<div class="meals-lbl">Choose your level</div>' + tierCards + deskBtn + coming;
+  $("#sheetBody").querySelectorAll(".mv-tier").forEach(function(b){
+    b.addEventListener("click", function(){ var g = b.dataset.go; if (g === "__desk") renderMoveDeskBreaks(); else renderMoveTier(g); });
+  });
+  $(".sheet-card").scrollTop = 0;
+}
+function renderMoveTier(id){
+  var t = _mvTier(id); if (!t){ renderMoveHome(); return; }
+  var sessions = (t.sessions || []).map(function(s){
+    return '<button class="rc-card mv-sess" data-sess="' + esc(s.id) + '" type="button"><div class="rc-b"><div class="rc-n">' + esc(s.name) + '</div>' +
+      '<div class="rc-m">' + (s.minutes ? int(s.minutes) + " min &middot; " : "") + ((s.exercises || []).length) + ' moves</div></div><span class="mv-chev">&rsaquo;</span></button>';
+  }).join("");
+  $("#sheetBody").innerHTML =
+    '<button class="sheet-back" id="mvBack" type="button">&lsaquo; Move</button>' +
+    '<div class="sheet-h">' + (t.emoji || "") + ' ' + esc(t.name) + '</div>' +
+    '<div class="sheet-sub">' + esc(t.tagline || "") + '</div>' +
+    (t.audience ? '<div class="mv-note">' + esc(t.audience) + '</div>' : "") +
+    (t.weekly ? '<div class="mv-note"><b>Weekly:</b> ' + esc(t.weekly) + '</div>' : "") +
+    '<div class="meals-lbl">Sessions</div>' + sessions;
+  $("#mvBack").addEventListener("click", renderMoveHome);
+  $("#sheetBody").querySelectorAll(".mv-sess").forEach(function(b){ b.addEventListener("click", function(){ renderMoveSession(id, b.dataset.sess); }); });
+  $(".sheet-card").scrollTop = 0;
+}
+function renderMoveSession(tierId, sessId){
+  var t = _mvTier(tierId); if (!t){ renderMoveHome(); return; }
+  var s = (t.sessions || []).filter(function(x){ return x.id === sessId; })[0]; if (!s){ renderMoveTier(tierId); return; }
+  var ex = (s.exercises || []).map(function(e, i){
+    return '<div class="mv-ex"><div class="mv-ex-h"><span class="mv-ex-n">' + (i + 1) + ". " + esc(e.name) + '</span><span class="mv-ex-rx">' + esc(e.rx || "") + '</span></div>' +
+      (e.cue ? '<div class="mv-ex-cue">' + esc(e.cue) + '</div>' : "") +
+      '<div class="mv-ex-meta">' + (e.rest ? "Rest " + esc(e.rest) : "") + (e.easier ? '<span class="mv-ex-easier">Easier: ' + esc(e.easier) + '</span>' : "") + '</div></div>';
+  }).join("");
+  $("#sheetBody").innerHTML =
+    '<button class="sheet-back" id="mvBack" type="button">&lsaquo; ' + esc(t.name) + '</button>' +
+    '<div class="sheet-h">' + esc(s.name) + '</div>' +
+    '<div class="sheet-sub">' + (s.minutes ? int(s.minutes) + " min &middot; " : "") + 'warm up first, ease off at any stop sign.</div>' +
+    ex + (s.cooldown ? '<div class="mv-note" style="margin-top:12px"><b>Cool down:</b> ' + esc(s.cooldown) + '</div>' : "") +
+    '<div class="coach-foot">' + esc(((_routines.global_rules || [])[0]) || "") + '</div>';
+  $("#mvBack").addEventListener("click", function(){ renderMoveTier(tierId); });
+  $(".sheet-card").scrollTop = 0;
+}
+function renderMoveDeskBreaks(){
+  var db = (_routines && _routines.desk_breaks) || {};
+  var snacks = (db.snacks || []).map(function(s){
+    return '<div class="mv-ex"><div class="mv-ex-h"><span class="mv-ex-n">' + esc(s.name) + '</span><span class="mv-ex-rx">' + esc(s.rx || "") + '</span></div>' +
+      (s.cue ? '<div class="mv-ex-cue">' + esc(s.cue) + '</div>' : "") + (s.every ? '<div class="mv-ex-meta">' + esc(s.every) + '</div>' : "") + '</div>';
+  }).join("");
+  $("#sheetBody").innerHTML =
+    '<button class="sheet-back" id="mvBack" type="button">&lsaquo; Move</button>' +
+    '<div class="sheet-h">' + (db.emoji || "🪑") + ' ' + esc(db.name || "Desk-Break Snacks") + '</div>' +
+    '<div class="sheet-sub">' + esc(db.frequency || "") + '</div>' +
+    (db.why ? '<div class="mv-note">' + esc(db.why) + '</div>' : "") + snacks;
+  $("#mvBack").addEventListener("click", renderMoveHome);
+  $(".sheet-card").scrollTop = 0;
+}
+if ($("#moveOpenBtn")) $("#moveOpenBtn").addEventListener("click", openMoveSheet);
 
 async function loadStreak(){
   try {

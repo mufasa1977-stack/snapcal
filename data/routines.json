@@ -1,0 +1,91 @@
+{
+  "module": "exercise",
+  "version": "1.0",
+  "disclaimer": "Educational fitness content, not medical advice. Stop any movement that causes sharp pain, chest pain, dizziness, or shortness of breath, and clear new exercise with your doctor first — especially with heart, joint, blood-pressure, or pregnancy concerns.",
+  "clearance": "Let's start this the safe way. Before your first workout, it's worth a quick word with your doctor — especially if you have a heart condition, diabetes, high blood pressure, joint pain, or you get chest pain, breathlessness, or dizziness when you're active. Most people get the green light to start with gentle walking. This takes 2 minutes and means you can move with total confidence. 💚",
+  "stop_signs": [
+    "Chest pain, pressure, or tightness",
+    "Breathlessness that feels severe or scary (not just “puffed”)",
+    "Dizziness, faintness, or feeling sick",
+    "A racing or irregular heartbeat",
+    "A cold sweat"
+  ],
+  "stop_note": "If any of these don't settle quickly with rest, call your local emergency number. These are rare — knowing them just means you can move with confidence.",
+  "expectations": "Here's the honest deal: what you eat drives the number on the scale — that's why SnapCal tracks it. Movement is what makes that weight loss healthy: it protects your muscle so you lose fat (not strength), guards your joints and heart, and lifts your mood and energy this week. Don't chase calories burned — chase how good you feel. 💪",
+  "global_rules": [
+    "Warm up 3-5 min before and cool down/stretch 3-5 min after every session.",
+    "Breathe out on the effort, never hold your breath.",
+    "Move through a pain-free range only; 'challenging but doable' is the target, not 'maximum'.",
+    "Keep water nearby and hydrate.",
+    "Progress by adding reps first, then sets, then resistance — never all at once.",
+    "Use the Talk Test: if you can talk but not sing, you've nailed the right effort."
+  ],
+  "tiers": [
+    {
+      "id": "tier1",
+      "name": "Start Here",
+      "emoji": "🌱",
+      "tagline": "Seated & standing-supported. Joint-friendly. No floor work.",
+      "audience": "Heavy or very deconditioned beginners. Everything is done seated or standing while holding a sturdy chair, counter, or wall — nothing requires getting down to or up from the floor.",
+      "intensity": "Very low impact",
+      "equipment": ["Sturdy armless chair", "Wall", "Counter or chair back for support"],
+      "weekly": "3-5 days/week (start at 3). Strength days (A & C) + a mobility day (B), with short easy walks + desk-break snacks on the in-between days. Rest or an easy walk on weekends.",
+      "sessions": [
+        {
+          "id": "t1_A", "name": "Session A — Full-Body Seated + Standing Strength", "minutes": 20,
+          "exercises": [
+            { "name": "Seated Marching", "rx": "2 sets × 30 sec", "rest": "30-45 sec", "cue": "Sit tall, lift one knee then the other like a slow march, swinging arms gently.", "easier": "Lift each foot just an inch off the floor, or alternate small heel raises." },
+            { "name": "Seated Shoulder & Arm Circles", "rx": "2 sets × 10 fwd + 10 back", "rest": "30 sec", "cue": "Roll shoulders in slow, smooth circles; keep them relaxed, not shrugged.", "easier": "Tiny circles, or one shoulder at a time." },
+            { "name": "Sit-to-Stand (Chair Squat)", "rx": "2 sets × 5-8 reps", "rest": "60 sec", "cue": "Scoot forward, press through your heels, push hands on thighs if needed, stand fully, then sit slow.", "easier": "Push up using the armrests, or just lift your hips an inch before sitting back." },
+            { "name": "Wall Push-Ups", "rx": "2 sets × 6-10 reps", "rest": "45-60 sec", "cue": "Hands on wall at shoulder height, body straight, bend elbows to bring chest toward wall, press back.", "easier": "Stand closer to the wall (more upright = easier); fewer reps." },
+            { "name": "Seated Leg Extensions", "rx": "2 sets × 8 per leg", "rest": "30-45 sec", "cue": "Sit tall, straighten one knee, squeeze the thigh, lower slowly.", "easier": "Extend only halfway, or alternate legs." },
+            { "name": "Seated Toe & Heel Raises", "rx": "2 sets × 15", "rest": "30 sec", "cue": "Lift toes up, then heels up, rolling through the foot — keeps ankles and circulation working.", "easier": "Toes-only or heels-only, fewer reps." }
+          ],
+          "cooldown": "Seated neck side-bends, overhead reach, slow seated forward fold — hold each 15-20 sec."
+        },
+        {
+          "id": "t1_B", "name": "Session B — Mobility & Gentle Range of Motion", "minutes": 18,
+          "exercises": [
+            { "name": "Seated Neck Mobility", "rx": "1 set × 5 each way", "rest": "20 sec", "cue": "Slow and small — ear toward shoulder, then look over each shoulder; never force or roll back.", "easier": "Reduce range to whatever is fully comfortable." },
+            { "name": "Seated Cat-Cow", "rx": "2 sets × 8", "rest": "30 sec", "cue": "Hands on thighs; round the back and tuck chin, then arch and lift the chest — breathe with it.", "easier": "Smaller spinal movement." },
+            { "name": "Seated Torso Rotation", "rx": "2 sets × 6 per side", "rest": "30 sec", "cue": "Cross arms on chest, rotate gently to look behind you, return to center, other side.", "easier": "Smaller turn." },
+            { "name": "Seated Hamstring Stretch", "rx": "2 × 20 sec per leg", "rest": "15 sec", "cue": "Extend one leg, heel on floor, sit tall and hinge slightly forward for a gentle stretch.", "easier": "Soft bend in the knee; lean less." },
+            { "name": "Seated Ankle Circles", "rx": "2 sets × 8 each way per foot", "rest": "15 sec", "cue": "Lift one foot slightly and draw slow circles with the toes.", "easier": "Heel on the floor, circle just the front of the foot." },
+            { "name": "Standing Supported Calf Stretch", "rx": "2 × 20 sec per leg", "rest": "20 sec", "cue": "Hold the counter, step one foot back with heel down, lean gently to stretch the calf.", "easier": "Smaller step back, or a seated calf press." }
+          ],
+          "cooldown": "Seated slow deep breathing × 5, shoulders dropping on each exhale."
+        },
+        {
+          "id": "t1_C", "name": "Session C — Standing Strength & Balance (supported)", "minutes": 20,
+          "exercises": [
+            { "name": "March in Place (supported)", "rx": "2 sets × 40 sec", "rest": "45 sec", "cue": "Hold the counter, march lifting knees to a comfortable height, tall posture.", "easier": "Smaller steps, or lift heels only; or seated marching." },
+            { "name": "Counter-Supported Mini Squats", "rx": "2 sets × 8", "rest": "60 sec", "cue": "Hold the counter, feet hip-width, bend knees a few inches like sitting back, then stand.", "easier": "Bend only an inch or two; or sit-to-stands from a chair." },
+            { "name": "Standing Heel Raises (supported)", "rx": "2 sets × 12", "rest": "45 sec", "cue": "Hold support, rise onto the balls of your feet, pause, lower slowly.", "easier": "Smaller lift; or seated with hands pressing on thighs." },
+            { "name": "Standing Side Leg Lift (supported)", "rx": "2 sets × 8 per leg", "rest": "45 sec", "cue": "Hold support, body tall, lift one leg out to the side a few inches, lower with control.", "easier": "Lift only slightly; or seated knee-out openings." },
+            { "name": "Standing Leg-Back (supported)", "rx": "2 sets × 8 per leg", "rest": "45 sec", "cue": "Hold support, squeeze the glute and press one leg straight back a few inches, don't arch.", "easier": "Small range; toes lightly brushing the floor." },
+            { "name": "Standing Weight Shifts (balance)", "rx": "2 sets × 8 shifts", "rest": "30 sec", "cue": "Hold support, slowly shift weight side to side onto each foot.", "easier": "Smaller shifts, two hands on support." }
+          ],
+          "cooldown": "Standing supported calf stretch + seated hamstring stretch, 20 sec each."
+        }
+      ]
+    }
+  ],
+  "desk_breaks": {
+    "name": "Desk-Break Snacks",
+    "emoji": "🪑",
+    "tagline": "2-5 minute movement breaks to interrupt long sitting.",
+    "why": "Breaking up 12-14 hours of sitting improves circulation, blood sugar, energy, posture, and hip/back comfort — more than one workout can offset alone.",
+    "frequency": "Take one every 30-60 minutes of sitting. Make the walk-around your longest, every 1-2 hours. Set a timer.",
+    "snacks": [
+      { "name": "Stand & Reset", "rx": "30-60 sec", "cue": "Stand, roll shoulders back 5×, reach overhead, 3 slow breaths. Tall spine, shoulders down.", "every": "Every 30-60 min" },
+      { "name": "Calf Raises", "rx": "1 min", "cue": "20-30 standing calf raises by your desk — rise, squeeze, lower slow. Great for circulation.", "every": "Every hour" },
+      { "name": "Sit-to-Stands", "rx": "1 min", "cue": "10 stand-ups from your chair without using your hands. Press through the heels.", "every": "Every 1-2 hours" },
+      { "name": "Hip-Flexor Stretch", "rx": "1 min", "cue": "Standing lunge stretch, 30 sec per side. Tuck the tailbone, press the hip forward — undoes the 'seated hip'.", "every": "Every 2-3 hours" },
+      { "name": "Posture Reset (Chin Tuck)", "rx": "45 sec", "cue": "Gently draw the chin straight back (double-chin) 5×; squeeze shoulder blades 5×. Counters 'tech neck'.", "every": "Every 30-60 min" },
+      { "name": "Neck & Shoulder Rolls", "rx": "30 sec", "cue": "5 slow shoulder rolls back, 3 gentle neck side-bends each way. Release shoulders from the ears.", "every": "Anytime tension builds" },
+      { "name": "Walk-Around", "rx": "2-5 min", "cue": "Walk to refill water, take a lap, or step outside. Bonus if you add stairs.", "every": "Every 1-2 hours (your longest)" },
+      { "name": "Marching in Place", "rx": "1-2 min", "cue": "March in place 60-90 sec, pumping the arms — a light cardio snack to beat the afternoon dip.", "every": "Mid-afternoon" }
+    ]
+  },
+  "more_tiers_coming": ["Gentle / Senior-friendly", "Intermediate", "Advanced / Strong"]
+}
