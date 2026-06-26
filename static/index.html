@@ -945,6 +945,23 @@
     <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
     <input type="file" id="galInput" accept="image/*" hidden>
 
+    <button class="gal-btn" id="quickAddToggle" type="button" style="margin-top:8px">⚡ Quick add — type the numbers</button>
+    <div class="card" id="quickAddCard" style="display:none;margin-top:12px">
+      <div class="goal-title">⚡ Quick add</div>
+      <div class="goal-desc" style="margin:4px 2px 10px">Know the numbers? Log it in seconds — no photo needed.</div>
+      <label class="field-lbl" for="qaName" style="margin-top:0">Food</label>
+      <input class="txt" id="qaName" type="text" placeholder="e.g. Protein shake" autocomplete="off">
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <div style="flex:1"><label class="field-lbl" for="qaCal" style="margin-top:0">Calories</label><input class="txt" id="qaCal" type="number" inputmode="numeric" min="0" placeholder="kcal"></div>
+        <div style="flex:1"><label class="field-lbl" for="qaPro" style="margin-top:0">Protein (g)</label><input class="txt" id="qaPro" type="number" inputmode="numeric" min="0" placeholder="opt"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <div style="flex:1"><label class="field-lbl" for="qaCarb" style="margin-top:0">Carbs (g)</label><input class="txt" id="qaCarb" type="number" inputmode="numeric" min="0" placeholder="opt"></div>
+        <div style="flex:1"><label class="field-lbl" for="qaFat" style="margin-top:0">Fat (g)</label><input class="txt" id="qaFat" type="number" inputmode="numeric" min="0" placeholder="opt"></div>
+      </div>
+      <button class="btn btn-dark" id="qaAddBtn" type="button" style="margin-top:14px">Add to today&rsquo;s log</button>
+    </div>
+
     <div class="card" id="previewCard" style="margin-top:14px;position:relative">
       <button class="scan-x" id="previewClose" type="button" aria-label="Close">&times;</button>
       <img id="previewImg" alt="Food preview">
@@ -1485,6 +1502,36 @@ function loadWater(){
 }
 if ($("#waterPlus")) $("#waterPlus").addEventListener("click", function(){ setWater(_water.glasses + 1); });
 if ($("#waterMinus")) $("#waterMinus").addEventListener("click", function(){ setWater(_water.glasses - 1); });
+
+/* ---------------- quick add (type the numbers — no photo) ---------------- */
+if ($("#quickAddToggle")) $("#quickAddToggle").addEventListener("click", function(){
+  var c = $("#quickAddCard"); if (!c) return;
+  var show = c.style.display === "none";
+  c.style.display = show ? "block" : "none";
+  if (show){ try{ $("#qaName").focus(); }catch(e){} c.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+});
+if ($("#qaAddBtn")) $("#qaAddBtn").addEventListener("click", async function(){
+  var name = ($("#qaName").value || "").trim();
+  var cal = int($("#qaCal").value);
+  if (!name){ try{ $("#qaName").focus(); }catch(e){} toast("Give it a name", true); return; }
+  if (cal <= 0){ try{ $("#qaCal").focus(); }catch(e){} toast("Enter the calories", true); return; }
+  var pro = int($("#qaPro").value), carb = int($("#qaCarb").value), fat = int($("#qaFat").value);
+  var btn = this; btn.disabled = true;
+  try {
+    await api("/api/meals", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: todayStr(), time: nowTime(), name: name,
+        calories: cal, protein_g: pro, carbs_g: carb, fat_g: fat,
+        items_json: JSON.stringify([{ name: name, calories: cal, protein_g: pro, carbs_g: carb, fat_g: fat }]),
+        source: "Manual entry", accuracy_tier: "estimate"
+      }) });
+    toast("✓ Added " + name);
+    ["qaName","qaCal","qaPro","qaCarb","qaFat"].forEach(function(id){ var el = $("#" + id); if (el) el.value = ""; });
+    $("#quickAddCard").style.display = "none";
+    switchTab("today");
+  } catch (e){ toast(e.message || "Couldn't add it", true); }
+  finally { btn.disabled = false; }
+});
 
 async function loadStreak(){
   try {
