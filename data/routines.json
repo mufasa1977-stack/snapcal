@@ -20,6 +20,13 @@
     "Progress by adding reps first, then sets, then resistance — never all at once.",
     "Use the Talk Test: if you can talk but not sing, you've nailed the right effort."
   ],
+  "walking": {
+    "emoji": "🚶",
+    "title": "Walking is your #1 move",
+    "lead": "At a higher weight every step burns close to double — so about 7,000 steps a day works out to roughly 500-600 calories. It's your biggest, most joint-friendly lever, and it costs nothing: no gym, no impact, just steps. Park farther out, take the long way, walk while you're on the phone.",
+    "goal_steps": 7000,
+    "neat": "Sitting for hours quietly switches off fat-burning in your legs — breaking it up beats any single workout. Aim for a 2-3 minute Desk-Break every 30-60 minutes."
+  },
   "tiers": [
     {
       "id": "tier1",
