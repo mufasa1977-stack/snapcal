@@ -2731,8 +2731,18 @@ function loadChatNearby(){
 function _fetchPlainNearby(pos){
   _chatRouteTo = "";
   apiNearbyRetry("/api/nearby?lat=" + pos.coords.latitude + "&lng=" + pos.coords.longitude, 1).then(function(data){
-    var m = (data && data.matched) || [];
-    _chatNearby = m.slice(0, 14).map(function(x){ return { name: x.chain, dist_m: x.dist_m }; });
+    /* Give Coach Cal the FULL real list — sit-down restaurants, cafes AND fast food — not just the
+       curated fast-food chains. That's why he only ever named fast food: it was all he was handed. */
+    var all = (data && data.nearby) || [];
+    var seen = {}, list = [];
+    all.slice().sort(function(a, b){ return (a.dist_m == null ? 9e9 : a.dist_m) - (b.dist_m == null ? 9e9 : b.dist_m); })
+      .forEach(function(p){
+        var nm = ((p.name || p.chain) || "").trim(); if (!nm) return;
+        var key = nm.toLowerCase(); if (seen[key]) return; seen[key] = 1;
+        list.push({ name: nm, dist_m: p.dist_m });
+      });
+    if (!list.length){ var m = (data && data.matched) || []; list = m.slice(0, 14).map(function(x){ return { name: x.chain, dist_m: x.dist_m }; }); }
+    _chatNearby = list.slice(0, 18);
   }).catch(function(){});
 }
 /* Pick the most natural voice the device has (the default is often the robotic one). */

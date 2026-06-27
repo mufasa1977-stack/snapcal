@@ -1507,11 +1507,15 @@ def _chat_nearby_clause(nearby, has_loc, route_to=""):
                     "is (early on, about midway, near your destination), honor any craving with the HEALTHIEST version of "
                     "it, and give a genuinely healthy order at each. Only name places from this list; never invent one.")
         if items:
-            return ("\n\nREAL places near the user RIGHT NOW (closest first): " + "; ".join(items) + ". For ANY "
-                    "'near me / on my way / where can I grab X' question, recommend SPECIFIC places FROM THIS LIST by "
-                    "name, with the distance and a genuinely healthy order at each. If they name a CRAVING (pancakes, "
-                    "burger, pizza), point them to the place that does the HEALTHIEST version of THAT, then offer one "
-                    "lighter grab-and-go alternative. Only name places from this list; never invent one.")
+            return ("\n\nREAL places near the user RIGHT NOW (closest first): " + "; ".join(items) + ". This list MIXES "
+                    "fast food, cafes, and sit-down restaurants — do NOT default to fast food. When the user wants "
+                    "something healthy, FAVOR the sit-down and fresh spots (places known for grilled proteins, salads, "
+                    "seafood, veg-forward bowls) over fast food, and name a specific healthy order there (e.g. at a "
+                    "seafood place: grilled fish, steamed veg, skip the biscuits; at a steakhouse: a sirloin with a side "
+                    "salad and a baked potato). For ANY 'near me / where can I grab X' question, recommend SPECIFIC "
+                    "places FROM THIS LIST by name with the distance and a genuinely healthy order at each, ideally "
+                    "offering a couple of DIFFERENT kinds of spots. If they name a CRAVING, point them to the place that "
+                    "does the HEALTHIEST version of THAT. Only name places from this list; never invent one.")
     if has_loc:
         return "\n\nThe user shared their location but nothing notable is nearby — suggest healthy grab-and-go basics."
     return ("\n\nThe user has NOT shared their location yet. If they ask for food 'near me / on my way / on my drive', "
