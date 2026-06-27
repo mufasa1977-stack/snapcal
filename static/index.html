@@ -1469,14 +1469,46 @@ function toggleBarcodePanel(){
     var inp = bcEl("bcInput"); if (inp) try{ inp.focus(); }catch(e){}
   } else { stopBarcodeCamera(); }
 }
+/* Map Open Food Facts' raw product JSON into our result shape (mirrors the server's mapping). */
+function _mapOFF(code, j){
+  var p = (j && j.product) || {};
+  var n = p.nutriments || {};
+  function num(k){ var v = parseFloat(n[k]); return isNaN(v) ? null : Math.round(v * 10) / 10; }
+  if ((j && j.status !== 1 && !j.product) || (num("energy-kcal_serving") == null && num("energy-kcal_100g") == null))
+    return { found: false, code: code };
+  var hasServ = num("energy-kcal_serving") != null;
+  var sfx = hasServ ? "_serving" : "_100g";
+  var serving = (p.serving_size || "").trim();
+  var sodium = num("sodium" + sfx);
+  return {
+    found: true, code: code,
+    name: (p.product_name || "").trim() || "Packaged food",
+    brand: ((p.brands || "").split(",")[0] || "").trim(),
+    serving: (hasServ && serving) ? serving : "100 g",
+    image: p.image_front_small_url || "",
+    calories: num("energy-kcal" + sfx), protein_g: num("proteins" + sfx),
+    carbs_g: num("carbohydrates" + sfx), fat_g: num("fat" + sfx),
+    fiber_g: num("fiber" + sfx), sugar_g: num("sugars" + sfx), sat_fat_g: num("saturated-fat" + sfx),
+    sodium_mg: sodium != null ? Math.round(sodium * 1000) : null,
+    source: "Open Food Facts", accuracy_tier: "EXACT"
+  };
+}
 function lookupBarcode(code){
   code = String(code || "").replace(/\D/g, "");
   var res = $("#nutriResult");
   if (code.length < 8){ if (res) res.innerHTML = '<div class="nf-card"><div class="nf-empty">That doesn’t look like a full barcode — enter all the digits under the bars.</div></div>'; return; }
   if (res) res.innerHTML = '<div class="empty" style="box-shadow:none;padding:12px"><span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(128,128,128,.25);border-top-color:var(--brand);border-radius:50%;vertical-align:-2px;animation:spin .7s linear infinite"></span> Checking the verified barcode database&hellip;</div>';
-  api("/api/barcode?code=" + encodeURIComponent(code)).then(renderBarcodeResult).catch(function(){
-    if (res) res.innerHTML = '<div class="nf-card"><div class="nf-empty">Couldn’t reach the barcode database right now — try again in a moment.</div></div>';
-  });
+  /* Look up Open Food Facts DIRECTLY from the browser — our server's host is network-blocked from OFF, but the
+     user's phone reaches it fine (OFF sends Access-Control-Allow-Origin: *). Fall back to the server, then no-match. */
+  var fields = "product_name,brands,serving_size,nutriments,image_front_small_url";
+  fetch("https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(code) + ".json?fields=" + fields, { headers: { "Accept": "application/json" } })
+    .then(function(r){ return r.json(); })
+    .then(function(j){ var d = _mapOFF(code, j); if (d.found) renderBarcodeResult(d); else renderBarcodeResult({ found: false }); })
+    .catch(function(){
+      api("/api/barcode?code=" + encodeURIComponent(code)).then(renderBarcodeResult).catch(function(){
+        if (res) res.innerHTML = '<div class="nf-card"><div class="nf-empty">Couldn’t reach the barcode database right now — check your connection and try again.</div></div>';
+      });
+    });
 }
 function renderBarcodeResult(d){
   var res = $("#nutriResult"); if (!res) return;
