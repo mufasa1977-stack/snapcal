@@ -2904,7 +2904,7 @@ function _closestPlace(){
 function _extractArea(t){
   t = " " + (t || "") + " ";
   if (!/\b(eat|eats|food|restaurant|restaurants|hungry|lunch|dinner|breakfast|brunch|grab|snack|place to|places to|somewhere|something healthy|bite)\b/i.test(t)) return "";
-  var m = t.match(/\b(?:in|to|at|near|around|over in|out in|visit|visiting|going to|gonna be in|headed to|heading to|driving to|when i (?:get|am) (?:to|in))\s+([A-Za-z][A-Za-z.'\- ]{2,38}?)\s*(?:tonight|today|tomorrow|tmrw|tonite|later|this (?:morning|afternoon|evening|weekend)|area|,|\.|\?|!|$)/i);
+  var m = t.match(/\b(?:in|to|at|near|around|about|for|over in|over to|out in|out to|down to|up to|off to|visit|visiting|going to|gonna be in|headed to|heading to|driving to|when i (?:get|am) (?:to|in))\s+([A-Za-z][A-Za-z.'\- ]{1,38}?)\s*(?:tonight|today|tomorrow|tmrw|tonite|later|this (?:morning|afternoon|evening|weekend)|area|and\b|but\b|so\b|then\b|because\b|cause\b|to (?:eat|grab|get|find)|for (?:lunch|dinner|breakfast|food)|[,.?!]|$)/i);
   if (!m) return "";
   var area = m[1].trim().replace(/^(the|a|an)\s+/i, "").replace(/\s+(the|a|an)$/i, "").trim();
   if (area.length < 3) return "";
@@ -2922,10 +2922,14 @@ async function sendChat(text){
     var a = _extractArea(text);
     if (a){
       setVoiceStatus("Finding healthy spots in " + a + "…");
-      var g = await api("/api/geocode?q=" + encodeURIComponent(a) + (_chatLat != null ? "&lat=" + _chatLat + "&lng=" + _chatLng : ""));
+      var g = null;
+      for (var gk = 0; gk < 2 && !(g && g.lat != null); gk++){    /* retry geocode through a transient hiccup */
+        try { g = await api("/api/geocode?q=" + encodeURIComponent(a) + (_chatLat != null ? "&lat=" + _chatLat + "&lng=" + _chatLng : "")); } catch(e){ g = null; }
+      }
       if (g && g.lat != null){
-        var lst = _nearbyToList(await apiNearbyRetry("/api/nearby?lat=" + g.lat + "&lng=" + g.lng, 1));
-        if (lst.length){ area = a; areaList = lst; _chatNearby = lst; }   /* so "take me there" navigates to the DESTINATION spot */
+        area = a;   /* it geocoded to a REAL place → HONOR the destination even if the spot list comes back empty (never silently redirect to current location) */
+        try { areaList = _nearbyToList(await apiNearbyRetry("/api/nearby?lat=" + g.lat + "&lng=" + g.lng, 2)); } catch(e){ areaList = []; }
+        if (areaList && areaList.length) _chatNearby = areaList;   /* so "take me there" navigates to the DESTINATION spot */
       }
       setVoiceStatus("Coach Cal is thinking…");
     }

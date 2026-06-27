@@ -1127,6 +1127,11 @@ def nearby():
         label = tags.get("name") or tags.get("brand")
         if not label:
             continue
+        # Drop OSM entries explicitly marked closed/gone (best-effort — OSM has no real business-status, so
+        # stale-but-untagged closures like a shut Bahama Breeze still slip through; the Google Places upgrade fixes that).
+        _oh = (tags.get("opening_hours") or "").strip().lower()
+        if _oh in ("closed", "off") or any(k.split(":", 1)[0] in ("disused", "abandoned", "was", "removed", "demolished") for k in tags):
+            continue
         elat = el.get("lat") if el.get("lat") is not None else (el.get("center") or {}).get("lat")
         elng = el.get("lon") if el.get("lon") is not None else (el.get("center") or {}).get("lon")
         dist = round(_haversine_m(lat, lng, elat, elng)) if (elat is not None and elng is not None) else None
@@ -1495,6 +1500,13 @@ def _body_clause(d):
 def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
     """Feed Coach Cal the REAL places near the user (or ALONG their drive, or in a DESTINATION area the user
     named like 'Philadelphia tonight') so suggestions match where they'll actually be — never invented."""
+    if area and not (isinstance(nearby, list) and nearby):
+        # The user named a place to eat (e.g. Ambler) but we couldn't load real spots there → do NOT redirect
+        # them to their current location and do NOT invent places.
+        return ("\n\nThe user wants to eat in/around " + str(area)[:50] + ", but the spot finder couldn't load real "
+                "places there right this second. Briefly apologize, tell them it hiccupped and to ask again in a moment, "
+                "and do NOT suggest places near their CURRENT location instead (they're not there) and NEVER invent a "
+                "restaurant. You can still suggest the KIND of healthy meal to look for in " + str(area)[:50] + ".")
     if isinstance(nearby, list) and nearby:
         items = []
         for p in nearby[:16]:
@@ -1512,7 +1524,13 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
         hours_note = (" CRITICAL — RESPECT OPENING HOURS: places may show [hours: ...] in OSM format and the user's "
                       "current local time is given above. NEVER recommend a place that is CLOSED at the time they'll "
                       "eat — pick ones that are open and say the hours (e.g. 'open till 10pm'). If a place shows "
-                      "[hours: not listed], you may suggest it but tell them to call or check it's open before heading over.")
+                      "[hours: not listed], you may suggest it but tell them to call or check it's open before heading over. "
+                      "STALE DATA: this list can be out of date — a spot may have permanently closed. Lean toward "
+                      "well-known places likely still open, and ALWAYS tell the user to quickly confirm it's open (a tap on "
+                      "the directions, or a call) before going — never guarantee a place is open. "
+                      "BE SPECIFIC, NOT VAGUE: name an ACTUAL dish to order that fits their goal (e.g. 'the grilled "
+                      "salmon with steamed broccoli, sauce on the side' or 'a burrito bowl with double chicken, no rice') — "
+                      "use what that cuisine/restaurant is known for. Never answer with only a vague 'some grilled fish options'.")
         if items and area:
             return ("\n\nThe user is planning to be in/around " + str(area)[:50] + " and wants to eat THERE (not near their "
                     "current location). REAL places in " + str(area)[:50] + " ('@' = street address): " + "; ".join(items) + ". "
