@@ -1102,6 +1102,11 @@
       <div id="dpResult" style="margin-top:12px"></div>
     </div>
     <div class="card">
+      <div class="goal-title">🎯 Smart targets <span style="font-weight:600;color:var(--ink3);font-size:12px">(from your real trend)</span></div>
+      <div class="goal-desc" style="margin:4px 2px 10px">Weigh in regularly and log your food, and I'll calculate your <b>actual</b> daily burn from how your weight is really moving — then tune your target to hit your goal without crashing.</div>
+      <div id="trendResult"><div class="goal-desc" style="font-size:12.5px;color:var(--ink3)">Loading…</div></div>
+    </div>
+    <div class="card">
       <div class="goal-title">🌓 Appearance</div>
       <div class="goal-seg" id="themeSeg">
         <button type="button" data-theme="auto"><span>Auto</span></button>
@@ -3139,6 +3144,35 @@ function profFrom(src){ return {
 function profLocalGet(){ try { return JSON.parse(localStorage.getItem("snapcal_profile") || "null"); } catch(e){ return null; } }
 function profLocalSave(p){ try { localStorage.setItem("snapcal_profile", JSON.stringify(p)); } catch(e){} }
 
+function loadTrend(){
+  var el = $("#trendResult"); if (!el) return;
+  api("/api/trend").then(function(d){
+    if (!d) return;
+    if (!d.ready){
+      el.innerHTML = '<div class="goal-desc" style="font-size:12.5px;color:var(--ink3)">' + esc(d.reason || "Keep logging your weight and food, and your real burn will show up here.") + '</div>';
+      return;
+    }
+    var rate = d.weekly_rate_lb;
+    var dir = rate < -0.05 ? ("losing " + Math.abs(rate).toFixed(1) + " lb/week") : (rate > 0.05 ? ("gaining " + rate.toFixed(1) + " lb/week") : "holding steady");
+    el.innerHTML =
+      '<div class="mv-note" style="margin:0 0 10px"><b>Your real burn: ~' + fmtNum(d.est_tdee) + ' cal/day.</b><br>' +
+      '<span style="color:var(--ink3)">Trend weight ' + d.trend_weight + ' lb &middot; ' + dir + ' &middot; you\'re averaging ' + fmtNum(d.avg_intake) + ' cal logged. Measured from how your weight is actually moving — more accurate than any formula.</span></div>' +
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+      '<div style="font-size:13.5px"><b>Suggested target: ' + fmtNum(d.suggested_target) + ' cal/day</b></div>' +
+      '<button class="btn btn-dark" id="trendApply" type="button" style="margin:0;width:auto;padding:9px 16px">Use this target</button></div>';
+    var b = $("#trendApply");
+    if (b) b.addEventListener("click", function(){
+      var t = int(d.suggested_target);
+      profile.daily_calories = t;
+      try { var pc = $("#pCal"); if (pc) pc.value = t; } catch(e){}
+      try { profLocalSave(profile); } catch(e){}
+      try { api("/api/profile", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ daily_calories: t, protein_g: int(profile.protein_g), carbs_g: int(profile.carbs_g), fat_g: int(profile.fat_g) }) }); } catch(e){}
+      try { if (typeof fillProfile === "function") fillProfile(); } catch(e){}
+      toast("Target tuned to your real burn: " + fmtNum(t) + " cal");
+    });
+  }).catch(function(){ el.innerHTML = '<div class="goal-desc" style="font-size:12.5px;color:var(--ink3)">Couldn’t load your trend right now.</div>'; });
+}
 async function loadProfile(){
   try { api("/api/version").then(function(v){ var el = $("#buildStamp"); if (el && v && v.commit) el.textContent = "SnapCal · build " + v.commit; }).catch(function(){}); } catch(e){}
   var local = profLocalGet();
@@ -3149,6 +3183,7 @@ async function loadProfile(){
   } catch (e) { /* server down/redeployed — the device copy still has them covered */ }
   fillProfile();
   updatePremiumUI();
+  loadTrend();
   try {
     var lw = localStorage.getItem("snapcal_weight");
     if (lw) { $("#pWeight").value = lw; }

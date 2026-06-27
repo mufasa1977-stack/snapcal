@@ -1692,7 +1692,11 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
                       "Only name places you're confident are real. "
                       "CHEAT DAY: if they say it's a cheat/treat/splurge day, give permission warmly and coach a SMARTER "
                       "indulgence at a real indulgent spot from the list (e.g. 'at Yard House get the burger, skip the fries; "
-                      "box half') — do NOT steer them to a salad/health-food spot.")
+                      "box half') — do NOT steer them to a salad/health-food spot. "
+                      "OFFER A CHOICE: when both a health-forward fast-casual spot (CAVA, Sweetgreen, Chipotle, HipCityVeg, "
+                      "Panera) AND a sit-down spot are in the list, offer ONE of each — a quick/cheap lane and a sit-down lane. "
+                      "CUISINE TACTICS: for BBQ/fried/comfort food, add the lean move — lean brisket/turkey/grilled over "
+                      "fried/pulled, sauce on the side, swap fries/mac for greens or a salad.")
         if items and area:
             return ("\n\nThe user is planning to be in/around " + str(area)[:50] + " and wants to eat THERE (not near their "
                     "current location). REAL places in " + str(area)[:50] + " ('@' = street address): " + "; ".join(items) + ". "
@@ -1788,9 +1792,11 @@ def chat():
             "unclear). For EACH day give Breakfast, Lunch, and Dinner; for each meal name a SPECIFIC real place (use the "
             "places list above when present, otherwise well-known real spots in that area you're confident exist) + ONE "
             "specific dish + a rough protein/calorie estimate, and keep each day's totals roughly within their daily "
-            "calorie & protein targets. Use a compact readable layout (e.g. 'Day 1 — Breakfast: <place> — <dish> (~Xg "
-            "protein); Lunch: ...; Dinner: ...'). Deliver the WHOLE plan, then one short upbeat closing line. If you used "
-            "places from general knowledge, add a brief 'verify hours' note.")
+            "calorie & protein targets. Use a compact readable layout (e.g. 'Day 1 - Breakfast: <place> - <dish> (~Xg "
+            "protein); Lunch: ...; Dinner: ...'). After EACH day add a rollup line: 'Day total: ~Pg protein / ~C cal vs your "
+            "[target]g & [cal] goal' — and if the day falls short of the protein target, name a concrete fix (a protein "
+            "shake, Greek yogurt, an extra meat portion). Deliver the WHOLE plan, then one short upbeat closing line. If you "
+            "used places from general knowledge, add a brief 'verify hours' note.")
     max_out = 1600 if is_trip else 750
     reply_cap = 4000 if is_trip else 1200
     convo = system + "\n\n"
@@ -2610,6 +2616,82 @@ def list_weights():
     finally:
         con.close()
     return jsonify({"weights": [{"date": r["date"], "weight": r["weight"]} for r in rows]})
+
+
+def _ewma(vals, alpha=0.25):
+    out, s = [], None
+    for v in vals:
+        s = v if s is None else (alpha * v + (1 - alpha) * s)
+        out.append(s)
+    return out
+
+
+def _slope(xs, ys):
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    mx, my = sum(xs) / n, sum(ys) / n
+    den = sum((x - mx) ** 2 for x in xs) or 1.0
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / den
+
+
+@app.get("/api/trend")
+def trend():
+    """Weight-trend adaptive TDEE (ACCURACY_ENGINE Rung 6 — MacroFactor's secret). Body-weight change is the
+       physical integral of true net calories, so an EWMA trend-weight + logged intake reveals the user's REAL
+       expenditure regardless of logging error, and a smarter calorie target to hit their goal pace. Pure math,
+       no AI. Returns ready:false (with a friendly reason) until there's ~2 weeks of weigh-ins + ~1 week of food."""
+    today = date.today()
+    cutoff = (today - timedelta(days=35)).isoformat()
+    con = get_db()
+    try:
+        wr = con.execute("SELECT date, weight FROM weights WHERE date >= ? ORDER BY date", (cutoff,)).fetchall()
+        mr = con.execute("SELECT date, SUM(calories) c FROM meals WHERE date >= ? AND uid = ? GROUP BY date",
+                         (cutoff, _uid())).fetchall()
+    finally:
+        con.close()
+    w = []
+    for r in wr:
+        try:
+            wt = float(r["weight"])
+        except (TypeError, ValueError):
+            continue
+        if 0 < wt < 2000:
+            w.append((date.fromisoformat(r["date"]), wt))
+    span_days = (w[-1][0] - w[0][0]).days if len(w) >= 2 else 0
+    if len(w) < 8 or span_days < 10:
+        return jsonify({"ready": False, "reason": "weigh in a few more times — I need about 2 weeks of weigh-ins to read your real trend.",
+                        "weighins": len(w), "need_weighins": 8})
+    xs = [(d - w[0][0]).days for d, _ in w]
+    ys = _ewma([wt for _, wt in w])
+    weekly = _slope(xs, ys) * 7.0           # lb/week (negative = losing)
+    trend_weight = round(ys[-1], 1)
+    cals = [_int(r["c"]) for r in mr if _int(r["c"]) > 0]
+    if len(cals) < 7:
+        return jsonify({"ready": False, "reason": "log your food a bit more — about a week of days lets me calculate your real burn.",
+                        "logged_days": len(cals), "need_days": 7})
+    avg_intake = round(sum(cals) / len(cals))
+    tdee = round(avg_intake - weekly * 3500.0 / 7.0)   # weekly<0 (losing) → tdee > intake
+    # Goal-aware suggested daily target.
+    gd = ""
+    con = get_db()
+    try:
+        row = con.execute("SELECT value FROM profile WHERE key = 'goal_dir'").fetchone()
+        gd = (row["value"] if row else "") or ""
+    finally:
+        con.close()
+    if gd == "gain":
+        suggested = tdee + 250
+    elif gd == "maintain":
+        suggested = tdee
+    else:                                   # lose / recomp → moderate, muscle-preserving deficit
+        suggested = tdee - 500
+    suggested = max(1500, int(round(suggested / 10) * 10))
+    return jsonify({
+        "ready": True, "trend_weight": trend_weight, "weekly_rate_lb": round(weekly, 2),
+        "avg_intake": avg_intake, "est_tdee": tdee, "suggested_target": suggested,
+        "weighins": len(w), "logged_days": len(cals),
+    })
 
 
 @app.post("/api/weight")
