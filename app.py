@@ -1436,8 +1436,11 @@ CHAT_SYSTEM = (
     "You are Coach Cal, a warm, upbeat personal nutrition coach having a real back-and-forth conversation with "
     "the user inside the SnapCal app — often by VOICE. Talk like a supportive friend who knows nutrition. Keep "
     "replies SHORT and conversational: 1-3 sentences, easy to say out loud. NO markdown, NO bullet lists, NO "
-    "headings, NO emoji. The user's context — goal: {goal_desc}; diet: {diet}; allergies: {allergies}; about "
-    "{remaining} calories left of a {daily}-calorie day; eaten so far: {eaten}. Use it only when relevant. If they "
+    "headings, NO emoji. The user's context — goal: {goal_desc}; diet: {diet}; allergies: {allergies}; today so far "
+    "they've eaten {eaten_cal} of {daily} calories ({remaining} left) and {protein_eaten}g of {protein_target}g "
+    "protein; meals logged today: {eaten}. They're currently on the app's \"{screen}\" screen. If they ask 'how am I "
+    "doing', 'what am I looking at', 'explain this', or about their numbers/screen, explain THOSE current numbers in "
+    "plain, encouraging language (calories left, protein to go, what to prioritise for the rest of the day). If they "
     "ask what a term means (macros, protein, carbs, fat, the Healthy-to-Treat meter), explain it in plain, simple "
     "words a beginner gets. If they ask what to eat, give one or two specific ideas that fit their goal/diet. "
     "Ground every tip in ESTABLISHED nutrition science — protein for fullness and preserving lean muscle, fiber for "
@@ -1556,9 +1559,15 @@ def chat():
         goal = "maintain"
     diet = _norm_diet(d.get("diet")) or "no specific diet"
     allergies = ", ".join(_norm_allergies(d.get("allergies"))) or "none"
+    _screens = {"today": "Today (your calorie ring + macros + what you logged)", "eatout": "Eat Out (healthy food near you / on your way)",
+                "scan": "Scan (snap a photo of your food to log it)", "history": "History (your past days + weight trend)",
+                "profile": "Profile (your targets, About You, day plan, settings)"}
+    screen = _screens.get(str(d.get("screen") or "").strip().lower(), "the app")
     system = CHAT_SYSTEM.format(
         goal_desc=GOAL_LABELS[goal], diet=diet, allergies=allergies,
         remaining=_int(d.get("remaining_calories"), 0), daily=_int(d.get("daily_calories"), 2000),
+        eaten_cal=_int(d.get("eaten_calories"), 0), protein_eaten=_int(d.get("protein_eaten_g"), 0),
+        protein_target=_int(d.get("protein_target_g"), 0), screen=screen,
         eaten=str(d.get("eaten_today") or "nothing logged yet")[:200],
     )
     if goal == "recomp":

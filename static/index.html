@@ -1535,7 +1535,9 @@ if (bcEl("bcInput")) bcEl("bcInput").addEventListener("keydown", function(e){ if
 if (bcEl("bcCamera")) bcEl("bcCamera").addEventListener("click", startBarcodeCamera);
 
 /* ---------------- tabs ---------------- */
+var _curTab = "today";
 function switchTab(name){
+  _curTab = name;   /* so Coach Cal knows what screen the user is on ("explain what I'm looking at") */
   document.querySelectorAll(".tab").forEach(function(t){
     t.classList.toggle("active", t.id === "tab-" + name);
   });
@@ -2934,6 +2936,9 @@ async function sendChat(text){
     allergies: (typeof allergyLabels === "function" ? allergyLabels() : []),
     daily_calories: int(profile.daily_calories),
     remaining_calories: Math.max(0, int(profile.daily_calories) - int(todayData.totals.calories)),
+    eaten_calories: int(todayData.totals.calories),
+    protein_eaten_g: int(todayData.totals.protein_g), protein_target_g: int(profile.protein_g),
+    screen: _curTab,
     eaten_today: (todayData.meals || []).map(function(m){ return m.name; }).filter(Boolean).join(", "),
     nearby: (areaList || _chatNearby), has_location: (area ? true : _chatHasLoc), route_to: (area ? "" : _chatRouteTo), area: area,
     local_time: (function(){ try { return new Date().toLocaleTimeString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch(e){ try { return new Date().toLocaleTimeString(); } catch(e2){ return ""; } } })()
