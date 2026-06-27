@@ -1,0 +1,18 @@
+name: keep-warm
+
+# Render's free tier sleeps after ~15 min idle, so the first request after a gap cold-starts (~50s) and can
+# fail. This pings SnapCal every 10 min (public repo → free unlimited Actions minutes) so it stays awake and
+# Coach Cal answers instantly. Manual run: Actions tab → keep-warm → Run workflow.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping SnapCal so the server stays warm
+        run: |
+          curl -fsS --max-time 90 "https://snapcal-api-lgla.onrender.com/api/profile" \
+            -H "X-Device-Id: keepwarm" -o /dev/null && echo "pinged OK" || echo "ping failed — will retry next run"
