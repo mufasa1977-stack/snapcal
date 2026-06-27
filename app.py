@@ -1487,9 +1487,9 @@ def _body_clause(d):
     return s + "."
 
 
-def _chat_nearby_clause(nearby, has_loc, route_to=""):
-    """Feed Coach Cal the REAL places near the user (or ALONG their drive) so 'find me X on my way to work'
-    actually works — and so she never invents places she can't see."""
+def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
+    """Feed Coach Cal the REAL places near the user (or ALONG their drive, or in a DESTINATION area the user
+    named like 'Philadelphia tonight') so suggestions match where they'll actually be — never invented."""
     if isinstance(nearby, list) and nearby:
         items = []
         for p in nearby[:16]:
@@ -1497,11 +1497,18 @@ def _chat_nearby_clause(nearby, has_loc, route_to=""):
                 continue
             dm = p.get("dist_m")
             dist = ""
-            if isinstance(dm, (int, float)):
+            if isinstance(dm, (int, float)) and not area:   # distances are from CURRENT location; meaningless for a far destination
                 mi = dm / 1609.34
                 dist = f" ({mi:.1f} mi)" if mi >= 0.1 else " (right here)"
             addr = str(p.get("addr") or "").strip()
             items.append(str(p["name"])[:40] + dist + (" @ " + addr[:60] if addr else ""))
+        if items and area:
+            return ("\n\nThe user is planning to be in/around " + str(area)[:50] + " and wants to eat THERE (not near their "
+                    "current location). REAL places in " + str(area)[:50] + " ('@' = street address): " + "; ".join(items) + ". "
+                    "Recommend SPECIFIC places FROM THIS LIST by name with the address, favor sit-down/fresh spots with a "
+                    "genuinely healthy order at each, and tell the user they can say \"take me there\" to open directions. "
+                    "These are in " + str(area)[:50] + ", so do NOT mention distance from their current location. Only name "
+                    "places from this list; never invent one.")
         if items and route_to:
             return ("\n\nREAL food spots ALONG the user's drive to " + str(route_to)[:50] + " (listed in TRAVEL ORDER, "
                     "start of the drive → destination): " + "; ".join(items) + ". For any 'on my way / on my drive / "
@@ -1554,7 +1561,7 @@ def chat():
                    "parfait, pancakes) in the evening, or a heavy dinner first thing in the morning. Match the "
                    "hour: breakfast in the morning, lunch midday, dinner in the evening, and a light protein "
                    "snack late at night. If it's late, lean toward something light that won't disrupt sleep.")
-    system += _chat_nearby_clause(d.get("nearby"), bool(d.get("has_location")), d.get("route_to") or "")
+    system += _chat_nearby_clause(d.get("nearby"), bool(d.get("has_location")), d.get("route_to") or "", str(d.get("area") or "").strip()[:50])
     convo = system + "\n\n"
     for m in msgs[-12:]:
         if not isinstance(m, dict):

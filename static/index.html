@@ -2728,22 +2728,24 @@ function loadChatNearby(){
     } else { _fetchPlainNearby(pos); }
   }, function(){ _chatHasLoc = false; }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 });
 }
+/* Build Coach Cal's place list from an /api/nearby response — FULL real list (sit-down + cafes + fast food,
+   deduped, closest-first), not just curated fast-food chains. */
+function _nearbyToList(data){
+  var all = (data && data.nearby) || [];
+  var seen = {}, list = [];
+  all.slice().sort(function(a, b){ return (a.dist_m == null ? 9e9 : a.dist_m) - (b.dist_m == null ? 9e9 : b.dist_m); })
+    .forEach(function(p){
+      var nm = ((p.name || p.chain) || "").trim(); if (!nm) return;
+      var key = nm.toLowerCase(); if (seen[key]) return; seen[key] = 1;
+      list.push({ name: nm, dist_m: p.dist_m, addr: p.addr || "", lat: p.lat, lng: p.lng });
+    });
+  if (!list.length){ var m = (data && data.matched) || []; list = m.slice(0, 14).map(function(x){ return { name: x.chain, dist_m: x.dist_m, addr: x.addr || "", lat: x.lat, lng: x.lng }; }); }
+  return list.slice(0, 18);
+}
 function _fetchPlainNearby(pos){
   _chatRouteTo = "";
-  apiNearbyRetry("/api/nearby?lat=" + pos.coords.latitude + "&lng=" + pos.coords.longitude, 1).then(function(data){
-    /* Give Coach Cal the FULL real list — sit-down restaurants, cafes AND fast food — not just the
-       curated fast-food chains. That's why he only ever named fast food: it was all he was handed. */
-    var all = (data && data.nearby) || [];
-    var seen = {}, list = [];
-    all.slice().sort(function(a, b){ return (a.dist_m == null ? 9e9 : a.dist_m) - (b.dist_m == null ? 9e9 : b.dist_m); })
-      .forEach(function(p){
-        var nm = ((p.name || p.chain) || "").trim(); if (!nm) return;
-        var key = nm.toLowerCase(); if (seen[key]) return; seen[key] = 1;
-        list.push({ name: nm, dist_m: p.dist_m, addr: p.addr || "", lat: p.lat, lng: p.lng });
-      });
-    if (!list.length){ var m = (data && data.matched) || []; list = m.slice(0, 14).map(function(x){ return { name: x.chain, dist_m: x.dist_m, addr: x.addr || "", lat: x.lat, lng: x.lng }; }); }
-    _chatNearby = list.slice(0, 18);
-  }).catch(function(){});
+  apiNearbyRetry("/api/nearby?lat=" + pos.coords.latitude + "&lng=" + pos.coords.longitude, 1)
+    .then(function(data){ _chatNearby = _nearbyToList(data); }).catch(function(){});
 }
 /* Pick the most natural voice the device has (the default is often the robotic one). */
 function pickTtsVoice(){
@@ -2801,14 +2803,18 @@ var _calAudio = null, _ttsQueue = [], _ttsOn = false, _ttsNext = null;
 /* Split a reply into short sentence-ish chunks so we can SPEAK the first one immediately
    (TTS for ~1 short sentence returns fast) instead of waiting for the whole paragraph's audio. */
 function _ttsChunks(t){
-  var parts = (t || "").replace(/\s+/g, " ").match(/[^.!?]+[.!?]*/g) || [t];
-  var out = [], buf = "";
-  parts.forEach(function(s){ s = s.trim(); if (!s) return;
-    if (((buf + " " + s).trim()).length <= 70) buf = (buf + " " + s).trim();
-    else { if (buf) out.push(buf); buf = s; }
-  });
+  t = (t || "").replace(/\s+/g, " ").trim(); if (!t) return [t];
+  var parts = (t.match(/[^.!?]+[.!?]*/g) || [t]).map(function(s){ return s.trim(); }).filter(Boolean);
+  var out = [];
+  /* FIRST chunk small (just the opening sentence, split a long one at ~50 chars) → fastest first word. */
+  var f = parts.shift() || t;
+  if (f.length > 55){ var sp = f.lastIndexOf(" ", 50); if (sp < 20) sp = 50; out.push(f.slice(0, sp).trim()); parts.unshift(f.slice(sp).trim()); }
+  else out.push(f);
+  /* group the rest into ~110-char chunks for smooth, gapless playback */
+  var buf = "";
+  parts.forEach(function(s){ if (((buf + " " + s).trim()).length <= 110) buf = (buf + " " + s).trim(); else { if (buf) out.push(buf); buf = s; } });
   if (buf) out.push(buf);
-  return out.length ? out : [String(t || "").trim()];
+  return out;
 }
 function _ttsUrl(chunk){ return "/api/tts?voice=Charon&text=" + encodeURIComponent(chunk.slice(0, 300)); }
 function stopSpeak(){
@@ -2862,12 +2868,37 @@ function _closestPlace(){
   list.sort(function(a, b){ return (a.dist_m == null ? 9e9 : a.dist_m) - (b.dist_m == null ? 9e9 : b.dist_m); });
   return list[0] || null;
 }
-function sendChat(text){
+/* Destination dining: detect when the user wants to eat somewhere OTHER than their current spot
+   ("going to Philadelphia tonight, somewhere healthy there") and pull the real food list for THAT area. */
+function _extractArea(t){
+  t = " " + (t || "") + " ";
+  if (!/\b(eat|eats|food|restaurant|restaurants|hungry|lunch|dinner|breakfast|brunch|grab|snack|place to|places to|somewhere|something healthy|bite)\b/i.test(t)) return "";
+  var m = t.match(/\b(?:in|to|at|near|around|over in|out in|visit|visiting|going to|gonna be in|headed to|heading to|driving to|when i (?:get|am) (?:to|in))\s+([A-Za-z][A-Za-z.'\- ]{2,38}?)\s*(?:tonight|today|tomorrow|tmrw|tonite|later|this (?:morning|afternoon|evening|weekend)|area|,|\.|\?|!|$)/i);
+  if (!m) return "";
+  var area = m[1].trim().replace(/^(the|a|an)\s+/i, "").replace(/\s+(the|a|an)$/i, "").trim();
+  if (area.length < 3) return "";
+  if (/^(eat|eats|food|lunch|dinner|breakfast|brunch|grab|something|somewhere|a place|the area|me|it|there|here|you|town|home|work|my)\b/i.test(area)) return "";
+  return area;
+}
+async function sendChat(text){
   text = (text || "").trim(); if (!text) return;
   voiceRender("user", text); _chatMsgs.push({ role: "user", content: text });
   var inp = $("#voiceInput"); if (inp) inp.value = "";
   if (_navIntent(text)){ var pl = _lastPlace || _closestPlace(); if (pl) openDirectionsTo(pl); }   /* open the map right away */
   setVoiceStatus("Coach Cal is thinking…");
+  var area = "", areaList = null;
+  try {
+    var a = _extractArea(text);
+    if (a){
+      setVoiceStatus("Finding healthy spots in " + a + "…");
+      var g = await api("/api/geocode?q=" + encodeURIComponent(a));
+      if (g && g.lat != null){
+        var lst = _nearbyToList(await apiNearbyRetry("/api/nearby?lat=" + g.lat + "&lng=" + g.lng, 1));
+        if (lst.length){ area = a; areaList = lst; _chatNearby = lst; }   /* so "take me there" navigates to the DESTINATION spot */
+      }
+      setVoiceStatus("Coach Cal is thinking…");
+    }
+  } catch(e){ /* geocode/nearby hiccup → fall back to current-location coaching */ }
   var body = {
     messages: _chatMsgs.slice(-12), goal: goal,
     diet: (typeof dietLabel === "function" ? dietLabel(_diet) : ""),
@@ -2875,7 +2906,7 @@ function sendChat(text){
     daily_calories: int(profile.daily_calories),
     remaining_calories: Math.max(0, int(profile.daily_calories) - int(todayData.totals.calories)),
     eaten_today: (todayData.meals || []).map(function(m){ return m.name; }).filter(Boolean).join(", "),
-    nearby: _chatNearby, has_location: _chatHasLoc, route_to: _chatRouteTo,
+    nearby: (areaList || _chatNearby), has_location: (area ? true : _chatHasLoc), route_to: (area ? "" : _chatRouteTo), area: area,
     local_time: (function(){ try { return new Date().toLocaleTimeString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch(e){ try { return new Date().toLocaleTimeString(); } catch(e2){ return ""; } } })()
   };
   if (typeof aboutBody === "function") { var _ab = aboutBody(); for (var _k in _ab){ if (_ab[_k]) body[_k] = _ab[_k]; } }
