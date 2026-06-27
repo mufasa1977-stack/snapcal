@@ -1130,7 +1130,8 @@ def nearby():
         elng = el.get("lon") if el.get("lon") is not None else (el.get("center") or {}).get("lon")
         dist = round(_haversine_m(lat, lng, elat, elng)) if (elat is not None and elng is not None) else None
         canon = _match_chain(tags, aliases)
-        nearby_list.append({"name": label, "dist_m": dist, "chain": canon, "lat": elat, "lng": elng, "addr": _osm_addr(tags)})
+        nearby_list.append({"name": label, "dist_m": dist, "chain": canon, "lat": elat, "lng": elng,
+                            "addr": _osm_addr(tags), "hours": (tags.get("opening_hours") or "").strip()[:80]})
         if canon:
             prev = matched.get(canon)
             if prev is None or (dist is not None and dist < prev["dist_m"]):
@@ -1501,7 +1502,13 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
                 mi = dm / 1609.34
                 dist = f" ({mi:.1f} mi)" if mi >= 0.1 else " (right here)"
             addr = str(p.get("addr") or "").strip()
-            items.append(str(p["name"])[:40] + dist + (" @ " + addr[:60] if addr else ""))
+            hrs = str(p.get("hours") or "").strip()
+            items.append(str(p["name"])[:40] + dist + (" @ " + addr[:60] if addr else "")
+                         + (" [hours: " + hrs[:50] + "]" if hrs else " [hours: not listed]"))
+        hours_note = (" CRITICAL — RESPECT OPENING HOURS: places may show [hours: ...] in OSM format and the user's "
+                      "current local time is given above. NEVER recommend a place that is CLOSED at the time they'll "
+                      "eat — pick ones that are open and say the hours (e.g. 'open till 10pm'). If a place shows "
+                      "[hours: not listed], you may suggest it but tell them to call or check it's open before heading over.")
         if items and area:
             return ("\n\nThe user is planning to be in/around " + str(area)[:50] + " and wants to eat THERE (not near their "
                     "current location). REAL places in " + str(area)[:50] + " ('@' = street address): " + "; ".join(items) + ". "
@@ -1509,13 +1516,13 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
                     "there (the address is optional — a brief neighborhood/cross-street is plenty). Favor sit-down/fresh spots, "
                     "and tell the user they can just say \"take me there\" and you'll open directions. "
                     "These are in " + str(area)[:50] + ", so do NOT mention distance from their current location. Only name "
-                    "places from this list; never invent one.")
+                    "places from this list; never invent one." + hours_note)
         if items and route_to:
             return ("\n\nREAL food spots ALONG the user's drive to " + str(route_to)[:50] + " (listed in TRAVEL ORDER, "
                     "start of the drive → destination): " + "; ".join(items) + ". For any 'on my way / on my drive / "
                     "on my route' question, recommend SPECIFIC places FROM THIS LIST, say roughly where on the drive each "
                     "is (early on, about midway, near your destination), honor any craving with the HEALTHIEST version of "
-                    "it, and give a genuinely healthy order at each. Only name places from this list; never invent one.")
+                    "it, and give a genuinely healthy order at each. Only name places from this list; never invent one." + hours_note)
         if items:
             return ("\n\nREAL places near the user RIGHT NOW (closest first; '@' = street address where known): " + "; ".join(items) + ". "
                     "Lead with the place NAME + a specific healthy order; you can briefly add the distance or cross-street, but the "
@@ -1529,7 +1536,7 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
                     "salad and a baked potato). For ANY 'near me / where can I grab X' question, recommend SPECIFIC "
                     "places FROM THIS LIST by name with the distance and a genuinely healthy order at each, ideally "
                     "offering a couple of DIFFERENT kinds of spots. If they name a CRAVING, point them to the place that "
-                    "does the HEALTHIEST version of THAT. Only name places from this list; never invent one.")
+                    "does the HEALTHIEST version of THAT. Only name places from this list; never invent one." + hours_note)
     if has_loc:
         return "\n\nThe user shared their location but nothing notable is nearby — suggest healthy grab-and-go basics."
     return ("\n\nThe user has NOT shared their location yet. If they ask for food 'near me / on my way / on my drive', "

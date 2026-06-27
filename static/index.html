@@ -2738,9 +2738,9 @@ function _nearbyToList(data){
     .forEach(function(p){
       var nm = ((p.name || p.chain) || "").trim(); if (!nm) return;
       var key = nm.toLowerCase(); if (seen[key]) return; seen[key] = 1;
-      list.push({ name: nm, dist_m: p.dist_m, addr: p.addr || "", lat: p.lat, lng: p.lng });
+      list.push({ name: nm, dist_m: p.dist_m, addr: p.addr || "", lat: p.lat, lng: p.lng, hours: p.hours || "" });
     });
-  if (!list.length){ var m = (data && data.matched) || []; list = m.slice(0, 14).map(function(x){ return { name: x.chain, dist_m: x.dist_m, addr: x.addr || "", lat: x.lat, lng: x.lng }; }); }
+  if (!list.length){ var m = (data && data.matched) || []; list = m.slice(0, 14).map(function(x){ return { name: x.chain, dist_m: x.dist_m, addr: x.addr || "", lat: x.lat, lng: x.lng, hours: x.hours || "" }; }); }
   return list.slice(0, 18);
 }
 function _fetchPlainNearby(pos){
@@ -2755,7 +2755,8 @@ function pickTtsVoice(){
     if (!voices.length) return null;
     var en = voices.filter(function(v){ return /^en(-|_|$)/i.test(v.lang); });
     var pool = en.length ? en : voices;
-    var prefer = ["samantha", "aria", "jenny", "libby", "sonia", "google us english", "google uk english female", "microsoft aria", "microsoft zira", "karen", "moira", "serena", "tessa", "fiona", "natural", "female"];
+    /* MALE-leaning to match Coach Cal's Gemini voice (Charon) so the device-voice fallback doesn't switch genders. */
+    var prefer = ["daniel", "google uk english male", "microsoft guy", "microsoft david", "alex", "arthur", "aaron", "rishi", "fred", "oliver", "male", "natural"];
     for (var i = 0; i < prefer.length; i++){
       for (var j = 0; j < pool.length; j++){ if (pool[j].name.toLowerCase().indexOf(prefer[i]) >= 0) return pool[j]; }
     }
@@ -2801,7 +2802,7 @@ function closeVoice(){
 }
 /* Coach Cal's real voice (Gemini TTS via /api/tts, cached server-side). Falls back to the
    device's built-in voice if the network/endpoint hiccups, so he always talks. */
-var _calAudio = null, _ttsQueue = [], _ttsOn = false, _ttsNext = null;
+var _calAudio = null, _ttsQueue = [], _ttsOn = false, _ttsNext = null, _ttsStarted = false;
 /* Split a reply into short sentence-ish chunks so we can SPEAK the first one immediately
    (TTS for ~1 short sentence returns fast) instead of waiting for the whole paragraph's audio. */
 function _ttsChunks(t){
@@ -2828,7 +2829,7 @@ function speak(text){
   text = (text || "").trim(); if (!text) return;
   stopSpeak();
   _ttsQueue = _ttsChunks(text);
-  _ttsOn = true;
+  _ttsOn = true; _ttsStarted = false;
   _playChunk(text);
 }
 function _playChunk(fullText){
@@ -2837,10 +2838,19 @@ function _playChunk(fullText){
   var a = (_ttsNext && _ttsNext.src.indexOf(encodeURIComponent(chunk.slice(0, 60))) !== -1) ? _ttsNext : new Audio(_ttsUrl(chunk));
   _calAudio = a; _ttsNext = null;
   if (_ttsQueue.length){ try { _ttsNext = new Audio(_ttsUrl(_ttsQueue[0])); _ttsNext.preload = "auto"; _ttsNext.load(); } catch(e){} }  /* prefetch next while this plays → no gaps */
-  a.onended = function(){ _playChunk(fullText); };
-  a.onerror = function(){ if (a === _calAudio && fullText){ _ttsOn = false; _speakFallback(fullText); } };
+  /* ONE voice per reply: if Coach Cal's voice (Gemini) has already started, a later chunk failure just SKIPS that
+     chunk (tiny gap) — never switch to the device voice mid-reply (that caused the guy→girl→guy flip). Only fall
+     back to the device voice if the very first chunk never plays. */
+  function fail(){
+    if (a !== _calAudio) return;
+    if (!_ttsStarted){ _ttsOn = false; _speakFallback(fullText); }
+    else { _playChunk(fullText); }
+  }
+  a.onplay = function(){ _ttsStarted = true; };
+  a.onended = function(){ _ttsStarted = true; _playChunk(fullText); };
+  a.onerror = fail;
   var p = a.play();
-  if (p && p.catch) p.catch(function(){ if (fullText){ _ttsOn = false; _speakFallback(fullText); } });
+  if (p && p.catch) p.catch(fail);
 }
 function _speakFallback(text){
   try {
