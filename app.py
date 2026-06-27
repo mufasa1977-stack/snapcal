@@ -2259,12 +2259,23 @@ def barcode():
         return jsonify(_BARCODE_CACHE[code])
     fields = "product_name,brands,serving_size,nutrition_data_per,nutriments,image_front_small_url"
     url = "https://world.openfoodfacts.org/api/v2/product/" + code + ".json?fields=" + fields
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "SnapCal/1.0 (barcode nutrition)"})
-        with urllib.request.urlopen(req, timeout=12) as r:
-            d = json.loads(r.read().decode("utf-8"))
-    except Exception:  # noqa: BLE001
-        return jsonify({"error": "lookup_failed"}), 502
+    # Open Food Facts REQUIRES a descriptive User-Agent (app + contact) and throttles weak/generic ones from
+    # shared cloud IPs — that was 502'ing every lookup from Render. Proper UA + retry fixes it.
+    headers = {"User-Agent": "SnapCal/1.0 (Xionprotech LLC health app; +https://snapcal-api-lgla.onrender.com; tariq@xionprotech.com)",
+               "Accept": "application/json"}
+    d = None
+    last = ""
+    for _attempt in range(2):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=12) as r:
+                d = json.loads(r.read().decode("utf-8"))
+            break
+        except Exception as exc:  # noqa: BLE001
+            last = str(exc)[:160]
+            time.sleep(0.5)
+    if d is None:
+        return jsonify({"error": "lookup_failed", "detail": last}), 502
     if d.get("status") != 1 and not d.get("product"):
         out = {"found": False, "code": code}
         _BARCODE_CACHE[code] = out
