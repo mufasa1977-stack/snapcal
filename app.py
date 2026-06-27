@@ -1718,8 +1718,15 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
                     "offering a couple of DIFFERENT kinds of spots. If they name a CRAVING, point them to the place that "
                     "does the HEALTHIEST version of THAT. Only name places from this list; never invent one." + hours_note)
     if has_loc:
-        # We have their location but the live finder returned nothing (it's down or truly empty). Don't punt —
-        # give reliable national options that exist almost everywhere + a specific order, and ask their city for exact spots.
+        # Empty after open-now filtering can mean it's LATE and everything healthy is closed — be honest about that
+        # rather than naming spots that are shut.
+        is_late = bool(lt and (lt[1] >= 21 * 60 or lt[1] < 5 * 60))
+        if is_late:
+            return ("\n\nIt's late and the open healthy spots near them are basically closed for the night. Be honest: say most "
+                    "places are closed this late, do NOT confidently send them to a spot that's likely shut, and offer realistic "
+                    "late-night options — a 24-hour diner, a grocery/convenience store (Wawa/Sheetz) for a grab-and-go protein "
+                    "(rotisserie chicken, Greek yogurt, hard-boiled eggs, a protein shake), or something simple at home — and tell "
+                    "them to confirm anything's open before heading out.")
         return ("\n\nThe live spot finder can't see places right now. Do NOT say 'try again'. Instead recommend 2-3 reliable, "
                 "widely-available healthy options with a SPECIFIC order — e.g. CAVA (a chicken+greens bowl, double protein), "
                 "Chipotle (a chicken burrito BOWL, no rice, extra veg), Sweetgreen, or Panera (a Power bowl) — and ask the user "
@@ -1818,7 +1825,7 @@ def chat():
             raise last_exc
     except Exception:  # noqa: BLE001
         return jsonify({"error": "Coach Cal can't talk right now — try again in a moment."}), 502
-    reply = reply.replace("**", "").replace("*", "").strip()[:reply_cap]
+    reply = reply.replace("**", "").replace("*", "").replace("—", " - ").replace("–", "-").strip()[:reply_cap]
     return jsonify({"reply": reply or "I'm here — what can I help you with?"})
 
 
