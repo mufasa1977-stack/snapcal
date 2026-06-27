@@ -76,7 +76,7 @@ def _overpass(query, timeout=18, cache_key=None):
 # local key file so `python app.py` still works during development.
 GEMINI_KEY_PATH = Path("C:/Users/somme/youtube_videos/gemini_key.txt")
 GEMINI_MODEL = "gemini-2.5-flash"  # gemini-2.0-flash was retired by the API (404)
-CHAT_MODEL = "gemini-2.5-flash-lite"  # Coach Cal's back-and-forth: lighter+faster model for short spoken replies (cuts the ~11s round-trip)
+CHAT_MODEL = "gemini-2.5-flash"  # Coach Cal: flash (not -lite) — the squad proved -lite was non-deterministic (wrong city ~1/8, invented dishes, bounced questions). Worth ~1-2s for correctness.
 PORT = int(os.environ.get("PORT", "5177"))  # Render/Fly inject $PORT in production
 
 # Origins the Capacitor native app calls the API from: iOS = capacitor://localhost,
@@ -1495,9 +1495,17 @@ CHAT_SYSTEM = (
     "targets/stats/settings), not a generic day summary."
     "\n4) For a recomp 'how do I lose fat but keep muscle' question, give the 3 concrete levers: a MODERATE deficit (not a "
     "crash), their protein target in GRAMS, and resistance training ~3-4x/week — with real numbers, not vague encouragement."
-    "\n5) When cooking/feeding others with allergies, give 2-3 ideas free of the listed allergens AND add one line to verify "
-    "every label because those allergies can be life-threatening."
+    "\n5) When cooking/feeding others with allergies: give 3 concrete nut-free (or relevant-allergen-free) dish ideas, each "
+    "with a one-line how-to; STEER AWAY from that allergen's hidden traps (for nuts: peanut oil, satay/Thai sauces, pesto, "
+    "almond flour, marzipan, nut-crusted proteins — never suggest one of these without a clear swap); and add a "
+    "life-threatening-allergy line: verify every label, use clean prep/fresh oil to avoid cross-contamination, and ask "
+    "guests about severity. Not medical advice."
     "\n6) Be specific and concrete; finish your sentences; warm but useful, never filler."
+    "\n7) DELIVER, don't deflect: when you have a real places list, or the user is mid-decision / already at a restaurant / "
+    "on a cheat day, give the answer THIS turn — name a specific place + dish — do NOT bounce back with a question like "
+    "'how about we look at some spots?'. Only ask a question if you genuinely cannot answer without it."
+    "\n8) Protein anchor: for a recomp user whose protein is well below target, pick the HIGHEST-protein option (or suggest a "
+    "protein add-on) and tie it to their remaining protein/calories (e.g. 'that bowl ~45g protein — puts you at 105 of 180')."
 )
 
 RECOMP_CHAT_CLAUSE = (
@@ -1673,9 +1681,11 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
                       "the side', 'a burrito bowl, double chicken, no rice'), tie it to their remaining calories/protein, and "
                       "never answer with a vague 'some grilled fish options'. "
                       "CUISINE HONESTY: if the user asked for a specific cuisine (soul food, jambalaya/Cajun, Thai...) and NO "
-                      "place in the list is that cuisine, say so honestly and either name a well-known real spot of that cuisine "
-                      "in the area from your own knowledge (verify-hours caveat) or offer the closest healthy option while clearly "
-                      "stating it's not that cuisine — NEVER relabel a different cuisine as what they asked for. "
+                      "place in the list is that cuisine, do NOT substitute an unrelated spot and do NOT just say it's unavailable. "
+                      "Instead NAME 1-2 well-known REAL restaurants of THAT cuisine in the area from your own knowledge, each with a "
+                      "specific healthier dish to order, and add 'these are from what I know — verify hours'. (e.g. soul food in "
+                      "Atlanta → Busy Bee Cafe or Paschal's, baked chicken + collards; jambalaya in St. Louis → Broadway Oyster Bar.) "
+                      "Only name places you're confident are real. "
                       "CHEAT DAY: if they say it's a cheat/treat/splurge day, give permission warmly and coach a SMARTER "
                       "indulgence at a real indulgent spot from the list (e.g. 'at Yard House get the burger, skip the fries; "
                       "box half') — do NOT steer them to a salad/health-food spot.")
@@ -1783,7 +1793,7 @@ def chat():
     try:
         from google.genai import types
         client = get_gemini_client()
-        cfg = types.GenerateContentConfig(max_output_tokens=max_out, temperature=0.7)
+        cfg = types.GenerateContentConfig(max_output_tokens=max_out, temperature=0.35)  # low temp = consistent, less hallucination, honors area/nearby
         # Gemini occasionally throws a transient error / rate-limit (intermittent 502s). Retry server-side —
         # flash-lite twice, then fall back to flash — so the user almost never sees a failure.
         attempts = [CHAT_MODEL, CHAT_MODEL, GEMINI_MODEL]
