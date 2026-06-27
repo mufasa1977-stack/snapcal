@@ -1744,6 +1744,29 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
             "do NOT invent or name specific restaurants you can't actually see.")
 
 
+def _degraded_reply(d):
+    """No-LLM fallback when Coach Cal's brain is unavailable (e.g. Gemini credits depleted) — keep the core
+       moat alive: name the closest currently-open real place from the data so the user still gets a real pick."""
+    lt = _parse_local_time(str(d.get("local_time") or ""))
+    nb = d.get("nearby") if isinstance(d.get("nearby"), list) else []
+    openish = []
+    for p in nb:
+        if not isinstance(p, dict) or not p.get("name"):
+            continue
+        o = _osm_open_now(p.get("hours"), lt[0], lt[1]) if (lt and p.get("hours")) else None
+        if o is False:
+            continue
+        openish.append(p)
+    if openish:
+        p = openish[0]
+        nm = str(p.get("name"))[:50]
+        addr = (" at " + str(p.get("addr"))[:60]) if p.get("addr") else ""
+        return ("My full chat is taking a quick breather, but here's a solid pick near you: " + nm + addr +
+                " — go for a grilled or baked protein with veggies, sauce on the side. Back with full coaching shortly! 💚")
+    return ("My chat brain is briefly offline — back in a few minutes. In the meantime: aim for a lean protein plus "
+            "veggies at your next meal, drink some water, and keep logging. You've got this! 💚")
+
+
 @app.post("/api/chat")
 def chat():
     d = request.get_json(silent=True) or {}
@@ -1834,7 +1857,9 @@ def chat():
         if not reply and last_exc is not None:
             raise last_exc
     except Exception:  # noqa: BLE001
-        return jsonify({"error": "Coach Cal can't talk right now — try again in a moment."}), 502
+        # LLM down (e.g. Gemini quota/credits depleted, transient outage). DON'T dead-end — degrade gracefully:
+        # if we have real nearby places, name the closest open one from the data (no LLM needed); else a friendly note.
+        return jsonify({"reply": _degraded_reply(d), "degraded": True})
     reply = reply.replace("**", "").replace("*", "").replace("—", " - ").replace("–", "-").strip()[:reply_cap]
     return jsonify({"reply": reply or "I'm here — what can I help you with?"})
 
