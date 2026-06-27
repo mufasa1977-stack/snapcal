@@ -1751,6 +1751,24 @@ function calcTargets(){
   if ($("#saveBtn")) $("#saveBtn").click();                       /* persist the computed targets */
   try{ $("#calcResult").scrollIntoView({ behavior: "smooth", block: "nearest" }); }catch(e){}
 }
+function aboutBody(){
+  return {
+    sex: _pSex,
+    age: int($("#pAge").value),
+    height_in: int($("#pHeightFt").value) * 12 + int($("#pHeightIn").value),
+    cur_weight: Math.round(parseFloat($("#pCurWeight").value) || 0),
+    goal_weight: Math.round(parseFloat($("#pGoalWeight").value) || 0),
+    activity: $("#pActivity").value || "sedentary",
+    goal_dir: _pGoalDir
+  };
+}
+var _aboutTimer = null;
+function _syncAbout(){                                  /* push body fields to /api/profile so Coach Cal personalizes (synced across devices) */
+  clearTimeout(_aboutTimer);
+  _aboutTimer = setTimeout(function(){
+    try { api("/api/profile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(aboutBody()) }); } catch (e){}
+  }, 800);
+}
 function saveAboutYou(){
   try {
     localStorage.setItem("snapcal_about", JSON.stringify({
@@ -1759,6 +1777,7 @@ function saveAboutYou(){
       activity: $("#pActivity").value, goal_dir: _pGoalDir
     }));
   } catch (e){}
+  _syncAbout();
 }
 function loadAboutYou(){
   var b = {}; try { b = JSON.parse(localStorage.getItem("snapcal_about") || "{}"); } catch (e){}
@@ -1770,6 +1789,20 @@ function loadAboutYou(){
   if (b.activity) $("#pActivity").value = b.activity;
   if (b.goalw) $("#pGoalWeight").value = b.goalw;
   if (b.cur && !$("#pCurWeight").value) $("#pCurWeight").value = b.cur;
+  if (!b.sex && !b.age) {                               /* no device copy yet → seed About-You from the server */
+    try {
+      api("/api/profile").then(function(s){
+        if (!s) return;
+        if (s.sex && (s.sex === "male" || s.sex === "female")) { _pSex = s.sex; _segSet("pSexSeg", "sex", _pSex); }
+        if (s.goal_dir) { _pGoalDir = s.goal_dir; _segSet("pGoalSeg", "pg", _pGoalDir); syncCoachGoal(); }
+        if (s.age && !$("#pAge").value) $("#pAge").value = s.age;
+        if (s.height_in && !$("#pHeightFt").value) { $("#pHeightFt").value = Math.floor(s.height_in / 12); $("#pHeightIn").value = s.height_in % 12; }
+        if (s.activity && $("#pActivity")) $("#pActivity").value = s.activity;
+        if (s.cur_weight && !$("#pCurWeight").value) $("#pCurWeight").value = s.cur_weight;
+        if (s.goal_weight && !$("#pGoalWeight").value) $("#pGoalWeight").value = s.goal_weight;
+      }).catch(function(){});
+    } catch (e){}
+  }
 }
 if ($("#pSexSeg")) $("#pSexSeg").querySelectorAll("button").forEach(function(btn){
   btn.addEventListener("click", function(){ _pSex = btn.dataset.sex; _segSet("pSexSeg", "sex", _pSex); saveAboutYou(); });
@@ -1778,6 +1811,9 @@ if ($("#pGoalSeg")) $("#pGoalSeg").querySelectorAll("button").forEach(function(b
   btn.addEventListener("click", function(){ _pGoalDir = btn.dataset.pg; _segSet("pGoalSeg", "pg", _pGoalDir); saveAboutYou(); syncCoachGoal(); });
 });
 if ($("#calcTargetsBtn")) $("#calcTargetsBtn").addEventListener("click", calcTargets);
+["pAge","pHeightFt","pHeightIn","pCurWeight","pGoalWeight","pActivity"].forEach(function(id){
+  var el = $("#" + id); if (el) el.addEventListener("change", saveAboutYou);
+});
 loadAboutYou();
 
 /* ---------------- personalized day plan ---------------- */
@@ -2776,6 +2812,7 @@ function sendChat(text){
     eaten_today: (todayData.meals || []).map(function(m){ return m.name; }).filter(Boolean).join(", "),
     nearby: _chatNearby, has_location: _chatHasLoc, route_to: _chatRouteTo
   };
+  if (typeof aboutBody === "function") { var _ab = aboutBody(); for (var _k in _ab){ if (_ab[_k]) body[_k] = _ab[_k]; } }
   api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
     .then(function(d){
       setVoiceStatus("");

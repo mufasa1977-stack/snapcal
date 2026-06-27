@@ -51,6 +51,9 @@ CORS_ORIGINS = [
 ] + [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 
 PROFILE_DEFAULTS = {"daily_calories": 2000, "protein_g": 150, "carbs_g": 200, "fat_g": 65}
+# Body fields synced from "About you" so Coach Cal can personalise across devices (not just localStorage).
+PROFILE_NUM_KEYS = ("age", "height_in", "cur_weight", "goal_weight")
+PROFILE_TEXT_KEYS = ("sex", "activity", "goal_dir")
 MACRO_KEYS = ("calories", "protein_g", "carbs_g", "fat_g")
 
 # Provenance accuracy ladder (see ACCURACY_ENGINE.md). EXACT = read off a real label or a
@@ -1454,6 +1457,35 @@ RECOMP_CHAT_CLAUSE = (
 )
 
 
+def _body_clause(d):
+    """Personalise Coach Cal with the user's synced body stats (age/sex/height/weight)."""
+    sex = str(d.get("sex") or "").strip().lower()
+    age, h, w, gw = _int(d.get("age")), _int(d.get("height_in")), _int(d.get("cur_weight")), _int(d.get("goal_weight"))
+    who = []
+    if age:
+        who.append(f"{age}-year-old")
+    if sex in ("male", "female"):
+        who.append(sex)
+    measure = []
+    if h:
+        ft, inch = divmod(h, 12)
+        measure.append(f"{ft}'{inch}\"")
+    if w:
+        measure.append(f"{w} lb")
+    parts = []
+    if who:
+        parts.append(" ".join(who))
+    if measure:
+        parts.append(", ".join(measure))
+    if not parts:
+        return ""
+    s = ("\n\nABOUT THIS USER (personalise to it — portion sizes, protein needs, a realistic pace — but never "
+         "recite their stats back at them unless they ask): " + "; ".join(parts))
+    if gw and w and gw < w:
+        s += f"; working toward {gw} lb"
+    return s + "."
+
+
 def _chat_nearby_clause(nearby, has_loc, route_to=""):
     """Feed Coach Cal the REAL places near the user (or ALONG their drive) so 'find me X on my way to work'
     actually works — and so she never invents places she can't see."""
@@ -1505,6 +1537,7 @@ def chat():
     )
     if goal == "recomp":
         system += RECOMP_CHAT_CLAUSE
+    system += _body_clause(d)
     system += _chat_nearby_clause(d.get("nearby"), bool(d.get("has_location")), d.get("route_to") or "")
     convo = system + "\n\n"
     for m in msgs[-12:]:
@@ -2127,7 +2160,14 @@ def get_profile():
     finally:
         con.close()
     stored = {r["key"]: r["value"] for r in rows}
-    return jsonify({k: _int(stored.get(k, v), v) for k, v in PROFILE_DEFAULTS.items()})
+    out = {k: _int(stored.get(k, v), v) for k, v in PROFILE_DEFAULTS.items()}
+    for k in PROFILE_NUM_KEYS:
+        if k in stored:
+            out[k] = _int(stored.get(k))
+    for k in PROFILE_TEXT_KEYS:
+        if k in stored and stored.get(k) is not None:
+            out[k] = str(stored.get(k))
+    return jsonify(out)
 
 
 @app.post("/api/profile")
@@ -2137,13 +2177,17 @@ def set_profile():
         return jsonify({"error": "JSON body required."}), 400
     con = get_db()
     try:
+        upsert = ("""INSERT INTO profile(key, value) VALUES (?, ?)
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value""")
         for key, default in PROFILE_DEFAULTS.items():
             if key in d:
-                con.execute(
-                    """INSERT INTO profile(key, value) VALUES (?, ?)
-                       ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
-                    (key, _int(d[key], default)),
-                )
+                con.execute(upsert, (key, _int(d[key], default)))
+        for key in PROFILE_NUM_KEYS:
+            if key in d and d[key] not in (None, "", 0):
+                con.execute(upsert, (key, _int(d[key])))
+        for key in PROFILE_TEXT_KEYS:
+            if key in d and isinstance(d[key], str) and d[key].strip():
+                con.execute(upsert, (key, d[key].strip()[:32]))
         con.commit()
     finally:
         con.close()
