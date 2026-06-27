@@ -2787,6 +2787,7 @@ function openVoice(){
   w.classList.add("show"); w.setAttribute("aria-hidden", "false");
   loadChatNearby();   /* ask for location + pull nearby spots so Coach Cal can find food on your way */
   try { new Audio("/api/tts?voice=Charon&text=ok").load(); } catch(e){}   /* pre-warm the TTS path so his first spoken line has no cold-start stall */
+  try { fetch(API_BASE + "/api/profile", { headers: { "X-Device-Id": DEVICE_ID } }); } catch(e){}   /* wake the (free-tier, sleeps-when-idle) server NOW so his first question doesn't hit a cold boot */
   if (!_chatMsgs.length){
     voiceRender("coach", "Hey, I'm Coach Cal! Tap the mic and talk to me — or type. Ask me what to eat, what a word like ‘protein’ or ‘macros’ means, anything at all.");
   }
@@ -2927,14 +2928,21 @@ async function sendChat(text){
     local_time: (function(){ try { return new Date().toLocaleTimeString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch(e){ try { return new Date().toLocaleTimeString(); } catch(e2){ return ""; } } })()
   };
   if (typeof aboutBody === "function") { var _ab = aboutBody(); for (var _k in _ab){ if (_ab[_k]) body[_k] = _ab[_k]; } }
-  api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-    .then(function(d){
-      setVoiceStatus("");
-      var reply = (d && d.reply) || "I’m here — what can I help you with?";
-      try { var rl = reply.toLowerCase(); (_chatNearby || []).forEach(function(p){ if (p && p.name && rl.indexOf(p.name.toLowerCase()) >= 0) _lastPlace = p; }); } catch(e){}   /* remember the place he named for "take me there" */
-      voiceRender("coach", reply); _chatMsgs.push({ role: "assistant", content: reply }); speak(reply);
-    })
-    .catch(function(){ setVoiceStatus(""); voiceRender("coach", "Sorry, I couldn’t catch that — mind trying again?"); });
+  /* Retry through a cold start: the free server sleeps after ~15 min idle and the first hit can 502 while it
+     boots (~50s). Don't dead-end — retry a few times, telling the user he's waking up, before giving up. */
+  var d = null;
+  for (var attempt = 0; attempt < 4; attempt++){
+    try { d = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); break; }
+    catch(e){ if (attempt < 3){ setVoiceStatus(attempt === 0 ? "Coach Cal is thinking…" : "Coach Cal is waking up…"); await new Promise(function(r){ setTimeout(r, 1500 + attempt * 2500); }); } }
+  }
+  setVoiceStatus("");
+  if (d){
+    var reply = (d && d.reply) || "I’m here — what can I help you with?";
+    try { var rl = reply.toLowerCase(); (_chatNearby || []).forEach(function(p){ if (p && p.name && rl.indexOf(p.name.toLowerCase()) >= 0) _lastPlace = p; }); } catch(e){}   /* remember the place he named for "take me there" */
+    voiceRender("coach", reply); _chatMsgs.push({ role: "assistant", content: reply }); speak(reply);
+  } else {
+    voiceRender("coach", "I’m having trouble connecting right now — give me a few seconds and ask me again.");
+  }
 }
 function startListening(){
   if (!_voiceSupported) return;
