@@ -1,0 +1,10 @@
+{
+  "autoPort": true,
+  "servers": [
+    {
+      "name": "snapcal",
+      "command": "python app.py",
+      "workingDirectory": "."
+    }
+  ]
+}

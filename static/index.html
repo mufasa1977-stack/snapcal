@@ -1082,6 +1082,25 @@
       <div id="calcResult" style="margin-top:12px"></div>
     </div>
     <div class="card">
+      <div class="goal-title">🗓️ Your day plan</div>
+      <div class="goal-desc" style="margin:4px 2px 12px">Tell me your hours and I'll lay out your meals, an eating window, and gentle nudges to log, move, and break up sitting — built around your day.</div>
+      <div class="p-grid">
+        <div class="p-cell"><label class="field-lbl" for="dpWake">Wake up</label><input class="txt" id="dpWake" type="time" value="07:00"></div>
+        <div class="p-cell"><label class="field-lbl" for="dpBed">Bedtime</label><input class="txt" id="dpBed" type="time" value="23:00"></div>
+        <div class="p-cell"><label class="field-lbl" for="dpWorkStart">Work starts</label><input class="txt" id="dpWorkStart" type="time" value="09:00"></div>
+        <div class="p-cell"><label class="field-lbl" for="dpWorkEnd">Work ends</label><input class="txt" id="dpWorkEnd" type="time" value="21:00"></div>
+        <div class="p-cell" style="grid-column:1/-1"><label class="field-lbl" for="dpWindow">Eating window</label>
+          <select class="txt sel" id="dpWindow">
+            <option value="12">12 hours — steady, all-day eating</option>
+            <option value="10">10 hours — a tighter window</option>
+            <option value="8">8 hours — 16:8 intermittent fasting</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-dark" id="dpBuildBtn" type="button" style="margin-top:14px">Build my day plan</button>
+      <div id="dpResult" style="margin-top:12px"></div>
+    </div>
+    <div class="card">
       <div class="goal-title">🌓 Appearance</div>
       <div class="goal-seg" id="themeSeg">
         <button type="button" data-theme="auto"><span>Auto</span></button>
@@ -1760,6 +1779,65 @@ if ($("#pGoalSeg")) $("#pGoalSeg").querySelectorAll("button").forEach(function(b
 });
 if ($("#calcTargetsBtn")) $("#calcTargetsBtn").addEventListener("click", calcTargets);
 loadAboutYou();
+
+/* ---------------- personalized day plan ---------------- */
+function _t2m(s){ var p=(s||"").split(":"); if(p.length<2) return null; var h=parseInt(p[0],10),m=parseInt(p[1],10); if(isNaN(h)||isNaN(m)) return null; return h*60+m; }
+function _m2t(m){ m=((Math.round(m)%1440)+1440)%1440; var h=Math.floor(m/60),mn=m%60; var ap=h<12?"AM":"PM"; var h12=h%12||12; return h12+":"+(mn<10?"0":"")+mn+" "+ap; }
+var DP_TIP = {
+  "Breakfast": "Lead with protein (eggs, Greek yogurt, a shake) — it sets fullness for the whole day.",
+  "Lunch": "Protein + veg + a smart carb. Eating away from the desk helps you stop when full.",
+  "Dinner": "Protein-forward and lighter on the carbs/fats as the day winds down.",
+  "Afternoon protein snack": "Beat the afternoon dip with protein, not sugar — yogurt, jerky, a shake.",
+  "Mid-morning snack": "A small protein hit to keep you even until lunch."
+};
+function buildDayPlan(){
+  var wake=_t2m($("#dpWake").value), bed=_t2m($("#dpBed").value);
+  var win=parseInt($("#dpWindow").value||"12",10);
+  var ws=_t2m($("#dpWorkStart").value), we=_t2m($("#dpWorkEnd").value);
+  if(wake==null||bed==null){ toast("Add your wake and bed times", true); return; }
+  var bedAbs = bed>wake ? bed : bed+1440;                 /* bedtime after midnight */
+  var eatStart = wake + 60;                                /* first meal ~1h after waking */
+  var eatEnd = eatStart + win*60;
+  var latest = bedAbs - 180;                               /* finish eating ~3h before bed */
+  if(eatEnd > latest){ eatEnd = latest; eatStart = eatEnd - win*60; if(eatStart < wake) eatStart = wake; }
+  var mid = (eatStart+eatEnd)/2;
+  var cal = (window.profile && profile.daily_calories) || int($("#pCal").value) || 2000;
+  var pro = (window.profile && profile.protein_g) || int($("#pPro").value) || 150;
+  var ev=[{k:"meal",name:"Breakfast",t:eatStart},{k:"meal",name:"Lunch",t:mid},{k:"meal",name:"Dinner",t:eatEnd}];
+  if(win>=10) ev.push({k:"snack",name:"Afternoon protein snack",t:(mid+eatEnd)/2});
+  if(win>=11 && pro>=140) ev.push({k:"snack",name:"Mid-morning snack",t:(eatStart+mid)/2});
+  ev.sort(function(a,b){return a.t-b.t;});
+  var totW = ev.reduce(function(s,e){return s+(e.k==="meal"?1:0.45);},0);
+  ev.forEach(function(e){ var w=(e.k==="meal"?1:0.45)/totW; e.cal=Math.round(cal*w/10)*10; e.pro=Math.round(pro*w); });
+  var rows = ev.map(function(e){
+    return '<div style="padding:9px 0;border-bottom:1px solid var(--line)">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px"><div><b>'+_m2t(e.t)+'</b> &middot; '+esc(e.name)+'</div>'+
+      '<div style="color:var(--ink3);white-space:nowrap">'+fmtNum(e.cal)+' Cal &middot; '+e.pro+'g P</div></div>'+
+      '<div style="color:var(--ink3);font-size:12px;margin-top:3px">'+esc(DP_TIP[e.name]||"")+'</div></div>';
+  }).join("");
+  var fastH = 24-win;
+  var notes=[];
+  notes.push("Eating window: <b>"+_m2t(eatStart)+" – "+_m2t(eatEnd)+"</b> ("+win+" h). Outside it, stick to water, black coffee, or unsweetened tea — that's your "+fastH+"-hour overnight fast working for you.");
+  if(ws!=null && we!=null){ var weAbs=we>ws?we:we+1440; var wh=Math.round((weAbs-ws)/60); notes.push("You're sitting about "+wh+" hours ("+_m2t(ws)+"–"+_m2t(we)+"). Stand and move 2–3 minutes every 30–60 min — set a timer. Breaking up sitting beats any single workout for someone at a desk all day."); }
+  notes.push("Fit a 10–15 min walk after lunch and again after dinner — easy steps toward your 7,000-step goal, and a post-meal walk blunts the blood-sugar spike.");
+  notes.push("Drink a glass of water with every meal and on each movement break — aim for 8 a day. Hydration helps fullness and your skin as the fat comes off.");
+  notes.push("Kitchen closes at <b>"+_m2t(eatEnd)+"</b>. Wind down and aim for bed by <b>"+_m2t(bed)+"</b> — muscle repairs and appetite hormones reset while you sleep.");
+  notes.push("Log each meal as you eat it, not at night — in-the-moment logging is what keeps the day honest.");
+  $("#dpResult").innerHTML =
+    '<div class="meals-lbl" style="margin:2px 0 6px">Your meals</div>'+rows+
+    '<div class="meals-lbl" style="margin:14px 0 6px">Your nudges</div>'+
+    notes.map(function(n){ return '<div class="mv-note" style="margin:0 0 8px">'+n+'</div>'; }).join("");
+  try{ localStorage.setItem("snapcal_dayplan", JSON.stringify({wake:$("#dpWake").value,bed:$("#dpBed").value,win:$("#dpWindow").value,ws:$("#dpWorkStart").value,we:$("#dpWorkEnd").value})); }catch(e){}
+  try{ $("#dpResult").scrollIntoView({behavior:"smooth",block:"nearest"}); }catch(e){}
+}
+function loadDayPlan(){
+  var b={}; try{ b=JSON.parse(localStorage.getItem("snapcal_dayplan")||"{}"); }catch(e){}
+  if(b.wake) $("#dpWake").value=b.wake; if(b.bed) $("#dpBed").value=b.bed;
+  if(b.win) $("#dpWindow").value=b.win; if(b.ws) $("#dpWorkStart").value=b.ws; if(b.we) $("#dpWorkEnd").value=b.we;
+  if(b.wake) buildDayPlan();
+}
+if ($("#dpBuildBtn")) $("#dpBuildBtn").addEventListener("click", buildDayPlan);
+loadDayPlan();
 
 async function loadStreak(){
   try {
