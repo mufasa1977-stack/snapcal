@@ -1453,19 +1453,33 @@ if ($("#nutriBtn")) $("#nutriBtn").addEventListener("click", lookupNutrition);
 if ($("#nutriInput")) $("#nutriInput").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); lookupNutrition(); } });
 
 /* ---------------- barcode -> VERIFIED label data (Open Food Facts, free, no key) ---------------- */
-var _bcStream = null, _bcRAF = null;
+var _bcStream = null, _bcRAF = null, _bcZX = null, _zxingPromise = null;
 function bcEl(id){ return document.getElementById(id); }
+function _canCamera(){ return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); }
+/* iOS Safari (and every iPhone browser) has NO BarcodeDetector — lazy-load ZXing so the camera scan
+   works there too. It decodes barcodes from the live video in pure JS. */
+function _loadZXing(){
+  if (window.ZXing) return Promise.resolve();
+  if (_zxingPromise) return _zxingPromise;
+  _zxingPromise = new Promise(function(resolve, reject){
+    var s = document.createElement("script");
+    s.src = "https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js";
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return _zxingPromise;
+}
 function toggleBarcodePanel(){
   var pan = bcEl("barcodePanel"); if (!pan) return;
   var show = pan.style.display === "none";
   pan.style.display = show ? "block" : "none";
   if (show){
     var cam = bcEl("bcCamera");
-    if (cam && ("BarcodeDetector" in window)) cam.style.display = "block";
+    if (cam && _canCamera()) cam.style.display = "block";   // show on iPhone too (ZXing), not just Android
     var hint = bcEl("bcHint");
-    if (hint) hint.textContent = ("BarcodeDetector" in window)
-      ? "Point your camera at the barcode, or type the number under the bars."
-      : "Type the barcode number under the bars (live camera scan needs Chrome on Android).";
+    if (hint) hint.textContent = _canCamera()
+      ? "Tap “Use camera to scan”, or type the number under the bars."
+      : "Type the barcode number under the bars.";
     var inp = bcEl("bcInput"); if (inp) try{ inp.focus(); }catch(e){}
   } else { stopBarcodeCamera(); }
 }
@@ -1545,24 +1559,41 @@ async function addBarcodeToToday(d){
   } catch (e){ toast(e.message || "Couldn't add it", true); }
 }
 async function startBarcodeCamera(){
-  var h = bcEl("bcHint");
-  if (!("BarcodeDetector" in window)){ if (h) h.textContent = "Camera scan needs Chrome on Android — type the number instead."; return; }
+  var h = bcEl("bcHint"), v = bcEl("bcVideo");
+  if (!_canCamera()){ if (h) h.textContent = "This browser can’t open the camera — type the barcode number instead."; return; }
+  // Fast native path — Chrome on Android (and desktop Chrome)
+  if ("BarcodeDetector" in window){
+    try{
+      var det = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_a","upc_e","code_128"] });
+      _bcStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      v.srcObject = _bcStream; v.style.display = "block"; await v.play();
+      if (h) h.textContent = "Hold the barcode steady in the frame…";
+      var tick = async function(){
+        if (!_bcStream) return;
+        try{ var codes = await det.detect(v); if (codes && codes.length){ stopBarcodeCamera(); lookupBarcode(codes[0].rawValue); return; } }catch(e){}
+        _bcRAF = requestAnimationFrame(tick);
+      };
+      tick(); return;
+    } catch (e){ if (h) h.textContent = "Couldn’t open the camera — type the barcode number instead."; stopBarcodeCamera(); return; }
+  }
+  // iPhone / Safari path — decode with ZXing (no BarcodeDetector on iOS)
+  if (h) h.textContent = "Starting camera…";
   try{
-    var det = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_a","upc_e","code_128"] });
-    var v = bcEl("bcVideo");
-    _bcStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-    v.srcObject = _bcStream; v.style.display = "block"; await v.play();
+    await _loadZXing();
+    if (!window.ZXing) throw new Error("zxing-failed");
+    var hints = new Map();
+    try{ hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E, ZXing.BarcodeFormat.CODE_128]); }catch(e){}
+    _bcZX = new ZXing.BrowserMultiFormatReader(hints);
+    v.style.display = "block";
     if (h) h.textContent = "Hold the barcode steady in the frame…";
-    var tick = async function(){
-      if (!_bcStream) return;
-      try{ var codes = await det.detect(v); if (codes && codes.length){ stopBarcodeCamera(); lookupBarcode(codes[0].rawValue); return; } }catch(e){}
-      _bcRAF = requestAnimationFrame(tick);
-    };
-    tick();
-  } catch (e){ if (h) h.textContent = "Couldn’t open the camera — type the barcode number instead."; stopBarcodeCamera(); }
+    _bcZX.decodeFromConstraints({ video: { facingMode: "environment" } }, v, function(result){
+      if (result){ var txt = result.getText(); stopBarcodeCamera(); lookupBarcode(txt); }
+    });
+  } catch (e){ if (h) h.textContent = "Couldn’t start the camera scanner — type the barcode number instead."; stopBarcodeCamera(); }
 }
 function stopBarcodeCamera(){
   if (_bcRAF){ cancelAnimationFrame(_bcRAF); _bcRAF = null; }
+  if (_bcZX){ try{ _bcZX.reset(); }catch(e){} _bcZX = null; }
   if (_bcStream){ _bcStream.getTracks().forEach(function(t){ t.stop(); }); _bcStream = null; }
   var v = bcEl("bcVideo"); if (v){ v.style.display = "none"; try{ v.srcObject = null; }catch(e){} }
 }
