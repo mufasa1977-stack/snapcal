@@ -1793,7 +1793,13 @@ def chat():
     try:
         from google.genai import types
         client = get_gemini_client()
-        cfg = types.GenerateContentConfig(max_output_tokens=max_out, temperature=0.35)  # low temp = consistent, less hallucination, honors area/nearby
+        # thinking_budget=0: gemini-2.5-flash is a THINKING model — left on, hidden reasoning eats the
+        # output budget and the visible reply truncates mid-sentence (the squad caught this). Off = full
+        # replies, faster, and we don't need extended reasoning for short coaching turns.
+        cfg = types.GenerateContentConfig(
+            max_output_tokens=max_out, temperature=0.35,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
         # Gemini occasionally throws a transient error / rate-limit (intermittent 502s). Retry server-side —
         # flash-lite twice, then fall back to flash — so the user almost never sees a failure.
         attempts = [CHAT_MODEL, CHAT_MODEL, GEMINI_MODEL]
