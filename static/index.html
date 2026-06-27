@@ -2669,7 +2669,7 @@ function closeSheet(){ $("#sheet").classList.remove("show"); }
 /* ---------------- Talk to Coach Cal (voice + text conversation) ---------------- */
 var _chatMsgs = [], _voiceRec = null, _voiceListening = false;
 var _voiceSupported = ("webkitSpeechRecognition" in window) || ("SpeechRecognition" in window);
-var _chatNearby = [], _chatHasLoc = false, _chatLocTried = false, _ttsVoice = null, _chatRouteTo = "";
+var _chatNearby = [], _chatHasLoc = false, _chatLocTried = false, _ttsVoice = null, _chatRouteTo = "", _chatLat = null, _chatLng = null;
 /* ---------------- Location permission: explain ONCE, ask once, never nag ----------------
    The browser remembers a granted site forever, so users are NEVER re-prompted after the first
    allow. We add a one-time, plain-English primer the FIRST time a location feature is used, so
@@ -2717,6 +2717,7 @@ function loadChatNearby(){
   _chatLocTried = true;
   snapGeo(function(pos){
     _chatHasLoc = true;
+    _chatLat = pos.coords.latitude; _chatLng = pos.coords.longitude;   /* remember coords to BIAS geocoding of named towns to the user's region */
     var dest = null; try { dest = JSON.parse(localStorage.getItem("snapcal_dest") || "null"); } catch(e){}
     if (dest && dest.lat != null){
       api("/api/route_nearby", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -2891,7 +2892,7 @@ async function sendChat(text){
     var a = _extractArea(text);
     if (a){
       setVoiceStatus("Finding healthy spots in " + a + "…");
-      var g = await api("/api/geocode?q=" + encodeURIComponent(a));
+      var g = await api("/api/geocode?q=" + encodeURIComponent(a) + (_chatLat != null ? "&lat=" + _chatLat + "&lng=" + _chatLng : ""));
       if (g && g.lat != null){
         var lst = _nearbyToList(await apiNearbyRetry("/api/nearby?lat=" + g.lat + "&lng=" + g.lng, 1));
         if (lst.length){ area = a; areaList = lst; _chatNearby = lst; }   /* so "take me there" navigates to the DESTINATION spot */

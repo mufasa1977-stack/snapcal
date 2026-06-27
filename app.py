@@ -1644,15 +1644,32 @@ def tts():
 
 @app.get("/api/geocode")
 def geocode():
-    """Turn a typed address (the user's work/gym/school) into a point, so we can route to it. Free (Nominatim)."""
+    """Turn a typed place (the user's work/gym, or a town they name like 'Ambler') into a point. Free (Nominatim).
+    BIAS to the user's area when lat/lng are passed — bare 'Ambler' otherwise geocodes to a village in Italy, not PA."""
     q = (request.args.get("q") or "").strip()
     if not q:
         return jsonify({"error": "q_required"}), 400
     try:
-        url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + urllib.parse.quote(q)
-        req = urllib.request.Request(url, headers={"User-Agent": "SnapCal/1.0 (nutrition coach)"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            d = json.loads(r.read().decode("utf-8"))
+        ulat = float(request.args.get("lat", ""))
+        ulng = float(request.args.get("lng", ""))
+    except (TypeError, ValueError):
+        ulat = ulng = None
+    base = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + urllib.parse.quote(q)
+    # First try: prefer results NEAR the user (viewbox ~175 mi box). If that finds nothing, fall back to a global search.
+    urls = []
+    if ulat is not None and ulng is not None:
+        dd = 2.5
+        vb = f"{ulng - dd},{ulat + dd},{ulng + dd},{ulat - dd}"
+        urls.append(base + "&viewbox=" + urllib.parse.quote(vb) + "&bounded=1")
+    urls.append(base)
+    d = []
+    try:
+        for u in urls:
+            req = urllib.request.Request(u, headers={"User-Agent": "SnapCal/1.0 (nutrition coach)"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                d = json.loads(r.read().decode("utf-8"))
+            if d:
+                break
     except Exception:  # noqa: BLE001
         return jsonify({"error": "geocode_failed"}), 502
     if not d:
