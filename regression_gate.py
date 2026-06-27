@@ -152,14 +152,22 @@ def main():
         page = ctx.new_page()
         page.route("**/api/nearby*", _route_nearby)   # deterministic near-me data (Overpass is too slow/flaky to gate on)
 
+        def _benign(msg):
+            # maplibre throws an AbortError when an in-flight tile/style request is cancelled by a tab
+            # switch or reload teardown — a transient navigation race, not an app bug. It flaked this
+            # gate ~5x/session (forcing a re-run). Suppress ONLY this exact pattern; real JS errors
+            # (TypeError/ReferenceError + any other uncaught exception) still fail the gate.
+            m = (msg or "").lower()
+            return "aborterror" in m and ("maplibre" in m or "_remove" in m or "_updatestyle" in m or "signal is aborted" in m)
+
         def on_console(m):
             t = m.text.lower()
             # ignore benign network noise (favicon, CDN/tile/logo loads) — those degrade gracefully;
             # we only fail on REAL JS errors (TypeError/ReferenceError) + uncaught exceptions (pageerror).
-            if m.type == "error" and "failed to load resource" not in t and "favicon" not in t:
+            if m.type == "error" and "failed to load resource" not in t and "favicon" not in t and not _benign(m.text):
                 errors.append(m.text[:160])
         page.on("console", on_console)
-        page.on("pageerror", lambda e: errors.append(str(e)[:160]))
+        page.on("pageerror", lambda e: (None if _benign(str(e)) else errors.append(str(e)[:160])))
 
         page.add_init_script("try{localStorage.setItem('snapcal_goal','lose_weight');localStorage.setItem('snapcal_c_snapcal_loc_primed','1');}catch(e){}")  # pre-prime location (lsGet/lsSet namespace keys with 'snapcal_c_') so geo checks aren't blocked by the one-time primer
         page.goto(BASE + "/?gate=1", wait_until="domcontentloaded", timeout=20000)
