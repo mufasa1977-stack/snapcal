@@ -1542,10 +1542,108 @@ def _body_clause(d):
     return s + "."
 
 
-def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
+_DOW2 = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
+_DOW3 = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+def _parse_local_time(s):
+    """'Sat, 1:05 PM' / 'Sat 1:05 PM' -> (weekday 0=Mon..6=Sun, minutes-since-midnight). None if unparseable."""
+    if not s:
+        return None
+    t = str(s).strip().lower().replace(",", " ")
+    wd = None
+    for p in t.split():
+        if p[:3] in _DOW3:
+            wd = _DOW3[p[:3]]
+            break
+    m = re.search(r"(\d{1,2}):(\d{2})\s*(am|pm)?", t)
+    if wd is None or not m:
+        return None
+    h, mn, ap = int(m.group(1)), int(m.group(2)), m.group(3)
+    if ap == "pm" and h != 12:
+        h += 12
+    if ap == "am" and h == 12:
+        h = 0
+    return (wd, h * 60 + mn)
+
+
+def _osm_open_now(hours, wd, minutes):
+    """Best-effort: is an OSM opening_hours string open at weekday wd / minutes? True / False / None(unknown)."""
+    if not hours:
+        return None
+    h = str(hours).strip().lower()
+    if "24/7" in h:
+        return True
+    matched_today = False
+    parsed_any = False
+    for rule in h.split(";"):
+        rule = rule.strip()
+        dm = re.match(r"^([a-z,\-\s]*?)\s*(\d{1,2}:\d{2}.*|off|closed)$", rule)
+        if not dm:
+            continue
+        parsed_any = True
+        dayspec, timespec = dm.group(1).strip(), dm.group(2).strip()
+        days = set()
+        if not dayspec:
+            days = set(range(7))
+        else:
+            for tok in dayspec.split(","):
+                tok = tok.strip()
+                if "-" in tok:
+                    a, b = tok.split("-", 1)
+                    a, b = _DOW2.get(a.strip()[:2]), _DOW2.get(b.strip()[:2])
+                    if a is None or b is None:
+                        continue
+                    i = a
+                    while True:
+                        days.add(i)
+                        if i == b:
+                            break
+                        i = (i + 1) % 7
+                else:
+                    d = _DOW2.get(tok[:2])
+                    if d is not None:
+                        days.add(d)
+        if wd not in days:
+            continue
+        matched_today = True
+        if timespec in ("off", "closed"):
+            return False
+        for rng in timespec.split(","):
+            mm = re.match(r"(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})", rng.strip())
+            if not mm:
+                continue
+            start = int(mm.group(1)) * 60 + int(mm.group(2))
+            end = int(mm.group(3)) * 60 + int(mm.group(4))
+            if end <= start:
+                end += 1440  # crosses midnight
+            if start <= minutes < end or start <= minutes + 1440 < end:
+                return True
+    # Rules existed but none cover now (incl. a weekday-only place on a weekend) → closed. No parseable rules → unknown.
+    return False if parsed_any else None
+
+
+def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
     """Feed Coach Cal the REAL places near the user (or ALONG their drive, or in a DESTINATION area the user
     named like 'Philadelphia tonight') so suggestions match where they'll actually be — never invented."""
-    if area and not (isinstance(nearby, list) and nearby):
+    # Compute open/closed per place from the user's local time and DROP confidently-closed ones so Coach Cal
+    # can't route the user to a shut restaurant (the squad caught it sending users to closed Pappas BBQ / a 10pm
+    # spot at 11:30pm). Keep open + unknown-hours places.
+    lt = _parse_local_time(local_time)
+    avail = []
+    if isinstance(nearby, list):
+        for p in nearby:
+            if not isinstance(p, dict) or not p.get("name"):
+                continue
+            o = _osm_open_now(p.get("hours"), lt[0], lt[1]) if (lt and p.get("hours")) else None
+            if o is False:
+                continue   # closed right now → never show it to the model
+            p = dict(p)
+            p["_open"] = o
+            avail.append(p)
+    avail.sort(key=lambda x: (x.get("_open") is not True,))   # open-now first
+    nearby = avail
+    if area and not nearby:
         # The user named a place to eat (e.g. Ambler) but the live spot finder is down → DON'T just punt with
         # "try again", and DON'T redirect to their current location. Name REAL well-known places there from
         # your own knowledge, clearly flagged to verify.
@@ -1554,11 +1652,9 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
                 "Instead, from your OWN knowledge name 2-3 WELL-KNOWN, real, currently-operating restaurants in " + str(area)[:50] + " "
                 "that fit their goal, each with a SPECIFIC healthy dish to order — and add a brief 'I can't confirm live hours, so call "
                 "ahead' caveat. Only name places you're genuinely confident exist; never invent one.")
-    if isinstance(nearby, list) and nearby:
+    if nearby:
         items = []
         for p in nearby[:16]:
-            if not isinstance(p, dict) or not p.get("name"):
-                continue
             dm = p.get("dist_m")
             dist = ""
             if isinstance(dm, (int, float)) and not area:   # distances are from CURRENT location; meaningless for a far destination
@@ -1566,18 +1662,23 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
                 dist = f" ({mi:.1f} mi)" if mi >= 0.1 else " (right here)"
             addr = str(p.get("addr") or "").strip()
             hrs = str(p.get("hours") or "").strip()
+            openflag = " [OPEN NOW]" if p.get("_open") is True else ""
             items.append(str(p["name"])[:40] + dist + (" @ " + addr[:60] if addr else "")
-                         + (" [hours: " + hrs[:50] + "]" if hrs else " [hours: not listed]"))
-        hours_note = (" CRITICAL — RESPECT OPENING HOURS: places may show [hours: ...] in OSM format and the user's "
-                      "current local time is given above. NEVER recommend a place that is CLOSED at the time they'll "
-                      "eat — pick ones that are open and say the hours (e.g. 'open till 10pm'). If a place shows "
-                      "[hours: not listed], you may suggest it but tell them to call or check it's open before heading over. "
-                      "STALE DATA: this list can be out of date — a spot may have permanently closed. Lean toward "
-                      "well-known places likely still open, and ALWAYS tell the user to quickly confirm it's open (a tap on "
-                      "the directions, or a call) before going — never guarantee a place is open. "
-                      "BE SPECIFIC, NOT VAGUE: name an ACTUAL dish to order that fits their goal (e.g. 'the grilled "
-                      "salmon with steamed broccoli, sauce on the side' or 'a burrito bowl with double chicken, no rice') — "
-                      "use what that cuisine/restaurant is known for. Never answer with only a vague 'some grilled fish options'.")
+                         + (" [hours: " + hrs[:50] + "]" if hrs else " [hours: not listed]") + openflag)
+        hours_note = (" THE ABOVE IS THE ONLY LIST OF REAL PLACES — recommend ONLY a place whose name appears EXACTLY in it. "
+                      "NEVER invent, rename, or add a restaurant that is not in the list (a user could be driven to a place "
+                      "that doesn't exist). Closed places have already been removed; [OPEN NOW] = confirmed open. If a place "
+                      "shows only [hours: not listed], suggest it but say 'I can't confirm hours — call ahead'. "
+                      "BE SPECIFIC: name an ACTUAL dish that fits their goal (e.g. 'the grilled salmon with broccoli, sauce on "
+                      "the side', 'a burrito bowl, double chicken, no rice'), tie it to their remaining calories/protein, and "
+                      "never answer with a vague 'some grilled fish options'. "
+                      "CUISINE HONESTY: if the user asked for a specific cuisine (soul food, jambalaya/Cajun, Thai...) and NO "
+                      "place in the list is that cuisine, say so honestly and either name a well-known real spot of that cuisine "
+                      "in the area from your own knowledge (verify-hours caveat) or offer the closest healthy option while clearly "
+                      "stating it's not that cuisine — NEVER relabel a different cuisine as what they asked for. "
+                      "CHEAT DAY: if they say it's a cheat/treat/splurge day, give permission warmly and coach a SMARTER "
+                      "indulgence at a real indulgent spot from the list (e.g. 'at Yard House get the burger, skip the fries; "
+                      "box half') — do NOT steer them to a salad/health-food spot.")
         if items and area:
             return ("\n\nThe user is planning to be in/around " + str(area)[:50] + " and wants to eat THERE (not near their "
                     "current location). REAL places in " + str(area)[:50] + " ('@' = street address): " + "; ".join(items) + ". "
@@ -1650,7 +1751,7 @@ def chat():
                    "parfait, pancakes) in the evening, or a heavy dinner first thing in the morning. Match the "
                    "hour: breakfast in the morning, lunch midday, dinner in the evening, and a light protein "
                    "snack late at night. If it's late, lean toward something light that won't disrupt sleep.")
-    system += _chat_nearby_clause(d.get("nearby"), bool(d.get("has_location")), d.get("route_to") or "", str(d.get("area") or "").strip()[:50])
+    system += _chat_nearby_clause(d.get("nearby"), bool(d.get("has_location")), d.get("route_to") or "", str(d.get("area") or "").strip()[:50], local_time=lt)
     convo = system + "\n\n"
     for m in msgs[-12:]:
         if not isinstance(m, dict):
