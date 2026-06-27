@@ -1180,6 +1180,7 @@
       <button class="btn" id="deleteDataBtn" type="button" style="background:rgba(220,38,38,.10);color:var(--bad);border:1.5px solid rgba(220,38,38,.3)">Delete my data</button>
       <div class="goal-desc" style="margin:10px 2px 0;font-size:11.5px">Permanently erases your food diary, profile, targets, weight &amp; water history, and preferences from this device and our server. This can’t be undone.</div>
     </div>
+    <div id="buildStamp" style="text-align:center;margin:2px 2px 6px;font-size:11px;color:var(--ink3)">SnapCal</div>
   </section>
 
 </main>
@@ -3130,6 +3131,7 @@ function profLocalGet(){ try { return JSON.parse(localStorage.getItem("snapcal_p
 function profLocalSave(p){ try { localStorage.setItem("snapcal_profile", JSON.stringify(p)); } catch(e){} }
 
 async function loadProfile(){
+  try { api("/api/version").then(function(v){ var el = $("#buildStamp"); if (el && v && v.commit) el.textContent = "SnapCal · build " + v.commit; }).catch(function(){}); } catch(e){}
   var local = profLocalGet();
   if (local) profile = profFrom(local);              /* their saved profile — instant + reliable */
   try {

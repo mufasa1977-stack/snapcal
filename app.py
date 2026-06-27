@@ -2259,6 +2259,12 @@ registered dietitian before making changes to your diet, exercise, or health.</p
 </body></html>"""
 
 
+@app.get("/api/version")
+def version():
+    """Which build is live — so Tariq can confirm his phone loaded the latest (Render injects RENDER_GIT_COMMIT)."""
+    return jsonify({"commit": (os.environ.get("RENDER_GIT_COMMIT") or "dev")[:7]})
+
+
 @app.get("/privacy")
 def privacy_page():
     """Public privacy-policy URL (required by both stores + the Play Data Safety form)."""
