@@ -87,6 +87,12 @@ GOAL_LABELS = {
                    "high protein to preserve muscle, low energy density, and watching hidden calories",
     "build_muscle": "building muscle / lean bulk — prioritise adequate calories, high total protein, "
                     "good protein density, and fuel around training",
+    "recomp": "body recomposition — losing fat while building and keeping muscle at the same time. Run a "
+              "MODERATE calorie deficit (never a crash) and hit a HIGH protein target so they stay SOLID, not "
+              "skinny: protein plus resistance training preserve and build lean muscle while the fat comes off, "
+              "and a slower, steadier loss with muscle underneath gives the best skin and body outcome. "
+              "Prioritise high protein, high satiety, whole foods, and enough fiber and water; keep the "
+              "deficit gentle, never aggressive",
     "maintain": "maintaining weight and eating healthily — prioritise balanced macros and overall "
                 "nutrient quality",
     "glp1": "on a GLP-1 medication (Ozempic/Wegovy/Zepbound) — appetite is suppressed so every bite must "
@@ -1435,6 +1441,18 @@ CHAT_SYSTEM = (
     "doctor or a registered dietitian. Encourage, never shame."
 )
 
+RECOMP_CHAT_CLAUSE = (
+    "\n\nThis user's goal is BODY RECOMPOSITION — losing fat while building muscle at the same time. Coach the "
+    "recomp mindset: a MODERATE calorie deficit (never a crash) plus a HIGH-protein intake so they stay SOLID, "
+    "not skinny, and encourage resistance / strength training to keep and build muscle as the fat comes off. If "
+    "they worry about loose or saggy skin, be honest and reassuring: losing fat gradually, keeping protein high, "
+    "building muscle underneath, staying hydrated and giving it time give the best skin result — a very large "
+    "loss can leave some skin (a later conversation), so never promise, just point them the right way. Favour "
+    "LOW-IMPACT movement and walking, and remind them that for someone heavier, daily steps and breaking up long "
+    "sitting burn more calories than they expect. Encourage, never shame. Not medical advice — for pain or "
+    "medical conditions, gently suggest their doctor."
+)
+
 
 def _chat_nearby_clause(nearby, has_loc, route_to=""):
     """Feed Coach Cal the REAL places near the user (or ALONG their drive) so 'find me X on my way to work'
@@ -1485,6 +1503,8 @@ def chat():
         remaining=_int(d.get("remaining_calories"), 0), daily=_int(d.get("daily_calories"), 2000),
         eaten=str(d.get("eaten_today") or "nothing logged yet")[:200],
     )
+    if goal == "recomp":
+        system += RECOMP_CHAT_CLAUSE
     system += _chat_nearby_clause(d.get("nearby"), bool(d.get("has_location")), d.get("route_to") or "")
     convo = system + "\n\n"
     for m in msgs[-12:]:

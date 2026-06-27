@@ -959,6 +959,7 @@
         <button type="button" data-goal="maintain"><span class="ge">⚖️</span><span>Maintain</span></button>
         <button type="button" data-goal="build_muscle"><span class="ge">💪</span><span>Build muscle</span></button>
         <button type="button" data-goal="glp1"><span class="ge">💉</span><span>On GLP-1</span></button>
+        <button type="button" data-goal="recomp" style="grid-column:1/-1"><span class="ge">🔁</span><span>Lose + tone (recomp)</span></button>
       </div>
       <div class="goal-desc" id="goalDesc"></div>
     </div>
@@ -1302,6 +1303,7 @@ var GOAL_INFO = {
   lose_weight:  { emoji: "🔥", label: "Lose weight",  desc: "Coaching for a calorie deficit — fullness, protein to protect muscle, and hidden-calorie warnings." },
   maintain:     { emoji: "⚖️", label: "Maintain",     desc: "Coaching for balance — even macros and overall food quality." },
   build_muscle: { emoji: "💪", label: "Build muscle", desc: "Coaching for a lean bulk — enough fuel, high protein, and good protein density." },
+  recomp:       { emoji: "🔁", label: "Lose + tone",  desc: "Coaching for body recomposition — a moderate deficit with high protein and strength work, so you lose fat and stay solid, not skinny." },
   glp1:         { emoji: "💉", label: "GLP-1",        desc: "Coaching for GLP-1 meds (Ozempic/Wegovy/Zepbound) — protein to protect muscle, fiber + water for digestion, and warnings on greasy or oversized portions that trigger nausea." }
 };
 var goal = localStorage.getItem("snapcal_goal") || "maintain";
@@ -1694,6 +1696,12 @@ function _segSet(wrapId, attr, val){
   var w = $("#" + wrapId); if (!w) return;
   w.querySelectorAll("button").forEach(function(b){ b.classList.toggle("active", b.dataset[attr] === val); });
 }
+var PG_TO_COACH = { lose: "lose_weight", recomp: "recomp", maintain: "maintain", gain: "build_muscle" };
+function syncCoachGoal(){
+  var g = PG_TO_COACH[_pGoalDir]; if (!g || g === goal) return;
+  goal = g; localStorage.setItem("snapcal_goal", goal);
+  if (typeof setGoalUI === "function") setGoalUI();
+}
 function calcTargets(){
   var age = int($("#pAge").value), ft = int($("#pHeightFt").value), inch = int($("#pHeightIn").value);
   var wlb = parseFloat($("#pCurWeight").value) || 0, goalLb = parseFloat($("#pGoalWeight").value) || 0;
@@ -1720,6 +1728,7 @@ function calcTargets(){
     protein + 'g protein &middot; ' + carb + 'g carbs &middot; ' + fat + 'g fat<br><span style="color:var(--ink3)">&asymp; ' + rateTxt +
     '. High protein keeps your muscle as the fat comes off. Filled in below — tweak anything, then <b>Save</b>.</span></div>';
   saveAboutYou();
+  syncCoachGoal();                                                /* "Lose + tone" → recomp coaching everywhere */
   if ($("#saveBtn")) $("#saveBtn").click();                       /* persist the computed targets */
   try{ $("#calcResult").scrollIntoView({ behavior: "smooth", block: "nearest" }); }catch(e){}
 }
@@ -1747,7 +1756,7 @@ if ($("#pSexSeg")) $("#pSexSeg").querySelectorAll("button").forEach(function(btn
   btn.addEventListener("click", function(){ _pSex = btn.dataset.sex; _segSet("pSexSeg", "sex", _pSex); saveAboutYou(); });
 });
 if ($("#pGoalSeg")) $("#pGoalSeg").querySelectorAll("button").forEach(function(btn){
-  btn.addEventListener("click", function(){ _pGoalDir = btn.dataset.pg; _segSet("pGoalSeg", "pg", _pGoalDir); saveAboutYou(); });
+  btn.addEventListener("click", function(){ _pGoalDir = btn.dataset.pg; _segSet("pGoalSeg", "pg", _pGoalDir); saveAboutYou(); syncCoachGoal(); });
 });
 if ($("#calcTargetsBtn")) $("#calcTargetsBtn").addEventListener("click", calcTargets);
 loadAboutYou();
