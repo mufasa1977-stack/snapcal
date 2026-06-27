@@ -37,6 +37,41 @@ RESTAURANTS_PATH = APP_DIR / "data" / "restaurants.json"  # curated "Eat Out" da
 RECIPES_PATH = APP_DIR / "data" / "recipes.json"  # curated recipe library (SnapCal Meals browser)
 ROUTINES_PATH = APP_DIR / "data" / "routines.json"  # curated exercise routines (Move module)
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"  # free OpenStreetMap places lookup (no API key / no billing)
+# Render's egress 429s/can't-reach the primary Overpass host a lot → rotate mirrors with retry so the eat-out
+# feature doesn't go dark (the QA squad found /api/nearby was unreachable in prod). Google Places later = the real cure.
+OVERPASS_MIRRORS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
+_OVERPASS_CACHE = {}  # key -> (payload, epoch); serves recent results through a transient outage
+
+
+def _overpass(query, timeout=18, cache_key=None):
+    """Run an Overpass query against rotating mirrors with retry; cache hits so an outage still serves data."""
+    if cache_key and cache_key in _OVERPASS_CACHE:
+        payload, ts = _OVERPASS_CACHE[cache_key]
+        if (time.time() - ts) < 21600:  # 6h
+            return payload
+    body = urllib.parse.urlencode({"data": query}).encode("utf-8")
+    last = None
+    for url in OVERPASS_MIRRORS:
+        try:
+            req = urllib.request.Request(url, data=body, headers={"User-Agent": "SnapCal/1.0 (health coach; contact tariq@xionprotech.com)"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            if cache_key:
+                if len(_OVERPASS_CACHE) > 500:
+                    _OVERPASS_CACHE.clear()
+                _OVERPASS_CACHE[cache_key] = (payload, time.time())
+            return payload
+        except Exception as exc:  # noqa: BLE001 - try the next mirror
+            last = exc
+    # All mirrors failed — serve a stale cache entry if we have one, else raise.
+    if cache_key and cache_key in _OVERPASS_CACHE:
+        return _OVERPASS_CACHE[cache_key][0]
+    raise last if last else RuntimeError("overpass_unreachable")
 # Key: prefer the GEMINI_API_KEY env var (hosting / paid tier); fall back to the
 # local key file so `python app.py` still works during development.
 GEMINI_KEY_PATH = Path("C:/Users/somme/youtube_videos/gemini_key.txt")
@@ -1090,10 +1125,8 @@ def nearby():
             ");out center tags 1200;"   # high cap: Overpass returns DB-order not nearest-first, so we must pull all-in-radius then sort ourselves
         )
     try:
-        body = urllib.parse.urlencode({"data": query}).encode("utf-8")
-        req = urllib.request.Request(OVERPASS_URL, data=body, headers={"User-Agent": "SnapCal/1.0 (eat-out)"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
+        ckey = f"{kind}:{round(lat, 3)},{round(lng, 3)}:{radius}"   # cache hotspots + survive a transient outage
+        payload = _overpass(query, timeout=18, cache_key=ckey)
     except Exception as exc:  # noqa: BLE001 - best-effort; degrade gracefully on Overpass hiccups
         # keep `center` so the frontend can ALWAYS draw the map even when the food lookup hiccups
         return jsonify({"matched": [], "nearby": [], "stores": [], "center": {"lat": lat, "lng": lng},
@@ -1453,6 +1486,18 @@ CHAT_SYSTEM = (
     "use simple evidence-based reasoning, never hype or trends. You are NOT a doctor: give general wellness guidance, "
     "never diagnose, prescribe, or make medical claims; for medical conditions, gently suggest they talk to their "
     "doctor or a registered dietitian. Encourage, never shame."
+    "\n\nHARD RULES — follow exactly, every time:"
+    "\n1) If a list of REAL places is provided, you MUST name at least ONE specific place from it AND one specific DISH to "
+    "order. NEVER answer a 'where/what should I eat' with only general advice like 'look for grilled chicken'."
+    "\n2) If the user asks 'how am I doing' or about their progress, you MUST state the EXACT numbers — calories left and "
+    "grams of protein still to go (from their context) — then give ONE concrete next step to close the protein gap."
+    "\n3) If they ask to 'explain what I'm looking at', describe the SCREEN named in their context (e.g. the Profile screen's "
+    "targets/stats/settings), not a generic day summary."
+    "\n4) For a recomp 'how do I lose fat but keep muscle' question, give the 3 concrete levers: a MODERATE deficit (not a "
+    "crash), their protein target in GRAMS, and resistance training ~3-4x/week — with real numbers, not vague encouragement."
+    "\n5) When cooking/feeding others with allergies, give 2-3 ideas free of the listed allergens AND add one line to verify "
+    "every label because those allergies can be life-threatening."
+    "\n6) Be specific and concrete; finish your sentences; warm but useful, never filler."
 )
 
 RECOMP_CHAT_CLAUSE = (
@@ -1501,12 +1546,14 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
     """Feed Coach Cal the REAL places near the user (or ALONG their drive, or in a DESTINATION area the user
     named like 'Philadelphia tonight') so suggestions match where they'll actually be — never invented."""
     if area and not (isinstance(nearby, list) and nearby):
-        # The user named a place to eat (e.g. Ambler) but we couldn't load real spots there → do NOT redirect
-        # them to their current location and do NOT invent places.
-        return ("\n\nThe user wants to eat in/around " + str(area)[:50] + ", but the spot finder couldn't load real "
-                "places there right this second. Briefly apologize, tell them it hiccupped and to ask again in a moment, "
-                "and do NOT suggest places near their CURRENT location instead (they're not there) and NEVER invent a "
-                "restaurant. You can still suggest the KIND of healthy meal to look for in " + str(area)[:50] + ".")
+        # The user named a place to eat (e.g. Ambler) but the live spot finder is down → DON'T just punt with
+        # "try again", and DON'T redirect to their current location. Name REAL well-known places there from
+        # your own knowledge, clearly flagged to verify.
+        return ("\n\nThe live spot finder is down right now, so you can't see real-time places in " + str(area)[:50] + ". "
+                "Do NOT say 'try again' and do NOT suggest places near their CURRENT location (they're going to " + str(area)[:50] + "). "
+                "Instead, from your OWN knowledge name 2-3 WELL-KNOWN, real, currently-operating restaurants in " + str(area)[:50] + " "
+                "that fit their goal, each with a SPECIFIC healthy dish to order — and add a brief 'I can't confirm live hours, so call "
+                "ahead' caveat. Only name places you're genuinely confident exist; never invent one.")
     if isinstance(nearby, list) and nearby:
         items = []
         for p in nearby[:16]:
@@ -1560,7 +1607,12 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
                     "offering a couple of DIFFERENT kinds of spots. If they name a CRAVING, point them to the place that "
                     "does the HEALTHIEST version of THAT. Only name places from this list; never invent one." + hours_note)
     if has_loc:
-        return "\n\nThe user shared their location but nothing notable is nearby — suggest healthy grab-and-go basics."
+        # We have their location but the live finder returned nothing (it's down or truly empty). Don't punt —
+        # give reliable national options that exist almost everywhere + a specific order, and ask their city for exact spots.
+        return ("\n\nThe live spot finder can't see places right now. Do NOT say 'try again'. Instead recommend 2-3 reliable, "
+                "widely-available healthy options with a SPECIFIC order — e.g. CAVA (a chicken+greens bowl, double protein), "
+                "Chipotle (a chicken burrito BOWL, no rice, extra veg), Sweetgreen, or Panera (a Power bowl) — and ask the user "
+                "what city they're in (or a restaurant they can see) so you can get specific. Keep it warm and useful, not an apology.")
     return ("\n\nThe user has NOT shared their location yet. If they ask for food 'near me / on my way / on my drive', "
             "warmly tell them to allow location (and to set their destination in settings for on-the-drive picks) — and "
             "do NOT invent or name specific restaurants you can't actually see.")
@@ -1610,7 +1662,7 @@ def chat():
     try:
         from google.genai import types
         client = get_gemini_client()
-        cfg = types.GenerateContentConfig(max_output_tokens=200, temperature=0.7)
+        cfg = types.GenerateContentConfig(max_output_tokens=700, temperature=0.7)
         # Gemini occasionally throws a transient error / rate-limit (intermittent 502s). Retry server-side —
         # flash-lite twice, then fall back to flash — so the user almost never sees a failure.
         attempts = [CHAT_MODEL, CHAT_MODEL, GEMINI_MODEL]
@@ -1704,27 +1756,41 @@ def geocode():
         ulng = float(request.args.get("lng", ""))
     except (TypeError, ValueError):
         ulat = ulng = None
-    base = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + urllib.parse.quote(q)
-    # First try: prefer results NEAR the user (viewbox ~175 mi box). If that finds nothing, fall back to a global search.
-    urls = []
-    if ulat is not None and ulng is not None:
-        dd = 2.5
-        vb = f"{ulng - dd},{ulat + dd},{ulng + dd},{ulat - dd}"
-        urls.append(base + "&viewbox=" + urllib.parse.quote(vb) + "&bounded=1")
-    urls.append(base)
-    d = []
+    # Rank by PROMINENCE (Nominatim 'importance'), not proximity — the old viewbox bias sent "Miami" to a NJ
+    # hamlet and "Houston" to Houston, DE. Prefer real localities (city/town) over streets/POIs; a small
+    # proximity bonus only breaks ties between similarly-prominent same-name places.
+    url = ("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&addressdetails=0&q="
+           + urllib.parse.quote(q))
     try:
-        for u in urls:
-            req = urllib.request.Request(u, headers={"User-Agent": "SnapCal/1.0 (nutrition coach)"})
-            with urllib.request.urlopen(req, timeout=10) as r:
-                d = json.loads(r.read().decode("utf-8"))
-            if d:
-                break
+        req = urllib.request.Request(url, headers={"User-Agent": "SnapCal/1.0 (health coach; tariq@xionprotech.com)"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            d = json.loads(r.read().decode("utf-8"))
     except Exception:  # noqa: BLE001
         return jsonify({"error": "geocode_failed"}), 502
-    if not d:
+    if not isinstance(d, list) or not d:
         return jsonify({"error": "not_found"}), 404
-    return jsonify({"lat": float(d[0]["lat"]), "lng": float(d[0]["lon"]), "label": str(d[0].get("display_name", ""))[:120]})
+
+    def _score(rec):
+        s = float(rec.get("importance") or 0)
+        cls, typ = rec.get("category") or rec.get("class") or "", rec.get("type") or ""
+        if cls in ("place", "boundary"):
+            s += 1.0                     # strongly prefer real localities
+        if typ in ("city", "town"):
+            s += 0.5
+        if typ in ("municipality", "administrative", "village"):
+            s += 0.2
+        if cls == "highway":
+            s -= 1.0                     # never pick a street ("Los Angeles Avenue, CT")
+        if ulat is not None and ulng is not None:
+            try:
+                dd = abs(float(rec["lat"]) - ulat) + abs(float(rec["lon"]) - ulng)
+                s += max(0.0, 0.25 - 0.03 * min(dd, 12))   # mild tiebreak toward nearby, never overrides prominence
+            except (KeyError, TypeError, ValueError):
+                pass
+        return s
+
+    best = max(d, key=_score)
+    return jsonify({"lat": float(best["lat"]), "lng": float(best["lon"]), "label": str(best.get("display_name", ""))[:120]})
 
 
 _ROUTE_CACHE = {}
@@ -1760,10 +1826,7 @@ def route_nearby():
     arounds = "".join(f'nwr(around:700,{c[1]},{c[0]})["amenity"~"^(fast_food|restaurant|cafe)$"];' for c in samples)
     query = "[out:json][timeout:20];(" + arounds + ");out center tags 400;"
     try:
-        body = urllib.parse.urlencode({"data": query}).encode("utf-8")
-        oreq = urllib.request.Request(OVERPASS_URL, data=body, headers={"User-Agent": "SnapCal/1.0 (route)"})
-        with urllib.request.urlopen(oreq, timeout=22) as r:
-            payload = json.loads(r.read().decode("utf-8"))
+        payload = _overpass(query, timeout=22)
     except Exception:  # noqa: BLE001
         return jsonify({"error": "lookup_failed", "places": []})
     aliases = _chain_alias_map()
