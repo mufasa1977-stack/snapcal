@@ -1558,6 +1558,33 @@ async function addBarcodeToToday(d){
     switchTab("today");
   } catch (e){ toast(e.message || "Couldn't add it", true); }
 }
+/* Make the scan camera FULL-SCREEN (fills the phone) with an aiming box + Close button. */
+function _bcFull(on){
+  var v = bcEl("bcVideo"); if (!v) return;
+  var btn = bcEl("bcClose"), g = bcEl("bcGuide");
+  if (on){
+    if (!btn){
+      btn = document.createElement("button");
+      btn.id = "bcClose"; btn.type = "button"; btn.textContent = "✕ Close";
+      btn.style.cssText = "position:fixed;top:16px;right:16px;z-index:10000;background:rgba(0,0,0,.62);color:#fff;border:none;border-radius:22px;padding:11px 18px;font-weight:800;font-size:15px;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent";
+      btn.addEventListener("click", stopBarcodeCamera);
+      document.body.appendChild(btn);
+    }
+    if (!g){
+      g = document.createElement("div"); g.id = "bcGuide";
+      g.style.cssText = "position:fixed;left:8%;right:8%;top:40%;height:18%;border:3px solid rgba(255,255,255,.92);border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.34);z-index:9999;pointer-events:none";
+      document.body.appendChild(g);
+    }
+    btn.style.display = "block"; g.style.display = "block";
+    document.body.style.overflow = "hidden";
+    v.style.cssText = "position:fixed;inset:0;width:100vw;height:100dvh;max-height:none;object-fit:cover;z-index:9998;border-radius:0;margin:0;background:#000;display:block";
+  } else {
+    if (btn) btn.style.display = "none";
+    if (g) g.style.display = "none";
+    document.body.style.overflow = "";
+    v.style.cssText = "display:none;width:100%;height:58vh;max-height:520px;min-height:300px;object-fit:cover;border-radius:14px;background:#000;margin-bottom:9px";
+  }
+}
 async function startBarcodeCamera(){
   var h = bcEl("bcHint"), v = bcEl("bcVideo");
   if (!_canCamera()){ if (h) h.textContent = "This browser can’t open the camera — type the barcode number instead."; return; }
@@ -1566,7 +1593,7 @@ async function startBarcodeCamera(){
     try{
       var det = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_a","upc_e","code_128"] });
       _bcStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      v.srcObject = _bcStream; v.style.display = "block"; await v.play();
+      v.srcObject = _bcStream; _bcFull(true); await v.play();
       if (h) h.textContent = "Hold the barcode steady in the frame…";
       var tick = async function(){
         if (!_bcStream) return;
@@ -1584,7 +1611,7 @@ async function startBarcodeCamera(){
     var hints = new Map();
     try{ hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E, ZXing.BarcodeFormat.CODE_128]); }catch(e){}
     _bcZX = new ZXing.BrowserMultiFormatReader(hints);
-    v.style.display = "block";
+    _bcFull(true);
     if (h) h.textContent = "Hold the barcode steady in the frame…";
     _bcZX.decodeFromConstraints({ video: { facingMode: "environment" } }, v, function(result){
       if (result){ var txt = result.getText(); stopBarcodeCamera(); lookupBarcode(txt); }
@@ -1595,7 +1622,8 @@ function stopBarcodeCamera(){
   if (_bcRAF){ cancelAnimationFrame(_bcRAF); _bcRAF = null; }
   if (_bcZX){ try{ _bcZX.reset(); }catch(e){} _bcZX = null; }
   if (_bcStream){ _bcStream.getTracks().forEach(function(t){ t.stop(); }); _bcStream = null; }
-  var v = bcEl("bcVideo"); if (v){ v.style.display = "none"; try{ v.srcObject = null; }catch(e){} }
+  var v = bcEl("bcVideo"); if (v){ try{ v.srcObject = null; }catch(e){} }
+  _bcFull(false);
 }
 if (bcEl("barcodeBtn")) bcEl("barcodeBtn").addEventListener("click", toggleBarcodePanel);
 if (bcEl("bcLookup")) bcEl("bcLookup").addEventListener("click", function(){ lookupBarcode(bcEl("bcInput").value); });
