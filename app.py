@@ -1752,6 +1752,26 @@ def chat():
                    "hour: breakfast in the morning, lunch midday, dinner in the evening, and a light protein "
                    "snack late at night. If it's late, lean toward something light that won't disrupt sleep.")
     system += _chat_nearby_clause(d.get("nearby"), bool(d.get("has_location")), d.get("route_to") or "", str(d.get("area") or "").strip()[:50], local_time=lt)
+    # Trip / multi-day planning intent → give a real structured plan, not a question back (squad caught the Miami
+    # "plan my 3 days" punt). Needs a bigger output budget so the plan isn't truncated.
+    last_user = ""
+    for _m in reversed(msgs):
+        if isinstance(_m, dict) and _m.get("role") == "user":
+            last_user = str(_m.get("content") or "")
+            break
+    is_trip = bool(re.search(r"(?i)\b(vacation|trip|itinerary|out of town|for \d+\s*days?|\d+[\s-]day|plan (?:my|me|out)\s+(?:meals?|the day|my day|the week|my trip|a day)|weekend in|days in|while (?:i'?m|we'?re)\s+(?:in|there))\b", last_user))
+    if is_trip:
+        system += (
+            "\n\nTRIP / MULTI-DAY PLAN MODE: the user wants an actual PLAN, not a question back — do NOT reply with "
+            "'what sounds good?'. Produce a clear day-by-day plan covering the days they mentioned (default 1 day if "
+            "unclear). For EACH day give Breakfast, Lunch, and Dinner; for each meal name a SPECIFIC real place (use the "
+            "places list above when present, otherwise well-known real spots in that area you're confident exist) + ONE "
+            "specific dish + a rough protein/calorie estimate, and keep each day's totals roughly within their daily "
+            "calorie & protein targets. Use a compact readable layout (e.g. 'Day 1 — Breakfast: <place> — <dish> (~Xg "
+            "protein); Lunch: ...; Dinner: ...'). Deliver the WHOLE plan, then one short upbeat closing line. If you used "
+            "places from general knowledge, add a brief 'verify hours' note.")
+    max_out = 1600 if is_trip else 750
+    reply_cap = 4000 if is_trip else 1200
     convo = system + "\n\n"
     for m in msgs[-12:]:
         if not isinstance(m, dict):
@@ -1763,7 +1783,7 @@ def chat():
     try:
         from google.genai import types
         client = get_gemini_client()
-        cfg = types.GenerateContentConfig(max_output_tokens=700, temperature=0.7)
+        cfg = types.GenerateContentConfig(max_output_tokens=max_out, temperature=0.7)
         # Gemini occasionally throws a transient error / rate-limit (intermittent 502s). Retry server-side —
         # flash-lite twice, then fall back to flash — so the user almost never sees a failure.
         attempts = [CHAT_MODEL, CHAT_MODEL, GEMINI_MODEL]
@@ -1782,7 +1802,7 @@ def chat():
             raise last_exc
     except Exception:  # noqa: BLE001
         return jsonify({"error": "Coach Cal can't talk right now — try again in a moment."}), 502
-    reply = reply.replace("**", "").replace("*", "").strip()[:700]
+    reply = reply.replace("**", "").replace("*", "").strip()[:reply_cap]
     return jsonify({"reply": reply or "I'm here — what can I help you with?"})
 
 
