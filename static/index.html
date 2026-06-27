@@ -922,7 +922,6 @@
         Scan a barcode for exact numbers
       </button>
       <div id="barcodePanel" style="display:none;margin-top:10px">
-        <video id="bcVideo" playsinline muted style="display:none;width:100%;height:58vh;max-height:520px;min-height:300px;object-fit:cover;border-radius:14px;background:#000;margin-bottom:9px"></video>
         <div style="display:flex;gap:8px">
           <input id="bcInput" type="text" inputmode="numeric" placeholder="Barcode number (UPC / EAN)" autocomplete="off" style="flex:1;min-width:0;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:11px;padding:11px 12px;font-size:14px;font-family:inherit">
           <button id="bcLookup" type="button" style="flex:0 0 auto;border:none;background:var(--brand);color:#fff;font-weight:800;border-radius:11px;padding:11px 16px;cursor:pointer;font-family:inherit">Look up</button>
@@ -1558,72 +1557,124 @@ async function addBarcodeToToday(d){
     switchTab("today");
   } catch (e){ toast(e.message || "Couldn't add it", true); }
 }
-/* Make the scan camera FULL-SCREEN (fills the phone) with an aiming box + Close button. */
-function _bcFull(on){
-  var v = bcEl("bcVideo"); if (!v) return;
-  var btn = bcEl("bcClose"), g = bcEl("bcGuide");
-  if (on){
-    if (!btn){
-      btn = document.createElement("button");
-      btn.id = "bcClose"; btn.type = "button"; btn.textContent = "✕ Close";
-      btn.style.cssText = "position:fixed;top:16px;right:16px;z-index:10000;background:rgba(0,0,0,.62);color:#fff;border:none;border-radius:22px;padding:11px 18px;font-weight:800;font-size:15px;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent";
-      btn.addEventListener("click", stopBarcodeCamera);
-      document.body.appendChild(btn);
-    }
-    if (!g){
-      g = document.createElement("div"); g.id = "bcGuide";
-      g.style.cssText = "position:fixed;left:8%;right:8%;top:40%;height:18%;border:3px solid rgba(255,255,255,.92);border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.34);z-index:9999;pointer-events:none";
-      document.body.appendChild(g);
-    }
-    btn.style.display = "block"; g.style.display = "block";
-    document.body.style.overflow = "hidden";
-    v.style.cssText = "position:fixed;inset:0;width:100vw;height:100dvh;max-height:none;object-fit:cover;z-index:9998;border-radius:0;margin:0;background:#000;display:block";
-  } else {
-    if (btn) btn.style.display = "none";
-    if (g) g.style.display = "none";
-    document.body.style.overflow = "";
-    v.style.cssText = "display:none;width:100%;height:58vh;max-height:520px;min-height:300px;object-fit:cover;border-radius:14px;background:#000;margin-bottom:9px";
+/* Body-level FULL-SCREEN scanner overlay. Built on document.body so no ancestor transform can
+   trap position:fixed (that was the "tiny camera" bug). Shows a live status banner, an aiming box,
+   and an instant result sheet over the camera so you SEE what you scanned without scrolling. */
+function _bcOverlay(){
+  var ov = bcEl("bcScanOverlay");
+  if (ov) return ov;
+  ov = document.createElement("div");
+  ov.id = "bcScanOverlay";
+  ov.style.cssText = "position:fixed;inset:0;z-index:99999;background:#000;display:none;overflow:hidden";
+  ov.innerHTML =
+    '<video id="bcVideo" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video>' +
+    '<div id="bcGuide" style="position:absolute;left:8%;right:8%;top:36%;height:20%;border:3px solid rgba(255,255,255,.92);border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.34);pointer-events:none"></div>' +
+    '<div id="bcStatus" style="position:absolute;top:0;left:0;right:0;padding:calc(16px + env(safe-area-inset-top)) 16px 16px;background:linear-gradient(rgba(0,0,0,.6),transparent);color:#fff;font-weight:800;font-size:16px;text-align:center">Point at a barcode</div>' +
+    '<button id="bcClose" type="button" style="position:absolute;top:calc(12px + env(safe-area-inset-top));right:14px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:22px;padding:10px 16px;font-weight:800;font-size:15px;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent">✕ Close</button>' +
+    '<div id="bcSheet" style="position:absolute;left:0;right:0;bottom:0;display:none;background:var(--card,#fff);color:var(--ink,#191919);border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -12px 34px rgba(0,0,0,.34)"></div>';
+  document.body.appendChild(ov);
+  ov.querySelector("#bcClose").addEventListener("click", stopBarcodeCamera);
+  return ov;
+}
+function _bcStatus(t){ var s = bcEl("bcStatus"); if (s) s.textContent = t; }
+function _bcShowResult(d){
+  var sheet = bcEl("bcSheet"), g = bcEl("bcGuide"); if (!sheet) return;
+  if (g) g.style.display = "none";
+  if (!d || d.found === false || d.calories == null){
+    _bcStatus("No match for that barcode");
+    sheet.innerHTML =
+      '<div style="font-weight:800;font-size:17px;margin-bottom:4px">No verified match yet</div>' +
+      '<div style="color:var(--ink3,#888);font-size:13px;margin-bottom:14px">Try again, or close and snap a photo / search the food.</div>' +
+      '<button id="bcAgain" type="button" class="btn btn-dark" style="margin:0">Scan again</button>';
+    sheet.style.display = "block";
+    bcEl("bcAgain").addEventListener("click", _bcScanAgain);
+    return;
   }
+  _bcStatus("✓ Got it");
+  sheet.innerHTML =
+    '<div style="font-weight:800;font-size:20px;line-height:1.18">' + esc(d.name) + '</div>' +
+    (d.brand ? '<div style="color:var(--ink3,#888);font-size:13px;margin-top:2px">' + esc(d.brand) + '</div>' : '') +
+    '<div style="display:flex;gap:18px;flex-wrap:wrap;margin:13px 0 6px">' +
+      '<div><span style="font-size:22px;font-weight:800">' + int(d.calories) + '</span> <span style="color:var(--ink3,#888);font-size:12px">cal</span></div>' +
+      '<div><span style="font-size:22px;font-weight:800">' + int(d.protein_g) + '</span> <span style="color:var(--ink3,#888);font-size:12px">g protein</span></div>' +
+      '<div><span style="font-size:22px;font-weight:800">' + int(d.carbs_g) + '</span> <span style="color:var(--ink3,#888);font-size:12px">g carbs</span></div>' +
+      '<div><span style="font-size:22px;font-weight:800">' + int(d.fat_g) + '</span> <span style="color:var(--ink3,#888);font-size:12px">g fat</span></div>' +
+    '</div>' +
+    '<div style="color:var(--brand,#2e8b57);font-weight:700;font-size:12px;margin-bottom:14px">✓ Verified label data &middot; per ' + esc(d.serving) + '</div>' +
+    '<div style="display:flex;gap:10px">' +
+      '<button id="bcAdd" type="button" class="btn btn-dark" style="flex:1;margin:0">Add to today</button>' +
+      '<button id="bcAgain" type="button" style="flex:0 0 auto;border:1.5px solid var(--line,#ddd);background:transparent;color:var(--ink,#333);border-radius:11px;padding:0 16px;font-weight:800;font-family:inherit;cursor:pointer">Scan again</button>' +
+    '</div>';
+  sheet.style.display = "block";
+  renderBarcodeResult(d);   // also populate the Today-tab card for when they close
+  bcEl("bcAdd").addEventListener("click", function(){ addBarcodeToToday(d); stopBarcodeCamera(); });
+  bcEl("bcAgain").addEventListener("click", _bcScanAgain);
+}
+function _bcScanAgain(){
+  var sheet = bcEl("bcSheet"), g = bcEl("bcGuide");
+  if (sheet){ sheet.style.display = "none"; sheet.innerHTML = ""; }
+  if (g) g.style.display = "block";
+  startBarcodeCamera();
+}
+/* A barcode was read from the camera — stop the live feed but KEEP the overlay, look it up, show it. */
+function _bcScanned(code){
+  if (_bcRAF){ cancelAnimationFrame(_bcRAF); _bcRAF = null; }
+  if (_bcZX){ try{ _bcZX.reset(); }catch(e){} _bcZX = null; }
+  if (_bcStream){ _bcStream.getTracks().forEach(function(t){ t.stop(); }); _bcStream = null; }
+  code = String(code || "").replace(/\D/g, "");
+  _bcStatus("Looking it up…");
+  var fields = "product_name,brands,serving_size,nutriments,image_front_small_url";
+  fetch("https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(code) + ".json?fields=" + fields, { headers: { "Accept": "application/json" } })
+    .then(function(r){ return r.json(); })
+    .then(function(j){ var d = _mapOFF(code, j); _bcShowResult(d.found ? d : { found: false, code: code }); })
+    .catch(function(){
+      api("/api/barcode?code=" + encodeURIComponent(code)).then(_bcShowResult).catch(function(){ _bcShowResult({ found: false, code: code }); });
+    });
 }
 async function startBarcodeCamera(){
-  var h = bcEl("bcHint"), v = bcEl("bcVideo");
-  if (!_canCamera()){ if (h) h.textContent = "This browser can’t open the camera — type the barcode number instead."; return; }
+  if (!_canCamera()){ var h = bcEl("bcHint"); if (h) h.textContent = "This browser can’t open the camera — type the barcode number instead."; return; }
+  var ov = _bcOverlay();
+  ov.style.display = "block";
+  document.body.style.overflow = "hidden";
+  var sheet = bcEl("bcSheet"); if (sheet){ sheet.style.display = "none"; sheet.innerHTML = ""; }
+  var g = bcEl("bcGuide"); if (g) g.style.display = "block";
+  _bcStatus("Starting camera…");
+  var v = bcEl("bcVideo");
   // Fast native path — Chrome on Android (and desktop Chrome)
   if ("BarcodeDetector" in window){
     try{
       var det = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_a","upc_e","code_128"] });
       _bcStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      v.srcObject = _bcStream; _bcFull(true); await v.play();
-      if (h) h.textContent = "Hold the barcode steady in the frame…";
+      v.srcObject = _bcStream; await v.play();
+      _bcStatus("Hold the barcode in the box");
       var tick = async function(){
         if (!_bcStream) return;
-        try{ var codes = await det.detect(v); if (codes && codes.length){ stopBarcodeCamera(); lookupBarcode(codes[0].rawValue); return; } }catch(e){}
+        try{ var codes = await det.detect(v); if (codes && codes.length){ _bcScanned(codes[0].rawValue); return; } }catch(e){}
         _bcRAF = requestAnimationFrame(tick);
       };
       tick(); return;
-    } catch (e){ if (h) h.textContent = "Couldn’t open the camera — type the barcode number instead."; stopBarcodeCamera(); return; }
+    } catch (e){ _bcStatus("Couldn’t open the camera"); setTimeout(stopBarcodeCamera, 1400); return; }
   }
   // iPhone / Safari path — decode with ZXing (no BarcodeDetector on iOS)
-  if (h) h.textContent = "Starting camera…";
   try{
     await _loadZXing();
     if (!window.ZXing) throw new Error("zxing-failed");
     var hints = new Map();
     try{ hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E, ZXing.BarcodeFormat.CODE_128]); }catch(e){}
     _bcZX = new ZXing.BrowserMultiFormatReader(hints);
-    _bcFull(true);
-    if (h) h.textContent = "Hold the barcode steady in the frame…";
+    _bcStatus("Hold the barcode in the box");
     _bcZX.decodeFromConstraints({ video: { facingMode: "environment" } }, v, function(result){
-      if (result){ var txt = result.getText(); stopBarcodeCamera(); lookupBarcode(txt); }
+      if (result){ _bcScanned(result.getText()); }
     });
-  } catch (e){ if (h) h.textContent = "Couldn’t start the camera scanner — type the barcode number instead."; stopBarcodeCamera(); }
+  } catch (e){ _bcStatus("Couldn’t start the camera scanner"); setTimeout(stopBarcodeCamera, 1400); }
 }
 function stopBarcodeCamera(){
   if (_bcRAF){ cancelAnimationFrame(_bcRAF); _bcRAF = null; }
   if (_bcZX){ try{ _bcZX.reset(); }catch(e){} _bcZX = null; }
   if (_bcStream){ _bcStream.getTracks().forEach(function(t){ t.stop(); }); _bcStream = null; }
   var v = bcEl("bcVideo"); if (v){ try{ v.srcObject = null; }catch(e){} }
-  _bcFull(false);
+  var ov = bcEl("bcScanOverlay"); if (ov) ov.style.display = "none";
+  document.body.style.overflow = "";
 }
 if (bcEl("barcodeBtn")) bcEl("barcodeBtn").addEventListener("click", toggleBarcodePanel);
 if (bcEl("bcLookup")) bcEl("bcLookup").addEventListener("click", function(){ lookupBarcode(bcEl("bcInput").value); });
