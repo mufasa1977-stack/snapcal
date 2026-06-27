@@ -2854,14 +2854,30 @@ function _speakFallback(text){
 }
 /* "Take me there" → open the user's maps app with driving directions to the place Coach Cal just named. */
 var _lastPlace = null;
-function openDirectionsTo(place){
-  if (!place) return false;
+function _mapsUrl(place){
+  if (!place) return "";
   var dest = (place.lat != null && place.lng != null) ? (place.lat + "," + place.lng)
            : ((place.name || "") + (place.addr ? (" " + place.addr) : "")).trim();
-  if (!dest) return false;
-  var url = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(dest);
-  try { window.open(url, "_blank"); } catch(e){ try { location.href = url; } catch(e2){ return false; } }
+  return dest ? ("https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(dest)) : "";
+}
+function openDirectionsTo(place){
+  var url = _mapsUrl(place); if (!url) return false;
+  /* A spoken "take me there" is NOT a user gesture, so window.open(_blank) gets popup-blocked and does
+     nothing. Try the new tab first (works on a tap); if it's blocked, navigate directly so it ALWAYS opens. */
+  var w = null; try { w = window.open(url, "_blank"); } catch(e){}
+  if (!w){ try { location.href = url; } catch(e2){ return false; } }
   return true;
+}
+/* Always drop a big tappable Directions button in the chat too — a guaranteed, gesture-backed fallback. */
+function renderDirectionsLink(place){
+  var url = _mapsUrl(place); if (!url) return;
+  var log = $("#voiceLog"); if (!log) return;
+  var a = document.createElement("a");
+  a.href = url; a.target = "_blank"; a.rel = "noopener";
+  a.className = "vmsg vmsg-coach";
+  a.style.cssText += ";display:block;text-decoration:none;background:var(--accent);color:#fff;font-weight:750;text-align:center";
+  a.textContent = "📍 Directions to " + (place.name || "there");
+  log.appendChild(a); log.scrollTop = log.scrollHeight;
 }
 function _navIntent(t){ return /\b(take me there|directions|navigate|how (do|can) i get there|open (the )?map|drive (me )?there|get me there|take me to it|bring me there)\b/i.test(t || ""); }
 function _closestPlace(){
@@ -2885,7 +2901,7 @@ async function sendChat(text){
   text = (text || "").trim(); if (!text) return;
   voiceRender("user", text); _chatMsgs.push({ role: "user", content: text });
   var inp = $("#voiceInput"); if (inp) inp.value = "";
-  if (_navIntent(text)){ var pl = _lastPlace || _closestPlace(); if (pl) openDirectionsTo(pl); }   /* open the map right away */
+  if (_navIntent(text)){ var pl = _lastPlace || _closestPlace(); if (pl){ renderDirectionsLink(pl); openDirectionsTo(pl); } }   /* tappable button + auto-open */
   setVoiceStatus("Coach Cal is thinking…");
   var area = "", areaList = null;
   try {

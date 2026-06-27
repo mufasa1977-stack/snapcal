@@ -1505,8 +1505,9 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
         if items and area:
             return ("\n\nThe user is planning to be in/around " + str(area)[:50] + " and wants to eat THERE (not near their "
                     "current location). REAL places in " + str(area)[:50] + " ('@' = street address): " + "; ".join(items) + ". "
-                    "Recommend SPECIFIC places FROM THIS LIST by name with the address, favor sit-down/fresh spots with a "
-                    "genuinely healthy order at each, and tell the user they can say \"take me there\" to open directions. "
+                    "Recommend SPECIFIC places FROM THIS LIST: lead with the place NAME + a specific healthy order to get "
+                    "there (the address is optional — a brief neighborhood/cross-street is plenty). Favor sit-down/fresh spots, "
+                    "and tell the user they can just say \"take me there\" and you'll open directions. "
                     "These are in " + str(area)[:50] + ", so do NOT mention distance from their current location. Only name "
                     "places from this list; never invent one.")
         if items and route_to:
@@ -1517,9 +1518,10 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area=""):
                     "it, and give a genuinely healthy order at each. Only name places from this list; never invent one.")
         if items:
             return ("\n\nREAL places near the user RIGHT NOW (closest first; '@' = street address where known): " + "; ".join(items) + ". "
-                    "You DO have these addresses — when you recommend a place, SAY its address and distance (e.g. \"about 0.4 mi away at "
-                    "120 Main St\"); if one has no address listed, give the name + distance. ALWAYS tell the user they can just say "
-                    "\"take me there\" and you'll open directions in their maps app — never say you don't have the location. This list MIXES "
+                    "Lead with the place NAME + a specific healthy order; you can briefly add the distance or cross-street, but the "
+                    "user mainly wants the spot + what to eat (full street address optional). You DO know where these are, so NEVER "
+                    "say you don't have the location — ALWAYS tell the user they can just say \"take me there\" and you'll open "
+                    "directions in their maps app. This list MIXES "
                     "fast food, cafes, and sit-down restaurants — do NOT default to fast food. When the user wants "
                     "something healthy, FAVOR the sit-down and fresh spots (places known for grilled proteins, salads, "
                     "seafood, veg-forward bowls) over fast food, and name a specific healthy order there (e.g. at a "
