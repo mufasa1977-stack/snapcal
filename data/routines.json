@@ -77,6 +77,162 @@
       ]
     },
     {
+      "id": "gentle",
+      "name": "Gentle — Senior-Friendly",
+      "emoji": "🌼",
+      "tagline": "Balance, mobility & light strength. Standing-supported & seated. Fall-proof your body.",
+      "audience": "Built for older adults and anyone who wants a kind, steady pace. The goals here are balance and fall-prevention, staying mobile, and keeping muscle and bone strong — with a sturdy chair or counter always within reach. Nothing requires getting onto the floor.",
+      "intensity": "Low impact, gentle",
+      "equipment": ["Sturdy chair", "Counter or wall for support", "Optional: light 1-3 lb dumbbells or filled water bottles"],
+      "weekly": "3-4 days/week. Two strength-and-balance days (A & C) and one mobility day (B), with easy daily walks on the in-between days. Never rush — slow and steady builds the most.",
+      "notes": [
+        "Balance is a skill you can rebuild at any age — a few minutes of practice each session meaningfully lowers fall risk and keeps you independent.",
+        "Always keep one hand near support until a balance move feels easy, then try a fingertip touch. Safety first, always.",
+        "Light resistance + daily protein protects muscle and bone as the years go on. Gentle and consistent beats hard and occasional."
+      ],
+      "sessions": [
+        {
+          "id": "gen_A", "name": "Session A — Strength & Balance (supported)", "minutes": 22,
+          "exercises": [
+            { "name": "Sit-to-Stand", "rx": "2 sets × 6-10", "rest": "60 sec", "cue": "From a sturdy chair, scoot forward, press through your heels and stand tall, then lower slowly with control. This is the #1 move for staying independent.", "easier": "Push off the armrests, or stand to just before fully up and sit back." },
+            { "name": "Counter-Supported Mini Squats", "rx": "2 sets × 8", "rest": "60 sec", "cue": "Hold the counter, feet hip-width, bend the knees a few inches like sitting back, then stand and squeeze.", "easier": "Bend only an inch or two." },
+            { "name": "Standing Heel-to-Toe Raises (supported)", "rx": "2 sets × 12", "rest": "45 sec", "cue": "Hold support, rise onto the balls of your feet, lower, then rock back onto your heels lifting the toes.", "easier": "Heels-only or toes-only, fewer reps." },
+            { "name": "Wall Push-Ups", "rx": "2 sets × 8-12", "rest": "45 sec", "cue": "Hands on the wall at shoulder height, body straight, bend the elbows to bring your chest toward the wall, press back.", "easier": "Stand closer to the wall (more upright = easier)." },
+            { "name": "Standing Side Leg Lift (supported)", "rx": "2 sets × 8 per leg", "rest": "45 sec", "cue": "Hold support, stand tall, lift one leg out to the side a few inches and lower with control — builds hip strength for steady walking.", "easier": "Smaller lift." },
+            { "name": "Single-Leg Balance (supported)", "rx": "2 × 10-20 sec per leg", "rest": "30 sec", "cue": "Hold the counter and lift one foot just off the floor; stand tall and breathe. Progress to a fingertip touch over time.", "easier": "Both hands on support; lift the foot only slightly." }
+          ],
+          "cooldown": "Seated hamstring stretch + standing supported calf stretch, 20 sec each; slow shoulder rolls."
+        },
+        {
+          "id": "gen_B", "name": "Session B — Mobility & Flexibility", "minutes": 18,
+          "exercises": [
+            { "name": "Seated Cat-Cow", "rx": "2 sets × 8", "rest": "20 sec", "cue": "Hands on thighs; round the back and tuck the chin, then arch and lift the chest. Breathe with the movement.", "easier": "Smaller range." },
+            { "name": "Seated Torso Rotation", "rx": "2 sets × 6 per side", "rest": "20 sec", "cue": "Cross arms on the chest, turn gently to look behind you, return to center, then the other side. Keeps the spine supple.", "easier": "Smaller turn." },
+            { "name": "Seated Neck Mobility", "rx": "1 set × 5 each way", "rest": "20 sec", "cue": "Slow and small — ear toward the shoulder, then look over each shoulder. Never force or roll the head back.", "easier": "Reduce range to fully comfortable." },
+            { "name": "Standing Supported Hip Circles", "rx": "2 sets × 5 each way", "rest": "20 sec", "cue": "Hold support, hands on hips, draw slow gentle circles with the hips to loosen the lower back.", "easier": "Tiny circles." },
+            { "name": "Seated Ankle Circles & Foot Rolls", "rx": "2 sets × 8 each way per foot", "rest": "15 sec", "cue": "Lift one foot slightly and draw slow circles, then roll through toe-to-heel. Keeps ankles mobile for balance.", "easier": "Heel on the floor, circle just the front of the foot." },
+            { "name": "Doorway Chest Stretch", "rx": "2 × 20-30 sec", "rest": "20 sec", "cue": "Forearm on the door frame, gently step through to open the chest and shoulders — undoes years of forward posture.", "easier": "Lower the arm; smaller step." }
+          ],
+          "cooldown": "Slow deep breathing × 5, shoulders dropping on each exhale."
+        },
+        {
+          "id": "gen_C", "name": "Session C — Standing Strength & Posture (supported)", "minutes": 22,
+          "exercises": [
+            { "name": "March in Place (supported)", "rx": "2 sets × 40 sec", "rest": "45 sec", "cue": "Hold support, march lifting the knees to a comfortable height, tall posture, gentle arm swing.", "easier": "Smaller steps or lift heels only." },
+            { "name": "Standing Leg-Back (supported)", "rx": "2 sets × 8 per leg", "rest": "45 sec", "cue": "Hold support, squeeze the glute and press one leg straight back a few inches — don't arch the back.", "easier": "Small range, toes brushing the floor." },
+            { "name": "Light Dumbbell or Bottle Shoulder Press", "rx": "2 sets × 10-12", "rest": "45-60 sec", "cue": "Seated or standing tall, press light weights from the shoulders to overhead and lower slow. Brace the core, don't arch.", "easier": "One arm at a time, or no weight." },
+            { "name": "Standing Row with Band or Bottles", "rx": "2 sets × 10-12", "rest": "45-60 sec", "cue": "Hinge slightly, pull the elbows back and squeeze the shoulder blades. Best posture move there is.", "easier": "Lighter resistance, seated." },
+            { "name": "Standing Weight Shifts (balance)", "rx": "2 sets × 8 shifts", "rest": "30 sec", "cue": "Hold support, slowly shift your weight fully onto each foot, pausing to feel steady.", "easier": "Smaller shifts, two hands on support." },
+            { "name": "Chin Tucks (posture)", "rx": "2 sets × 8", "rest": "30 sec", "cue": "Gently draw the chin straight back to make a 'double chin', hold a second, release. Counters tech-neck and keeps you tall.", "easier": "Smaller, gentler movement." }
+          ],
+          "cooldown": "Standing supported calf stretch + cross-body shoulder stretch, 20 sec each."
+        }
+      ]
+    },
+    {
+      "id": "intermediate",
+      "name": "Intermediate — Build & Burn",
+      "emoji": "⚡",
+      "tagline": "Standing full-body strength + low-impact cardio. Light dumbbells. More challenge, knees protected.",
+      "audience": "For when Start Here feels easy and you can move comfortably standing. This steps up to standing full-body strength with light-to-moderate dumbbells and low-impact cardio intervals. Still zero jumping or running — all cardio stays joint-friendly to keep your knees happy.",
+      "intensity": "Moderate, low impact",
+      "equipment": ["A pair of dumbbells (light-to-moderate)", "Sturdy chair or bench", "Wall or counter for support", "Optional: a resistance band"],
+      "weekly": "3-4 days/week: two strength days (A & C) and one cardio day (B), keeping your daily walks and desk-breaks going on top. Leave a day between the two strength days.",
+      "notes": [
+        "Pair this with high protein and you're recomposing — losing fat while building muscle so you finish solid, not skinny.",
+        "Progress the smart way: add reps first, then a set, then a little weight — never all three at once. Leave 1-2 reps in the tank.",
+        "Low-impact still gets your heart up: intervals of brisk marching, step-touch, and incline walking spike the burn without pounding your joints."
+      ],
+      "sessions": [
+        {
+          "id": "int_A", "name": "Session A — Lower Body & Core (low impact)", "minutes": 28,
+          "exercises": [
+            { "name": "Goblet Squat to Chair", "rx": "3 sets × 10-12", "rest": "60 sec", "cue": "Hold a dumbbell at your chest, sit back to lightly tap a chair, drive through the heels to stand and squeeze. Knees track over the toes.", "easier": "No weight, or higher chair / smaller depth." },
+            { "name": "Standing Dumbbell Romanian Deadlift", "rx": "3 sets × 10", "rest": "60 sec", "cue": "Soft knees, push the hips straight back lowering the weights down your thighs, feel the hamstrings, then squeeze the glutes to stand. Flat back.", "easier": "Lighter weight, smaller range." },
+            { "name": "Supported Reverse Lunge (low impact)", "rx": "2 sets × 8 per leg", "rest": "60 sec", "cue": "Hold support, step one foot back and lower gently, press through the front heel to return. Step back, never jump.", "easier": "Smaller step and shallow bend; or a standing split-stance squat." },
+            { "name": "Standing Calf Raises", "rx": "3 sets × 15", "rest": "45 sec", "cue": "Rise onto the balls of the feet, pause at the top, lower slow. Add a dumbbell when easy.", "easier": "Bodyweight, hold support." },
+            { "name": "Standing Pallof Press (band, anti-rotation)", "rx": "2 sets × 10 per side", "rest": "45 sec", "cue": "Band from the side at chest height, press straight out and resist the twist. Brace the abs hard — a strong, protective core.", "easier": "Stand closer to the anchor; fewer reps." },
+            { "name": "Dead Bug (on bench or standing march)", "rx": "2 sets × 8 per side", "rest": "45 sec", "cue": "If comfortable on a bench: extend opposite arm and leg slowly, keeping the low back pressed down. Prefer standing? Do slow high-knee marches with a tight core.", "easier": "Move just the legs, or do standing marches." }
+          ],
+          "cooldown": "Standing quad stretch (hold support) 20 sec/leg, hamstring stretch 20 sec/leg, hip-flexor lunge stretch 20 sec/side."
+        },
+        {
+          "id": "int_B", "name": "Session B — Low-Impact Cardio Intervals", "minutes": 25,
+          "exercises": [
+            { "name": "Warm-Up March", "rx": "3 min easy", "rest": "—", "cue": "March in place or walk, gradually picking up the pace, arms swinging, until you feel warm and loose.", "easier": "Slower, seated marching." },
+            { "name": "Brisk March / Step-Touch Intervals", "rx": "6 rounds: 40 sec brisk / 40 sec easy", "rest": "built in", "cue": "Go brisk — high marching or side step-touches with arm pumps — then ease off. Talk test: brisk = can talk but not sing.", "easier": "Lower the knees / smaller steps; extend the easy portion." },
+            { "name": "Standing Punch-Outs", "rx": "3 sets × 40 sec", "rest": "30 sec", "cue": "Light, controlled punches forward and across, staying light on the feet with a braced core. Gets the heart up, spares the knees.", "easier": "Slower pace, no reaching." },
+            { "name": "Incline Walk or Marching Finisher", "rx": "5-8 min steady", "rest": "—", "cue": "If you have a treadmill incline or a hill, walk it steady; otherwise a steady purposeful march. Heart rate up, joints calm.", "easier": "Flat, shorter, slower." }
+          ],
+          "cooldown": "Slow walking 2-3 min to bring the heart rate down, then calf + hamstring + chest stretches 20-30 sec each."
+        },
+        {
+          "id": "int_C", "name": "Session C — Upper Body & Core", "minutes": 28,
+          "exercises": [
+            { "name": "Dumbbell Floor or Bench Press", "rx": "3 sets × 10-12", "rest": "60 sec", "cue": "Press the dumbbells up over the chest, lower under control until the elbows reach the floor/bench. Shoulders down.", "easier": "Lighter weight, or incline push-ups against a counter." },
+            { "name": "One-Arm Dumbbell Row", "rx": "3 sets × 10 per arm", "rest": "60 sec", "cue": "Brace a hand and knee on a bench (or hand on your thigh), pull the dumbbell to the hip, squeeze the back, lower slow.", "easier": "Lighter weight; support the chest more." },
+            { "name": "Seated or Standing Dumbbell Shoulder Press", "rx": "3 sets × 10", "rest": "60 sec", "cue": "Dumbbells at ear height, press up and slightly together, lower to the ears. Brace the core, don't arch.", "easier": "One arm at a time, lighter weight." },
+            { "name": "Band Pull-Apart or Reverse Fly", "rx": "3 sets × 15", "rest": "45 sec", "cue": "Arms out to the sides, squeeze the shoulder blades, lead with the pinkies. Posture gold after a desk day.", "easier": "Lighter band, smaller range." },
+            { "name": "Dumbbell Biceps Curl + Overhead Triceps", "rx": "2 sets × 12 each", "rest": "45 sec", "cue": "Curl without swinging, then one dumbbell overhead and lower behind the head for triceps. Control both directions.", "easier": "Lighter weight, alternate arms." },
+            { "name": "Counter Plank", "rx": "3 holds × 20-40 sec", "rest": "45 sec", "cue": "Hands on a sturdy counter or bench, body one straight line, squeeze glutes and abs, breathe. Higher hands = easier.", "easier": "Hands on a higher surface; shorter holds." }
+          ],
+          "cooldown": "Doorway chest stretch 20-30 sec, cross-body + overhead triceps stretch 20 sec/arm, gentle cat-cow ×5."
+        }
+      ]
+    },
+    {
+      "id": "advanced",
+      "name": "Advanced — Strong & Lean",
+      "emoji": "💥",
+      "tagline": "Higher-volume strength supersets + hard low-impact conditioning. For seasoned movers, joints respected.",
+      "audience": "For experienced, well-conditioned movers who want a real challenge. Bigger lifts, supersets, and demanding low-impact conditioning — still no jumping or running, because smart training protects the knees for the long game. If a move ever causes joint pain, scale back to the Intermediate version.",
+      "intensity": "High effort, low impact",
+      "equipment": ["A full set of dumbbells (or access to machines/cables)", "Bench", "Resistance band", "Optional: bike, rower, or treadmill with incline for conditioning"],
+      "weekly": "4 days/week: Lower (A), Upper (C), a conditioning day (B), and a repeat of your weaker of A/C — or run A/B/C/B. Keep a hard day away from another hard day for the same muscles. Daily steps stay non-negotiable.",
+      "notes": [
+        "Train hard, recover harder: progressive overload only works if you sleep, hit your protein, and don't redline every set. Leave ~1 rep in the tank on most sets, push the last set.",
+        "Supersets (two moves back-to-back) keep the heart rate up and pack more work into less time — great for fat loss while you build.",
+        "Knee-safe by design: load the hips with hinges, split-stance and supported work; get your intensity from bike/row/incline, never from impact."
+      ],
+      "sessions": [
+        {
+          "id": "adv_A", "name": "Session A — Lower Body Power (low impact)", "minutes": 38,
+          "exercises": [
+            { "name": "Goblet or Dumbbell Squat", "rx": "4 sets × 8-12", "rest": "75-90 sec", "cue": "Hold weight at the chest (or dumbbells at the sides), sit back and down to a comfortable depth, drive up through the heels. Controlled, deep as your knees allow pain-free.", "easier": "Squat to a higher box, lighter load." },
+            { "name": "Dumbbell Romanian Deadlift", "rx": "4 sets × 10", "rest": "75-90 sec", "cue": "Soft knees, hips back, lower the weights down the legs with a flat back until you feel the hamstrings, squeeze the glutes to stand. This is your big knee-friendly strength builder.", "easier": "Lighter weight, smaller range." },
+            { "name": "Bulgarian Split Squat (rear foot on bench)", "rx": "3 sets × 8-10 per leg", "rest": "60-75 sec", "cue": "Rear foot up on a bench, drop straight down on the front leg, drive through the front heel. Hold support if needed — controlled, never bouncing.", "easier": "Rear foot on the floor (split stance), shallower, hold support." },
+            { "name": "Hip Thrust or Glute Bridge (weighted)", "rx": "3 sets × 12-15", "rest": "60 sec", "cue": "Shoulders on a bench (or back on the floor), weight across the hips, drive the hips up and squeeze the glutes hard at the top, lower slow.", "easier": "Bodyweight, floor bridge." },
+            { "name": "Standing Calf Raise (weighted)", "rx": "4 sets × 12-15", "rest": "45 sec", "cue": "Hold a dumbbell, rise high onto the balls of the feet, pause, lower slow for a stretch.", "easier": "Bodyweight, hold support." },
+            { "name": "Hanging or Captain's-Chair Knee Raise", "rx": "3 sets × 10-15", "rest": "60 sec", "cue": "Lift the knees toward the chest with control, no swinging — lower abs drive it. Use a captain's chair to spare the grip and back.", "easier": "Seated knee raises on a bench." }
+          ],
+          "cooldown": "Couch/hip-flexor stretch 30 sec/side, hamstring + quad stretch 30 sec/leg, deep breathing ×5."
+        },
+        {
+          "id": "adv_B", "name": "Session B — Hard Low-Impact Conditioning", "minutes": 30,
+          "exercises": [
+            { "name": "Warm-Up Build", "rx": "5 min progressive", "rest": "—", "cue": "Bike, row, or brisk incline walk, building from easy to moderate so you're fully warm before the hard work.", "easier": "Shorter, easier." },
+            { "name": "Intervals: Bike / Row / Incline", "rx": "8-10 rounds: 30 sec hard / 60 sec easy", "rest": "built in", "cue": "Hard = breathing heavy, can only get a word out; easy = recover. All seated or walking — max heart rate, zero pounding.", "easier": "6 rounds, 20 sec hard / 90 sec easy." },
+            { "name": "Loaded Carry (farmer's walk)", "rx": "3 rounds × 30-40 m", "rest": "60 sec", "cue": "Heavy dumbbell in each hand, stand tall, brace the core, walk smooth and controlled. Total-body strength and conditioning in one.", "easier": "Lighter weight, shorter distance." },
+            { "name": "Steady Finisher", "rx": "5-8 min steady", "rest": "—", "cue": "Bike, row, or incline walk at a strong but sustainable pace to finish the tank off.", "easier": "Shorter, lower intensity." }
+          ],
+          "cooldown": "Easy 3-5 min cool-down on the bike/walk, then full lower-body stretch 30 sec each."
+        },
+        {
+          "id": "adv_C", "name": "Session C — Upper Body Strength (supersets)", "minutes": 38,
+          "exercises": [
+            { "name": "Superset 1a: Dumbbell Bench/Floor Press", "rx": "4 sets × 8-10", "rest": "go to 1b", "cue": "Press strong over the chest, lower under control. Pair back-to-back with 1b for density.", "easier": "Lighter weight, incline push-ups." },
+            { "name": "Superset 1b: One-Arm Dumbbell Row", "rx": "4 sets × 8-10 per arm", "rest": "75 sec then repeat", "cue": "Pull the dumbbell to the hip, squeeze the back hard, lower slow. Then rest and repeat the pair.", "easier": "Lighter weight, more chest support." },
+            { "name": "Superset 2a: Standing Overhead Press", "rx": "3 sets × 8-10", "rest": "go to 2b", "cue": "Brace the core and glutes, press the dumbbells overhead without arching, lower to the ears.", "easier": "Seated, lighter, one arm at a time." },
+            { "name": "Superset 2b: Lat Pulldown or Band Pulldown", "rx": "3 sets × 10-12", "rest": "75 sec then repeat", "cue": "Drive the elbows down and back to bring the bar to the upper chest, squeeze the lats, control the return.", "easier": "Lighter, supported single-arm pulldown." },
+            { "name": "Superset 3a: Incline Curl", "rx": "3 sets × 10-12", "rest": "go to 3b", "cue": "Arms hanging back on an incline bench, curl with control, no swing, slow negative.", "easier": "Standing curls, lighter." },
+            { "name": "Superset 3b: Overhead or Cable Triceps Extension", "rx": "3 sets × 12-15", "rest": "60 sec then repeat", "cue": "Elbows steady, extend to straight, squeeze the triceps, control back. Only the forearms move.", "easier": "Lighter band or weight." },
+            { "name": "Face Pull (posture finisher)", "rx": "3 sets × 15-20", "rest": "45 sec", "cue": "Pull toward the forehead with elbows high, squeeze the rear shoulders. Bulletproofs the shoulders against all that pressing.", "easier": "Lighter band, seated." }
+          ],
+          "cooldown": "Doorway chest stretch 30 sec, lat stretch 20 sec/side, cross-body + overhead triceps stretch 20 sec/arm."
+        }
+      ]
+    },
+    {
       "id": "iron",
       "name": "Iron — Upper Body & Core",
       "emoji": "🏋️",
@@ -144,5 +300,5 @@
       { "name": "Marching in Place", "rx": "1-2 min", "cue": "March in place 60-90 sec, pumping the arms — a light cardio snack to beat the afternoon dip.", "every": "Mid-afternoon" }
     ]
   },
-  "more_tiers_coming": ["Gentle / Senior-friendly", "Intermediate", "Advanced / Strong"]
+  "more_tiers_coming": []
 }
