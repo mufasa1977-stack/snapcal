@@ -1542,6 +1542,13 @@ def chat():
     if goal == "recomp":
         system += RECOMP_CHAT_CLAUSE
     system += _body_clause(d)
+    lt = str(d.get("local_time") or "").strip()[:24]
+    if lt:
+        system += ("\n\nThe user's current local time is " + lt + ". Make every food or meal suggestion "
+                   "APPROPRIATE TO THIS TIME OF DAY — do NOT suggest breakfast foods (eggs, oatmeal, yogurt "
+                   "parfait, pancakes) in the evening, or a heavy dinner first thing in the morning. Match the "
+                   "hour: breakfast in the morning, lunch midday, dinner in the evening, and a light protein "
+                   "snack late at night. If it's late, lean toward something light that won't disrupt sleep.")
     system += _chat_nearby_clause(d.get("nearby"), bool(d.get("has_location")), d.get("route_to") or "")
     convo = system + "\n\n"
     for m in msgs[-12:]:

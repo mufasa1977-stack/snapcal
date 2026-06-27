@@ -2791,23 +2791,47 @@ function openVoice(){
 }
 function closeVoice(){
   stopListening();
-  try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e){}
+  stopSpeak();
   var w = $("#voiceWrap"); if (w){ w.classList.remove("show"); w.setAttribute("aria-hidden", "true"); }
 }
 /* Coach Cal's real voice (Gemini TTS via /api/tts, cached server-side). Falls back to the
    device's built-in voice if the network/endpoint hiccups, so he always talks. */
-var _calAudio = null;
-function speak(text){
-  text = (text || "").trim(); if (!text) return;
+var _calAudio = null, _ttsQueue = [], _ttsOn = false, _ttsNext = null;
+/* Split a reply into short sentence-ish chunks so we can SPEAK the first one immediately
+   (TTS for ~1 short sentence returns fast) instead of waiting for the whole paragraph's audio. */
+function _ttsChunks(t){
+  var parts = (t || "").replace(/\s+/g, " ").match(/[^.!?]+[.!?]*/g) || [t];
+  var out = [], buf = "";
+  parts.forEach(function(s){ s = s.trim(); if (!s) return;
+    if (((buf + " " + s).trim()).length <= 70) buf = (buf + " " + s).trim();
+    else { if (buf) out.push(buf); buf = s; }
+  });
+  if (buf) out.push(buf);
+  return out.length ? out : [String(t || "").trim()];
+}
+function _ttsUrl(chunk){ return "/api/tts?voice=Charon&text=" + encodeURIComponent(chunk.slice(0, 300)); }
+function stopSpeak(){
+  _ttsOn = false; _ttsQueue = []; _ttsNext = null;
   try { if (_calAudio){ _calAudio.pause(); _calAudio = null; } } catch(e){}
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e){}
-  try {
-    var a = new Audio("/api/tts?voice=Charon&text=" + encodeURIComponent(text.slice(0, 700)));
-    _calAudio = a;
-    a.onerror = function(){ _speakFallback(text); };
-    var p = a.play();
-    if (p && p.catch) p.catch(function(){ _speakFallback(text); });
-  } catch(e){ _speakFallback(text); }
+}
+function speak(text){
+  text = (text || "").trim(); if (!text) return;
+  stopSpeak();
+  _ttsQueue = _ttsChunks(text);
+  _ttsOn = true;
+  _playChunk(text);
+}
+function _playChunk(fullText){
+  if (!_ttsOn || !_ttsQueue.length){ _ttsOn = false; return; }
+  var chunk = _ttsQueue.shift();
+  var a = (_ttsNext && _ttsNext.src.indexOf(encodeURIComponent(chunk.slice(0, 60))) !== -1) ? _ttsNext : new Audio(_ttsUrl(chunk));
+  _calAudio = a; _ttsNext = null;
+  if (_ttsQueue.length){ try { _ttsNext = new Audio(_ttsUrl(_ttsQueue[0])); _ttsNext.preload = "auto"; _ttsNext.load(); } catch(e){} }  /* prefetch next while this plays → no gaps */
+  a.onended = function(){ _playChunk(fullText); };
+  a.onerror = function(){ if (a === _calAudio && fullText){ _ttsOn = false; _speakFallback(fullText); } };
+  var p = a.play();
+  if (p && p.catch) p.catch(function(){ if (fullText){ _ttsOn = false; _speakFallback(fullText); } });
 }
 function _speakFallback(text){
   try {
@@ -2832,7 +2856,8 @@ function sendChat(text){
     daily_calories: int(profile.daily_calories),
     remaining_calories: Math.max(0, int(profile.daily_calories) - int(todayData.totals.calories)),
     eaten_today: (todayData.meals || []).map(function(m){ return m.name; }).filter(Boolean).join(", "),
-    nearby: _chatNearby, has_location: _chatHasLoc, route_to: _chatRouteTo
+    nearby: _chatNearby, has_location: _chatHasLoc, route_to: _chatRouteTo,
+    local_time: (function(){ try { return new Date().toLocaleTimeString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch(e){ try { return new Date().toLocaleTimeString(); } catch(e2){ return ""; } } })()
   };
   if (typeof aboutBody === "function") { var _ab = aboutBody(); for (var _k in _ab){ if (_ab[_k]) body[_k] = _ab[_k]; } }
   api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
@@ -2848,7 +2873,7 @@ function startListening(){
   if (_voiceListening){ stopListening(); return; }
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   _voiceRec = new SR(); _voiceRec.lang = "en-US"; _voiceRec.interimResults = false; _voiceRec.maxAlternatives = 1;
-  _voiceRec.onstart = function(){ _voiceListening = true; var m = $("#voiceMic"); if (m) m.classList.add("listening"); try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e){} setVoiceStatus("Listening… speak now"); };
+  _voiceRec.onstart = function(){ _voiceListening = true; var m = $("#voiceMic"); if (m) m.classList.add("listening"); stopSpeak(); setVoiceStatus("Listening… speak now"); };
   _voiceRec.onresult = function(ev){ var t = ev.results[0][0].transcript; sendChat(t); };
   _voiceRec.onerror = function(ev){ setVoiceStatus(ev.error === "not-allowed" ? "Microphone is blocked — allow mic access, or just type below." : "Didn’t catch that — tap the mic and try again."); };
   _voiceRec.onend = function(){ _voiceListening = false; var m = $("#voiceMic"); if (m) m.classList.remove("listening"); };
