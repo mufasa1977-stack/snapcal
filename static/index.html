@@ -2739,9 +2739,9 @@ function _fetchPlainNearby(pos){
       .forEach(function(p){
         var nm = ((p.name || p.chain) || "").trim(); if (!nm) return;
         var key = nm.toLowerCase(); if (seen[key]) return; seen[key] = 1;
-        list.push({ name: nm, dist_m: p.dist_m });
+        list.push({ name: nm, dist_m: p.dist_m, addr: p.addr || "", lat: p.lat, lng: p.lng });
       });
-    if (!list.length){ var m = (data && data.matched) || []; list = m.slice(0, 14).map(function(x){ return { name: x.chain, dist_m: x.dist_m }; }); }
+    if (!list.length){ var m = (data && data.matched) || []; list = m.slice(0, 14).map(function(x){ return { name: x.chain, dist_m: x.dist_m, addr: x.addr || "", lat: x.lat, lng: x.lng }; }); }
     _chatNearby = list.slice(0, 18);
   }).catch(function(){});
 }
@@ -2783,6 +2783,7 @@ function openVoice(){
   var w = $("#voiceWrap"); if (!w) return;
   w.classList.add("show"); w.setAttribute("aria-hidden", "false");
   loadChatNearby();   /* ask for location + pull nearby spots so Coach Cal can find food on your way */
+  try { new Audio("/api/tts?voice=Charon&text=ok").load(); } catch(e){}   /* pre-warm the TTS path so his first spoken line has no cold-start stall */
   if (!_chatMsgs.length){
     voiceRender("coach", "Hey, I'm Coach Cal! Tap the mic and talk to me — or type. Ask me what to eat, what a word like ‘protein’ or ‘macros’ means, anything at all.");
   }
@@ -2844,10 +2845,28 @@ function _speakFallback(text){
     window.speechSynthesis.speak(u);
   } catch(e){}
 }
+/* "Take me there" → open the user's maps app with driving directions to the place Coach Cal just named. */
+var _lastPlace = null;
+function openDirectionsTo(place){
+  if (!place) return false;
+  var dest = (place.lat != null && place.lng != null) ? (place.lat + "," + place.lng)
+           : ((place.name || "") + (place.addr ? (" " + place.addr) : "")).trim();
+  if (!dest) return false;
+  var url = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(dest);
+  try { window.open(url, "_blank"); } catch(e){ try { location.href = url; } catch(e2){ return false; } }
+  return true;
+}
+function _navIntent(t){ return /\b(take me there|directions|navigate|how (do|can) i get there|open (the )?map|drive (me )?there|get me there|take me to it|bring me there)\b/i.test(t || ""); }
+function _closestPlace(){
+  var list = (_chatNearby || []).filter(function(p){ return p && (p.lat != null || p.name); });
+  list.sort(function(a, b){ return (a.dist_m == null ? 9e9 : a.dist_m) - (b.dist_m == null ? 9e9 : b.dist_m); });
+  return list[0] || null;
+}
 function sendChat(text){
   text = (text || "").trim(); if (!text) return;
   voiceRender("user", text); _chatMsgs.push({ role: "user", content: text });
   var inp = $("#voiceInput"); if (inp) inp.value = "";
+  if (_navIntent(text)){ var pl = _lastPlace || _closestPlace(); if (pl) openDirectionsTo(pl); }   /* open the map right away */
   setVoiceStatus("Coach Cal is thinking…");
   var body = {
     messages: _chatMsgs.slice(-12), goal: goal,
@@ -2864,6 +2883,7 @@ function sendChat(text){
     .then(function(d){
       setVoiceStatus("");
       var reply = (d && d.reply) || "I’m here — what can I help you with?";
+      try { var rl = reply.toLowerCase(); (_chatNearby || []).forEach(function(p){ if (p && p.name && rl.indexOf(p.name.toLowerCase()) >= 0) _lastPlace = p; }); } catch(e){}   /* remember the place he named for "take me there" */
       voiceRender("coach", reply); _chatMsgs.push({ role: "assistant", content: reply }); speak(reply);
     })
     .catch(function(){ setVoiceStatus(""); voiceRender("coach", "Sorry, I couldn’t catch that — mind trying again?"); });

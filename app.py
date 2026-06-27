@@ -40,6 +40,7 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"  # free OpenStreetMap p
 # local key file so `python app.py` still works during development.
 GEMINI_KEY_PATH = Path("C:/Users/somme/youtube_videos/gemini_key.txt")
 GEMINI_MODEL = "gemini-2.5-flash"  # gemini-2.0-flash was retired by the API (404)
+CHAT_MODEL = "gemini-2.5-flash-lite"  # Coach Cal's back-and-forth: lighter+faster model for short spoken replies (cuts the ~11s round-trip)
 PORT = int(os.environ.get("PORT", "5177"))  # Render/Fly inject $PORT in production
 
 # Origins the Capacitor native app calls the API from: iOS = capacitor://localhost,
@@ -1129,7 +1130,7 @@ def nearby():
         elng = el.get("lon") if el.get("lon") is not None else (el.get("center") or {}).get("lon")
         dist = round(_haversine_m(lat, lng, elat, elng)) if (elat is not None and elng is not None) else None
         canon = _match_chain(tags, aliases)
-        nearby_list.append({"name": label, "dist_m": dist, "chain": canon, "lat": elat, "lng": elng})
+        nearby_list.append({"name": label, "dist_m": dist, "chain": canon, "lat": elat, "lng": elng, "addr": _osm_addr(tags)})
         if canon:
             prev = matched.get(canon)
             if prev is None or (dist is not None and dist < prev["dist_m"]):
@@ -1499,7 +1500,8 @@ def _chat_nearby_clause(nearby, has_loc, route_to=""):
             if isinstance(dm, (int, float)):
                 mi = dm / 1609.34
                 dist = f" ({mi:.1f} mi)" if mi >= 0.1 else " (right here)"
-            items.append(str(p["name"])[:40] + dist)
+            addr = str(p.get("addr") or "").strip()
+            items.append(str(p["name"])[:40] + dist + (" @ " + addr[:60] if addr else ""))
         if items and route_to:
             return ("\n\nREAL food spots ALONG the user's drive to " + str(route_to)[:50] + " (listed in TRAVEL ORDER, "
                     "start of the drive → destination): " + "; ".join(items) + ". For any 'on my way / on my drive / "
@@ -1507,7 +1509,10 @@ def _chat_nearby_clause(nearby, has_loc, route_to=""):
                     "is (early on, about midway, near your destination), honor any craving with the HEALTHIEST version of "
                     "it, and give a genuinely healthy order at each. Only name places from this list; never invent one.")
         if items:
-            return ("\n\nREAL places near the user RIGHT NOW (closest first): " + "; ".join(items) + ". This list MIXES "
+            return ("\n\nREAL places near the user RIGHT NOW (closest first; '@' = street address where known): " + "; ".join(items) + ". "
+                    "You DO have these addresses — when you recommend a place, SAY its address and distance (e.g. \"about 0.4 mi away at "
+                    "120 Main St\"); if one has no address listed, give the name + distance. ALWAYS tell the user they can just say "
+                    "\"take me there\" and you'll open directions in their maps app — never say you don't have the location. This list MIXES "
                     "fast food, cafes, and sit-down restaurants — do NOT default to fast food. When the user wants "
                     "something healthy, FAVOR the sit-down and fresh spots (places known for grilled proteins, salads, "
                     "seafood, veg-forward bowls) over fast food, and name a specific healthy order there (e.g. at a "
@@ -1558,9 +1563,12 @@ def chat():
         convo += who + ": " + str(m.get("content", "")).strip()[:600] + "\n"
     convo += "Coach Cal:"
     try:
-        from google import genai  # noqa: F401
+        from google.genai import types
         client = get_gemini_client()
-        resp = client.models.generate_content(model=GEMINI_MODEL, contents=[convo])
+        resp = client.models.generate_content(
+            model=CHAT_MODEL, contents=[convo],
+            config=types.GenerateContentConfig(max_output_tokens=200, temperature=0.7),
+        )
         reply = (resp.text or "").strip()
     except Exception:  # noqa: BLE001
         return jsonify({"error": "Coach Cal can't talk right now — try again in a moment."}), 502
