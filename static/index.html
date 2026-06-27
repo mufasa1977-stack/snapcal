@@ -1525,9 +1525,10 @@ function lookupBarcode(code){
 }
 function renderBarcodeResult(d){
   var res = $("#nutriResult"); if (!res) return;
+  var _seeIt = function(){ try{ res.scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){} };
   if (!d || d.found === false || d.calories == null){
     res.innerHTML = '<div class="nf-card"><div class="nf-empty">No verified match for that barcode yet. Try the food search above, or snap a photo to estimate it.</div></div>';
-    return;
+    _seeIt(); return;
   }
   res.innerHTML = '<div class="nf-card">' +
     '<div class="nf-food">' + esc(d.name) + (d.brand ? ' <span style="color:var(--ink3);font-weight:600">&middot; ' + esc(d.brand) + '</span>' : '') + '</div>' +
@@ -1539,6 +1540,7 @@ function renderBarcodeResult(d){
     '<button id="bcAdd" type="button" class="btn btn-dark" style="margin-top:12px">Add to today</button>' +
   '</div>';
   var add = bcEl("bcAdd"); if (add) add.addEventListener("click", function(){ addBarcodeToToday(d); });
+  _seeIt();
 }
 async function addBarcodeToToday(d){
   try{
@@ -1570,66 +1572,18 @@ function _bcOverlay(){
     '<video id="bcVideo" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video>' +
     '<div id="bcGuide" style="position:absolute;left:8%;right:8%;top:36%;height:20%;border:3px solid rgba(255,255,255,.92);border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.34);pointer-events:none"></div>' +
     '<div id="bcStatus" style="position:absolute;top:0;left:0;right:0;padding:calc(16px + env(safe-area-inset-top)) 16px 16px;background:linear-gradient(rgba(0,0,0,.6),transparent);color:#fff;font-weight:800;font-size:16px;text-align:center">Point at a barcode</div>' +
-    '<button id="bcClose" type="button" style="position:absolute;top:calc(12px + env(safe-area-inset-top));right:14px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:22px;padding:10px 16px;font-weight:800;font-size:15px;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent">✕ Close</button>' +
-    '<div id="bcSheet" style="position:absolute;left:0;right:0;bottom:0;display:none;background:var(--card,#fff);color:var(--ink,#191919);border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -12px 34px rgba(0,0,0,.34)"></div>';
+    '<button id="bcClose" type="button" style="position:absolute;top:calc(12px + env(safe-area-inset-top));right:14px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:22px;padding:12px 20px;font-weight:800;font-size:16px;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent">✕ Close</button>';
   document.body.appendChild(ov);
   ov.querySelector("#bcClose").addEventListener("click", stopBarcodeCamera);
   return ov;
 }
 function _bcStatus(t){ var s = bcEl("bcStatus"); if (s) s.textContent = t; }
-function _bcShowResult(d){
-  var sheet = bcEl("bcSheet"), g = bcEl("bcGuide"); if (!sheet) return;
-  if (g) g.style.display = "none";
-  if (!d || d.found === false || d.calories == null){
-    _bcStatus("No match for that barcode");
-    sheet.innerHTML =
-      '<div style="font-weight:800;font-size:17px;margin-bottom:4px">No verified match yet</div>' +
-      '<div style="color:var(--ink3,#888);font-size:13px;margin-bottom:14px">Try again, or close and snap a photo / search the food.</div>' +
-      '<button id="bcAgain" type="button" class="btn btn-dark" style="margin:0">Scan again</button>';
-    sheet.style.display = "block";
-    bcEl("bcAgain").addEventListener("click", _bcScanAgain);
-    return;
-  }
-  _bcStatus("✓ Got it");
-  sheet.innerHTML =
-    '<div style="font-weight:800;font-size:20px;line-height:1.18">' + esc(d.name) + '</div>' +
-    (d.brand ? '<div style="color:var(--ink3,#888);font-size:13px;margin-top:2px">' + esc(d.brand) + '</div>' : '') +
-    '<div style="display:flex;gap:18px;flex-wrap:wrap;margin:13px 0 6px">' +
-      '<div><span style="font-size:22px;font-weight:800">' + int(d.calories) + '</span> <span style="color:var(--ink3,#888);font-size:12px">cal</span></div>' +
-      '<div><span style="font-size:22px;font-weight:800">' + int(d.protein_g) + '</span> <span style="color:var(--ink3,#888);font-size:12px">g protein</span></div>' +
-      '<div><span style="font-size:22px;font-weight:800">' + int(d.carbs_g) + '</span> <span style="color:var(--ink3,#888);font-size:12px">g carbs</span></div>' +
-      '<div><span style="font-size:22px;font-weight:800">' + int(d.fat_g) + '</span> <span style="color:var(--ink3,#888);font-size:12px">g fat</span></div>' +
-    '</div>' +
-    '<div style="color:var(--brand,#2e8b57);font-weight:700;font-size:12px;margin-bottom:14px">✓ Verified label data &middot; per ' + esc(d.serving) + '</div>' +
-    '<div style="display:flex;gap:10px">' +
-      '<button id="bcAdd" type="button" class="btn btn-dark" style="flex:1;margin:0">Add to today</button>' +
-      '<button id="bcAgain" type="button" style="flex:0 0 auto;border:1.5px solid var(--line,#ddd);background:transparent;color:var(--ink,#333);border-radius:11px;padding:0 16px;font-weight:800;font-family:inherit;cursor:pointer">Scan again</button>' +
-    '</div>';
-  sheet.style.display = "block";
-  renderBarcodeResult(d);   // also populate the Today-tab card for when they close
-  bcEl("bcAdd").addEventListener("click", function(){ addBarcodeToToday(d); stopBarcodeCamera(); });
-  bcEl("bcAgain").addEventListener("click", _bcScanAgain);
-}
-function _bcScanAgain(){
-  var sheet = bcEl("bcSheet"), g = bcEl("bcGuide");
-  if (sheet){ sheet.style.display = "none"; sheet.innerHTML = ""; }
-  if (g) g.style.display = "block";
-  startBarcodeCamera();
-}
-/* A barcode was read from the camera — stop the live feed but KEEP the overlay, look it up, show it. */
+/* A barcode was read from the camera — AUTO-CLOSE the full-screen camera (no hunting for the ✕) and drop
+   the user back on the page with the result shown + a working "Add to today". */
 function _bcScanned(code){
-  if (_bcRAF){ cancelAnimationFrame(_bcRAF); _bcRAF = null; }
-  if (_bcZX){ try{ _bcZX.reset(); }catch(e){} _bcZX = null; }
-  if (_bcStream){ _bcStream.getTracks().forEach(function(t){ t.stop(); }); _bcStream = null; }
   code = String(code || "").replace(/\D/g, "");
-  _bcStatus("Looking it up…");
-  var fields = "product_name,brands,serving_size,nutriments,image_front_small_url";
-  fetch("https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(code) + ".json?fields=" + fields, { headers: { "Accept": "application/json" } })
-    .then(function(r){ return r.json(); })
-    .then(function(j){ var d = _mapOFF(code, j); _bcShowResult(d.found ? d : { found: false, code: code }); })
-    .catch(function(){
-      api("/api/barcode?code=" + encodeURIComponent(code)).then(_bcShowResult).catch(function(){ _bcShowResult({ found: false, code: code }); });
-    });
+  stopBarcodeCamera();          // close the camera overlay automatically
+  lookupBarcode(code);          // renders into #nutriResult with a working Add button, and scrolls it into view
 }
 async function startBarcodeCamera(){
   if (!_canCamera()){ var h = bcEl("bcHint"); if (h) h.textContent = "This browser can’t open the camera — type the barcode number instead."; return; }
