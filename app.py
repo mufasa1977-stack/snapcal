@@ -11,6 +11,7 @@ import os
 import re
 import socket
 import sqlite3
+import time
 import urllib.parse
 import urllib.request
 from datetime import date, timedelta
@@ -1578,14 +1579,27 @@ def chat():
         who = "User" if m.get("role") == "user" else "Coach Cal"
         convo += who + ": " + str(m.get("content", "")).strip()[:600] + "\n"
     convo += "Coach Cal:"
+    reply = ""
     try:
         from google.genai import types
         client = get_gemini_client()
-        resp = client.models.generate_content(
-            model=CHAT_MODEL, contents=[convo],
-            config=types.GenerateContentConfig(max_output_tokens=200, temperature=0.7),
-        )
-        reply = (resp.text or "").strip()
+        cfg = types.GenerateContentConfig(max_output_tokens=200, temperature=0.7)
+        # Gemini occasionally throws a transient error / rate-limit (intermittent 502s). Retry server-side —
+        # flash-lite twice, then fall back to flash — so the user almost never sees a failure.
+        attempts = [CHAT_MODEL, CHAT_MODEL, GEMINI_MODEL]
+        last_exc = None
+        for i, mdl in enumerate(attempts):
+            try:
+                resp = client.models.generate_content(model=mdl, contents=[convo], config=cfg)
+                reply = (resp.text or "").strip()
+                if reply:
+                    break
+            except Exception as e:  # noqa: BLE001
+                last_exc = e
+            if i < len(attempts) - 1:
+                time.sleep(0.4)
+        if not reply and last_exc is not None:
+            raise last_exc
     except Exception:  # noqa: BLE001
         return jsonify({"error": "Coach Cal can't talk right now — try again in a moment."}), 502
     reply = reply.replace("**", "").replace("*", "").strip()[:700]
