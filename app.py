@@ -2124,6 +2124,95 @@ def delete_meal(meal_id):
     return jsonify({"ok": True})
 
 
+@app.post("/api/account/delete")
+def delete_account():
+    """Account/data deletion (Play + Apple 5.1.1v). Wipes this device's server-side food diary
+       (uid-scoped); the client clears its local profile/weights/water/preferences on success so
+       NONE of the user's personal data remains. Multi-tester-safe: only the caller's uid is touched."""
+    con = get_db()
+    try:
+        cur = con.execute("DELETE FROM meals WHERE uid = ?", (_uid(),))
+        con.commit()
+        deleted = cur.rowcount if cur.rowcount is not None else 0
+    finally:
+        con.close()
+    return jsonify({"ok": True, "deleted_meals": deleted})
+
+
+DELETE_PAGE_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delete your SnapCal data</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,system-ui,sans-serif;max-width:640px;margin:0 auto;
+padding:32px 22px;line-height:1.6;color:#18181b;background:#fafaf9}h1{font-size:24px}h2{font-size:17px;margin-top:28px}
+code{background:#f1f1f0;padding:2px 6px;border-radius:6px}.muted{color:#6b7280;font-size:14px}a{color:#059669}</style>
+</head><body>
+<h1>Delete your SnapCal data</h1>
+<p>SnapCal (by Xionprotech LLC) lets you delete your account and all of your data at any time. There is no
+sign-up and no login &mdash; your information stays on your device, with your food diary mirrored to our
+server only so it survives a reinstall.</p>
+<h2>Delete it inside the app (instant)</h2>
+<p>Open SnapCal &rarr; <strong>Profile</strong> &rarr; scroll to <strong>Delete my data</strong> &rarr; confirm.
+This immediately erases your food diary from our server and clears your profile, targets, weight history,
+water log, and all preferences from the device.</p>
+<h2>What gets deleted</h2>
+<p>Your logged meals, calorie &amp; macro targets, body details (age, sex, height, weight), goal, weight
+history, water log, day plan, and diet/allergy preferences. Deletion is permanent and cannot be undone.</p>
+<h2>Need help?</h2>
+<p>If you can&rsquo;t access the app, email <a href="mailto:tariq@xionprotech.com">tariq@xionprotech.com</a>
+from any address and we&rsquo;ll remove your data within 30 days.</p>
+<p class="muted">SnapCal provides general wellness guidance and is not medical advice.</p>
+</body></html>"""
+
+
+@app.get("/delete-my-data")
+def delete_my_data_page():
+    """Public account-deletion URL required by Google Play for the Data Safety form."""
+    return app.response_class(DELETE_PAGE_HTML, mimetype="text/html")
+
+
+PRIVACY_PAGE_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SnapCal Privacy Policy</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,system-ui,sans-serif;max-width:680px;margin:0 auto;
+padding:32px 22px;line-height:1.6;color:#18181b;background:#fafaf9}h1{font-size:24px}h2{font-size:17px;margin-top:26px}
+.muted{color:#6b7280;font-size:14px}a{color:#059669}ul{padding-left:20px}</style>
+</head><body>
+<h1>SnapCal Privacy Policy</h1>
+<p class="muted">Xionprotech LLC &middot; Last updated June 2026</p>
+<p>SnapCal helps you track food and movement for general wellness. We built it to need as little of your
+data as possible. There is no account or login &mdash; your information lives on your device, with your food
+diary mirrored to our server so it survives a reinstall.</p>
+<h2>What we collect</h2>
+<ul>
+<li><strong>Food photos &amp; logs</strong> you create, and the calorie/macro estimates from them.</li>
+<li><strong>Profile &amp; body details</strong> you enter: age, sex, height, weight, goal, and your calorie/macro targets.</li>
+<li><strong>Weight and water logs</strong> you record.</li>
+<li><strong>Approximate (coarse) location</strong> &mdash; only when you tap a &ldquo;near me&rdquo; feature, only while the app is open, and only to find nearby food options. We never track you in the background.</li>
+<li>A random per-device ID so your diary stays separate from other users on our server.</li>
+</ul>
+<h2>Third-party AI</h2>
+<p>To estimate nutrition from a photo and to power Coach Cal, the relevant image or text is sent to
+<strong>Google&rsquo;s Gemini API</strong>, which processes it on our behalf and does not use it to train its
+models. By analyzing a photo or chatting with Coach Cal you consent to this processing.</p>
+<h2>What we never do</h2>
+<p>We do not sell your data, and we never use your health, food, or location data for advertising,
+ad-targeting, or data-mining.</p>
+<h2>Your control &amp; deletion</h2>
+<p>You can delete everything at any time: in the app, open <strong>Profile &rarr; Delete my data</strong>, or
+visit <a href="/delete-my-data">our deletion page</a>. Deletion is permanent.</p>
+<h2>Contact</h2>
+<p>Questions or requests: <a href="mailto:tariq@xionprotech.com">tariq@xionprotech.com</a>.</p>
+<p class="muted">SnapCal provides general wellness guidance and is not medical advice. Consult a doctor or
+registered dietitian before making changes to your diet, exercise, or health.</p>
+</body></html>"""
+
+
+@app.get("/privacy")
+def privacy_page():
+    """Public privacy-policy URL (required by both stores + the Play Data Safety form)."""
+    return app.response_class(PRIVACY_PAGE_HTML, mimetype="text/html")
+
+
 @app.get("/api/history")
 def history():
     try:

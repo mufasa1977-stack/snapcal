@@ -427,6 +427,7 @@
   .allergy-chip.on{border-color:var(--brand);background:rgba(16,185,129,.13);color:var(--brand)}
   .allergy-note{font-size:12px;line-height:1.55;color:var(--ink2);background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.18);border-radius:12px;padding:11px 13px;margin-top:2px}
   .allergy-seclabel{font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin:2px 2px 7px}
+  .dp-link{font-size:13.5px;font-weight:650;color:var(--brand);text-decoration:none}
   .diet-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:6px 0 4px}
   .diet-chip{display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 8px;border-radius:14px;border:1.6px solid var(--line);background:var(--card);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s,color .12s}
   .diet-chip.on{border-color:var(--brand);background:var(--brand);color:#fff;box-shadow:0 2px 9px rgba(16,185,129,.3)}
@@ -1167,6 +1168,17 @@
         </div>
         <button class="btn btn-dark" id="premToggle" type="button" style="margin-top:0;width:auto;padding:12px 18px"></button>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="goal-title">🔒 Privacy &amp; your data</div>
+      <div class="goal-desc" style="margin:4px 2px 12px">SnapCal is general wellness guidance, not medical advice — check with your doctor before changing your diet or exercise. Your data stays yours, and you can erase it anytime.</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:14px">
+        <a class="dp-link" href="/privacy" target="_blank" rel="noopener">Privacy policy →</a>
+        <a class="dp-link" href="/delete-my-data" target="_blank" rel="noopener">How data deletion works →</a>
+      </div>
+      <button class="btn" id="deleteDataBtn" type="button" style="background:rgba(220,38,38,.10);color:var(--bad);border:1.5px solid rgba(220,38,38,.3)">Delete my data</button>
+      <div class="goal-desc" style="margin:10px 2px 0;font-size:11.5px">Permanently erases your food diary, profile, targets, weight &amp; water history, and preferences from this device and our server. This can’t be undone.</div>
     </div>
   </section>
 
@@ -3042,6 +3054,16 @@ $("#saveBtn").addEventListener("click", async function(){
   btn.disabled = false;
 });
 
+if ($("#deleteDataBtn")) $("#deleteDataBtn").addEventListener("click", async function(){
+  if (!confirm("Delete ALL your SnapCal data? This erases your food diary, profile, targets, weight & water history, and preferences from this device and our server. This can’t be undone.")) return;
+  if (!confirm("Are you sure? This is permanent.")) return;
+  var btn = this; btn.disabled = true; btn.textContent = "Deleting…";
+  try { await api("/api/account/delete", { method: "POST" }); } catch (e) { /* clear locally regardless */ }
+  try { Object.keys(localStorage).filter(function(k){ return /^snapcal_|^mp_|^gro_|^coach/.test(k); }).forEach(function(k){ localStorage.removeItem(k); }); } catch (e){}
+  toast("Your data was deleted");
+  setTimeout(function(){ location.reload(); }, 700);
+});
+
 /* ---------------- premium / paywall ---------------- */
 var FREE_SCANS = 3;
 // Cached premium flag. Web build = localStorage preview. Native build = synced from
@@ -3260,7 +3282,7 @@ function openAllergySheet(){
     '<div class="diet-grid">' + dietChips + '</div>' +
     '<div class="allergy-seclabel" style="margin-top:14px">Allergies — keep these out</div>' +
     '<div class="allergy-grid">' + grid + '</div>' +
-    '<div class="allergy-note">⚠️ Always confirm with the restaurant or read the label before eating. Kitchens handle many allergens, so we can\'t guarantee an item is free of cross-contact.</div>';
+    '<div class="allergy-note">⚠️ <b>Do not rely on SnapCal for life-threatening allergies.</b> Allergen detection can be incomplete or wrong — always verify with the restaurant or read the product label before eating. Kitchens handle many allergens, so we can\'t guarantee an item is free of cross-contact.</div>';
   var sb = $("#sheetBody"); if (sb) sb.innerHTML = html;
   openSheet();
 }
