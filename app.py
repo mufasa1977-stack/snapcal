@@ -1634,23 +1634,23 @@ def _osm_open_now(hours, wd, minutes):
 def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
     """Feed Coach Cal the REAL places near the user (or ALONG their drive, or in a DESTINATION area the user
     named like 'Philadelphia tonight') so suggestions match where they'll actually be — never invented."""
-    # Compute open/closed per place from the user's local time and DROP confidently-closed ones so Coach Cal
-    # can't route the user to a shut restaurant (the squad caught it sending users to closed Pappas BBQ / a 10pm
-    # spot at 11:30pm). Keep open + unknown-hours places.
+    # Compute open/closed per place from the user's local time. PREFER open/unknown places; but if NONE are open,
+    # keep the closed ones (clearly tagged) rather than emptying the list — emptying used to trigger a from-memory
+    # fallback that hallucinated/recommended closed spots (the squad caught Philly + late-night). all_closed lets the
+    # prompt be honest ("everything near you is closed now").
     lt = _parse_local_time(local_time)
-    avail = []
+    open_unknown, closed = [], []
     if isinstance(nearby, list):
         for p in nearby:
             if not isinstance(p, dict) or not p.get("name"):
                 continue
             o = _osm_open_now(p.get("hours"), lt[0], lt[1]) if (lt and p.get("hours")) else None
-            if o is False:
-                continue   # closed right now → never show it to the model
             p = dict(p)
             p["_open"] = o
-            avail.append(p)
-    avail.sort(key=lambda x: (x.get("_open") is not True,))   # open-now first
-    nearby = avail
+            (closed if o is False else open_unknown).append(p)
+    all_closed = (not open_unknown) and bool(closed)
+    nearby = open_unknown if open_unknown else closed
+    nearby.sort(key=lambda x: (x.get("_open") is not True,))   # open-now first
     if area and not nearby:
         # The user named a place to eat (e.g. Ambler) but the live spot finder is down → DON'T just punt with
         # "try again", and DON'T redirect to their current location. Name REAL well-known places there from
@@ -1670,9 +1670,13 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
                 dist = f" ({mi:.1f} mi)" if mi >= 0.1 else " (right here)"
             addr = str(p.get("addr") or "").strip()
             hrs = str(p.get("hours") or "").strip()
-            openflag = " [OPEN NOW]" if p.get("_open") is True else ""
+            openflag = " [OPEN NOW]" if p.get("_open") is True else (" [CLOSED NOW]" if p.get("_open") is False else "")
             items.append(str(p["name"])[:40] + dist + (" @ " + addr[:60] if addr else "")
                          + (" [hours: " + hrs[:50] + "]" if hrs else " [hours: not listed]") + openflag)
+        closed_note = (" HEADS UP: every place in this list is CLOSED right now — be honest and tell the user that; do NOT "
+                       "imply any is open. Name the closest one WITH its hours so they can plan for later, and offer a realistic "
+                       "open-late option (a 24-hour diner, or Wawa/Sheetz for a grab-and-go protein like rotisserie chicken or "
+                       "Greek yogurt).") if all_closed else ""
         hours_note = (" THE ABOVE IS THE ONLY LIST OF REAL PLACES — recommend ONLY a place whose name appears EXACTLY in it. "
                       "NEVER invent, rename, or add a restaurant that is not in the list (a user could be driven to a place "
                       "that doesn't exist). Closed places have already been removed; [OPEN NOW] = confirmed open. If a place "
@@ -1696,13 +1700,13 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
                     "there (the address is optional — a brief neighborhood/cross-street is plenty). Favor sit-down/fresh spots, "
                     "and tell the user they can just say \"take me there\" and you'll open directions. "
                     "These are in " + str(area)[:50] + ", so do NOT mention distance from their current location. Only name "
-                    "places from this list; never invent one." + hours_note)
+                    "places from this list; never invent one." + hours_note + closed_note)
         if items and route_to:
             return ("\n\nREAL food spots ALONG the user's drive to " + str(route_to)[:50] + " (listed in TRAVEL ORDER, "
                     "start of the drive → destination): " + "; ".join(items) + ". For any 'on my way / on my drive / "
                     "on my route' question, recommend SPECIFIC places FROM THIS LIST, say roughly where on the drive each "
                     "is (early on, about midway, near your destination), honor any craving with the HEALTHIEST version of "
-                    "it, and give a genuinely healthy order at each. Only name places from this list; never invent one." + hours_note)
+                    "it, and give a genuinely healthy order at each. Only name places from this list; never invent one." + hours_note + closed_note)
         if items:
             return ("\n\nREAL places near the user RIGHT NOW (closest first; '@' = street address where known): " + "; ".join(items) + ". "
                     "Lead with the place NAME + a specific healthy order; you can briefly add the distance or cross-street, but the "
@@ -1716,7 +1720,7 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
                     "salad and a baked potato). For ANY 'near me / where can I grab X' question, recommend SPECIFIC "
                     "places FROM THIS LIST by name with the distance and a genuinely healthy order at each, ideally "
                     "offering a couple of DIFFERENT kinds of spots. If they name a CRAVING, point them to the place that "
-                    "does the HEALTHIEST version of THAT. Only name places from this list; never invent one." + hours_note)
+                    "does the HEALTHIEST version of THAT. Only name places from this list; never invent one." + hours_note + closed_note)
     if has_loc:
         # Empty after open-now filtering can mean it's LATE and everything healthy is closed — be honest about that
         # rather than naming spots that are shut.
