@@ -922,11 +922,15 @@
         Scan a barcode for exact numbers
       </button>
       <div id="barcodePanel" style="display:none;margin-top:10px">
+        <button id="bcCamera" type="button" style="display:none;width:100%;border:none;background:var(--brand);color:#fff;font-weight:800;border-radius:15px;padding:16px;cursor:pointer;font-family:inherit;font-size:16.5px;align-items:center;justify-content:center;gap:11px;box-shadow:0 5px 16px rgba(46,139,87,.30);-webkit-tap-highlight-color:transparent">
+          <svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7.7 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.7L14.5 4z"></path><circle cx="12" cy="13" r="3.6"></circle></svg>
+          Use camera to scan
+        </button>
+        <div id="bcOrLine" style="display:none;text-align:center;color:var(--ink3);font-size:11.5px;margin:11px 0 9px;letter-spacing:.02em">or enter the number by hand</div>
         <div style="display:flex;gap:8px">
           <input id="bcInput" type="text" inputmode="numeric" placeholder="Barcode number (UPC / EAN)" autocomplete="off" style="flex:1;min-width:0;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:11px;padding:11px 12px;font-size:14px;font-family:inherit">
-          <button id="bcLookup" type="button" style="flex:0 0 auto;border:none;background:var(--brand);color:#fff;font-weight:800;border-radius:11px;padding:11px 16px;cursor:pointer;font-family:inherit">Look up</button>
+          <button id="bcLookup" type="button" style="flex:0 0 auto;border:none;background:var(--soft);color:var(--brand);font-weight:800;border-radius:11px;padding:11px 16px;cursor:pointer;font-family:inherit">Look up</button>
         </div>
-        <button id="bcCamera" type="button" style="display:none;width:100%;margin-top:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;border-radius:11px;padding:10px;cursor:pointer;font-family:inherit">📷 Use camera to scan</button>
         <div id="bcHint" style="font-size:11.5px;color:var(--ink3);margin-top:8px;text-align:center"></div>
       </div>
       <div id="nutriResult" style="margin-top:12px"></div>
@@ -1473,37 +1477,58 @@ function toggleBarcodePanel(){
   var show = pan.style.display === "none";
   pan.style.display = show ? "block" : "none";
   if (show){
-    var cam = bcEl("bcCamera");
-    if (cam && _canCamera()) cam.style.display = "block";   // show on iPhone too (ZXing), not just Android
+    var cam = bcEl("bcCamera"), orline = bcEl("bcOrLine");
+    if (cam && _canCamera()) cam.style.display = "flex";    // big primary button; show on iPhone too (ZXing)
+    if (orline && _canCamera()) orline.style.display = "block";
     var hint = bcEl("bcHint");
-    if (hint) hint.textContent = _canCamera()
-      ? "Tap “Use camera to scan”, or type the number under the bars."
-      : "Type the barcode number under the bars.";
-    var inp = bcEl("bcInput"); if (inp) try{ inp.focus(); }catch(e){}
+    if (hint) hint.textContent = _canCamera() ? "" : "Type the barcode number under the bars.";
   } else { stopBarcodeCamera(); }
 }
-/* Map Open Food Facts' raw product JSON into our result shape (mirrors the server's mapping). */
+/* Map Open Food Facts' raw product JSON into our result shape — with a SANITY ENGINE.
+   OFF is crowdsourced and has bad entries (e.g. a Cheetos listed at 16,000 kcal/100g). We validate against
+   physics (food maxes ~9 cal/gram, pure fat) and, when the listed calories are impossible, recompute them from
+   the actual macros (Atwater 4/4/9), pulling each macro from the serving OR 100g basis so nothing's missing. */
 function _mapOFF(code, j){
   var p = (j && j.product) || {};
   var n = p.nutriments || {};
-  function num(k){ var v = parseFloat(n[k]); return isNaN(v) ? null : Math.round(v * 10) / 10; }
-  if ((j && j.status !== 1 && !j.product) || (num("energy-kcal_serving") == null && num("energy-kcal_100g") == null))
-    return { found: false, code: code };
-  var hasServ = num("energy-kcal_serving") != null;
-  var sfx = hasServ ? "_serving" : "_100g";
-  var serving = (p.serving_size || "").trim();
-  var sodium = num("sodium" + sfx);
+  if (j && j.status !== 1 && !j.product) return { found: false, code: code };
+  function f(k){ var v = parseFloat(n[k]); return isNaN(v) ? null : v; }
+  var servStr = (p.serving_size || "").trim();
+  var gMatch = servStr.match(/([\d.]+)\s*g\b/i);
+  var servGrams = gMatch ? parseFloat(gMatch[1]) : null;
+  var hasServ = (f("energy-kcal_serving") != null) || (servGrams != null && f("proteins_serving") != null);
+  // value on the DISPLAY basis (per serving if we have one, else per 100 g), with cross-basis fallback
+  function val(base){
+    var sv = f(base + "_serving"), hv = f(base + "_100g");
+    if (hasServ){
+      if (sv != null) return sv;
+      if (hv != null && servGrams != null) return hv * servGrams / 100;
+      return null;
+    }
+    return (hv != null) ? hv : sv;
+  }
+  var cal = val("energy-kcal"), protein = val("proteins"), carbs = val("carbohydrates"), fat = val("fat");
+  if (cal == null && protein == null && carbs == null && fat == null) return { found: false, code: code };
+  var basisGrams = hasServ ? (servGrams || 100) : 100;
+  var ceil = basisGrams * 9.2 + 5;                                  // physical max calories for this weight
+  var atwater = (fat != null || carbs != null || protein != null) ? (4 * (protein || 0) + 4 * (carbs || 0) + 9 * (fat || 0)) : null;
+  var estimated = false;
+  if (cal == null || cal > ceil){                                  // missing or impossible -> use the macros
+    if (atwater != null && atwater > 0 && atwater <= ceil){ cal = atwater; estimated = true; }
+    else return { found: false, code: code };                      // can't produce a trustworthy number
+  }
+  function r1(x){ return x == null ? null : Math.round(x * 10) / 10; }
+  var sodium = val("sodium");
   return {
     found: true, code: code,
     name: (p.product_name || "").trim() || "Packaged food",
     brand: ((p.brands || "").split(",")[0] || "").trim(),
-    serving: (hasServ && serving) ? serving : "100 g",
+    serving: (hasServ && servStr) ? servStr : "100 g",
     image: p.image_front_small_url || "",
-    calories: num("energy-kcal" + sfx), protein_g: num("proteins" + sfx),
-    carbs_g: num("carbohydrates" + sfx), fat_g: num("fat" + sfx),
-    fiber_g: num("fiber" + sfx), sugar_g: num("sugars" + sfx), sat_fat_g: num("saturated-fat" + sfx),
+    calories: Math.round(cal), protein_g: r1(protein), carbs_g: r1(carbs), fat_g: r1(fat),
+    fiber_g: r1(val("fiber")), sugar_g: r1(val("sugars")), sat_fat_g: r1(val("saturated-fat")),
     sodium_mg: sodium != null ? Math.round(sodium * 1000) : null,
-    source: "Open Food Facts", accuracy_tier: "EXACT"
+    source: "Open Food Facts", accuracy_tier: estimated ? "ESTIMATED" : "EXACT", estimated: estimated
   };
 }
 function lookupBarcode(code){
@@ -1532,7 +1557,10 @@ function renderBarcodeResult(d){
   }
   res.innerHTML = '<div class="nf-card">' +
     '<div class="nf-food">' + esc(d.name) + (d.brand ? ' <span style="color:var(--ink3);font-weight:600">&middot; ' + esc(d.brand) + '</span>' : '') + '</div>' +
-    '<div class="nf-serv">Per ' + esc(d.serving) + ' &middot; <b style="color:var(--brand)">✓ Verified label data</b></div>' +
+    '<div class="nf-serv">Per ' + esc(d.serving) + ' &middot; ' + (d.estimated
+      ? '<b style="color:#c77d20">≈ Estimated from the label</b>'
+      : '<b style="color:var(--brand)">✓ Verified label data</b>') + '</div>' +
+    (d.estimated ? '<div style="font-size:11.5px;color:var(--ink3);margin:-2px 0 6px">The listed calories looked off, so we recalculated them from the protein/carbs/fat on the label.</div>' : '') +
     nfRow("Calories", d.calories, "kcal") + nfRow("Protein", d.protein_g, "g") + nfRow("Carbs", d.carbs_g, "g") +
     nfRow("Fiber", d.fiber_g, "g") + nfRow("Sugar", d.sugar_g, "g") + nfRow("Fat", d.fat_g, "g") +
     nfRow("Saturated fat", d.sat_fat_g, "g") + nfRow("Sodium", d.sodium_mg, "mg") +
