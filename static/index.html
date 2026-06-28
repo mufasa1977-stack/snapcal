@@ -1341,6 +1341,8 @@ var DEVICE_ID = localStorage.getItem("snapcal_device") || (function(){
 async function api(path, opts){
   opts = opts || {};
   opts.headers = Object.assign({ "X-Device-Id": DEVICE_ID }, opts.headers || {});
+  // Tell the server when Premium so it bypasses the free-tier daily caps (server enforces them as the hard cost cap).
+  if (typeof premiumActive !== "undefined" && premiumActive) opts.headers["X-Premium"] = "1";
   var res;
   try {
     res = await fetch(API_BASE + path, opts);
@@ -2435,6 +2437,7 @@ $("#analyzeBtn").addEventListener("click", async function(){
     fd.append("allergies", (typeof allergyLabels === "function" ? allergyLabels() : []).join(","));
     fd.append("diet", (typeof dietLabel === "function" ? dietLabel(_diet) : ""));
     var data = await api("/api/analyze", { method: "POST", body: fd });
+    if (data && data.limit) { openPaywall(); return; }   // server enforced the free daily scan cap
     analyzeResult = normalizeResult(data);
     analyzeResult.mults = analyzeResult.items.map(function(){ return 1; });
     renderScanCard();
@@ -3238,6 +3241,7 @@ async function sendChat(text){
     catch(e){ if (attempt < 3){ setVoiceStatus(attempt === 0 ? "Coach Cal is thinking…" : "Coach Cal is waking up…"); await new Promise(function(r){ setTimeout(r, 1500 + attempt * 2500); }); } }
   }
   setVoiceStatus("");
+  if (d && d.limit) { openPaywall(); return; }   // server enforced the free daily Coach Cal cap
   if (d){
     if (!isPremium()) bumpChat();   // count a billed reply against the free daily allowance
     var reply = (d && d.reply) || "I’m here — what can I help you with?";

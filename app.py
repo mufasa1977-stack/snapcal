@@ -395,6 +395,18 @@ def init_db():
                    glasses INTEGER NOT NULL DEFAULT 0
                )"""
         )
+        # Server-side daily usage counters (the HARD cost cap). The client shows "N scans left" from
+        # localStorage for instant UX, but that's trivially editable — this table is the real enforcement so a
+        # free user can't run up the Gemini bill on /api/analyze (vision) + /api/chat (Coach Cal). Premium = no cap.
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS usage(
+                   uid TEXT,
+                   date TEXT,
+                   kind TEXT,
+                   count INTEGER NOT NULL DEFAULT 0,
+                   PRIMARY KEY (uid, date, kind)
+               )"""
+        )
         # Web-push subscriptions (one per device). Carries enough profile snapshot to write a personal
         # check-in on a schedule, plus the device tz offset so we fire morning/midday/evening in LOCAL time,
         # and last_slot/last_date so each user gets at most ONE push per slot per day.
@@ -440,6 +452,53 @@ def _uid():
     """Per-device id the client sends on every request (X-Device-Id) — scopes each
        user's diary so two testers never see each other's meals."""
     return (request.headers.get("X-Device-Id") or "").strip() or "_shared"
+
+
+# --- Free-tier cost cap (server-side enforcement). Mirrors the client's FREE_SCANS/FREE_CHATS. -------------
+FREE_SCANS_DAY = 3   # photo meal-scans/day on free (Gemini vision — billed)
+FREE_CHATS_DAY = 5   # Coach Cal chats/day on free (Gemini chat — billed)
+
+
+def _req_is_premium():
+    """The client sends X-Premium:1 when the user is Premium (entitlement check is client/RevenueCat-side for
+       now). Premium bypasses the daily caps. Once IAP is live this can be upgraded to a server-side RevenueCat
+       entitlement verification; until then this caps the dominant cost risk: heavy FREE usage."""
+    return (request.headers.get("X-Premium") or "").strip() == "1"
+
+
+def _cap_over(kind, limit):
+    """If this free device has hit today's limit for `kind`, return the limit payload (caller returns it as 200
+       so the client shows the upgrade prompt). Premium → never capped. Does NOT bump — call _cap_bump on allow."""
+    if _req_is_premium():
+        return None
+    today = date.today().isoformat()
+    con = get_db()
+    try:
+        row = con.execute("SELECT count FROM usage WHERE uid = ? AND date = ? AND kind = ?",
+                          (_uid(), today, kind)).fetchone()
+    finally:
+        con.close()
+    used = row["count"] if row else 0
+    if used >= limit:
+        return {"limit": True, "kind": kind, "used": used, "cap": limit}
+    return None
+
+
+def _cap_bump(kind):
+    """Count one billed call against today's allowance for this device (no-op for premium)."""
+    if _req_is_premium():
+        return
+    today = date.today().isoformat()
+    con = get_db()
+    try:
+        con.execute(
+            """INSERT INTO usage(uid, date, kind, count) VALUES(?,?,?,1)
+               ON CONFLICT(uid, date, kind) DO UPDATE SET count = count + 1""",
+            (_uid(), today, kind),
+        )
+        con.commit()
+    finally:
+        con.close()
 
 def _int(value, default=0):
     try:
@@ -711,6 +770,11 @@ def analyze():
     img_bytes = f.read()
     if not img_bytes:
         return jsonify({"error": "Uploaded file is empty."}), 400
+
+    capped = _cap_over("scan", FREE_SCANS_DAY)  # HARD free-tier cost cap (server-side, can't be client-bypassed)
+    if capped:
+        return jsonify(capped)
+    _cap_bump("scan")  # count it now — the Gemini vision cost is incurred whether or not parsing succeeds
 
     goal = (request.form.get("goal") or "maintain").strip().lower()
     if goal not in GOAL_LABELS:
@@ -1802,6 +1866,10 @@ def chat():
     msgs = d.get("messages")
     if not isinstance(msgs, list) or not msgs:
         return jsonify({"error": "no_messages"}), 400
+    capped = _cap_over("chat", FREE_CHATS_DAY)  # HARD free-tier cost cap (server-side, can't be client-bypassed)
+    if capped:
+        return jsonify(capped)
+    _cap_bump("chat")  # count it now — the Gemini chat cost is incurred on the call
     goal = str(d.get("goal") or "maintain").strip().lower()
     if goal not in GOAL_LABELS:
         goal = "maintain"
