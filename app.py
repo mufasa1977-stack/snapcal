@@ -36,6 +36,7 @@ DB_PATH = _DB_DIR / "snapcal.db"
 RESTAURANTS_PATH = APP_DIR / "data" / "restaurants.json"  # curated "Eat Out" dataset
 RECIPES_PATH = APP_DIR / "data" / "recipes.json"  # curated recipe library (SnapCal Meals browser)
 ROUTINES_PATH = APP_DIR / "data" / "routines.json"  # curated exercise routines (Move module)
+LESSONS_PATH = APP_DIR / "data" / "lessons.json"  # behavior-change / CBT micro-lesson arc (daily lesson card)
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"  # free OpenStreetMap places lookup (no API key / no billing)
 # Render's egress 429s/can't-reach the primary Overpass host a lot → rotate mirrors with retry so the eat-out
 # feature doesn't go dark (the QA squad found /api/nearby was unreachable in prod). Google Places later = the real cure.
@@ -455,6 +456,15 @@ def init_db():
                    minutes INTEGER,
                    calories INTEGER,
                    created TEXT
+               )"""
+        )
+        # Body measurements beyond weight (waist is the most useful fat-loss signal; recomp can hide it on the scale).
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS measurements(
+                   uid TEXT,
+                   date TEXT,
+                   waist REAL, hip REAL, chest REAL, arm REAL, thigh REAL, neck REAL,
+                   PRIMARY KEY (uid, date)
                )"""
         )
         # User-created custom recipes (multi-ingredient meals the user composes once + logs in one tap).
@@ -1151,6 +1161,26 @@ def _load_recipes():
 def recipes():
     """Serve the curated SnapCal Meals recipe library (categories + recipes) for the in-app browser."""
     return jsonify(_load_recipes())
+
+
+_lessons_cache = None
+
+
+def _load_lessons():
+    """Load the behavior-change / CBT micro-lesson arc once (data/lessons.json — the daily lesson card)."""
+    global _lessons_cache
+    if _lessons_cache is None:
+        try:
+            _lessons_cache = json.loads(LESSONS_PATH.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — degrade to no lessons rather than 500
+            _lessons_cache = {"lessons": []}
+    return _lessons_cache
+
+
+@app.get("/api/lessons")
+def lessons():
+    """Serve the daily behavior-lesson arc (short CBT/habit micro-lessons). The client picks today's by day index."""
+    return jsonify(_load_lessons())
 
 
 _routines_cache = None
@@ -2637,7 +2667,8 @@ _FDC_NUTRIENTS = {   # USDA nutrient name -> our short label. Cronometer-level d
     # Minerals
     "Sodium, Na": "sodium_mg", "Potassium, K": "potassium_mg", "Calcium, Ca": "calcium_mg",
     "Iron, Fe": "iron_mg", "Magnesium, Mg": "magnesium_mg", "Zinc, Zn": "zinc_mg",
-    "Phosphorus, P": "phosphorus_mg",
+    "Phosphorus, P": "phosphorus_mg", "Copper, Cu": "copper_mg", "Manganese, Mn": "manganese_mg",
+    "Selenium, Se": "selenium_mcg",
     # Vitamins
     "Vitamin C, total ascorbic acid": "vitc_mg",
     "Vitamin A, RAE": "vita_mcg",
@@ -2646,6 +2677,7 @@ _FDC_NUTRIENTS = {   # USDA nutrient name -> our short label. Cronometer-level d
     "Vitamin K (phylloquinone)": "vitk_mcg",
     "Thiamin": "b1_mg", "Riboflavin": "b2_mg", "Niacin": "b3_mg",
     "Vitamin B-6": "b6_mg", "Folate, total": "folate_mcg", "Vitamin B-12": "b12_mcg",
+    "Pantothenic acid": "b5_mg", "Choline, total": "choline_mg",
 }
 
 
@@ -3069,6 +3101,65 @@ def recent_foods():
         if len(out) >= 15:
             break
     return jsonify({"recents": out})
+
+
+_MEASURE_KEYS = ("waist", "hip", "chest", "arm", "thigh", "neck")
+
+
+@app.post("/api/measurements")
+def add_measurement():
+    """Save body measurements (inches) for a day — waist/hip/chest/arm/thigh/neck. Upserts one row per
+       device per day; only provided fields overwrite, so partial logging keeps prior values."""
+    d = request.get_json(silent=True) or {}
+    day = str(d.get("date") or date.today().isoformat())[:10]
+    vals = {}
+    for k in _MEASURE_KEYS:
+        v = d.get(k)
+        if v in (None, ""):
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if 0 < f <= 120:
+            vals[k] = round(f, 1)
+    if not vals:
+        return jsonify({"error": "no_measurements"}), 400
+    cols = ", ".join(_MEASURE_KEYS)
+    placeholders = ", ".join("?" for _ in _MEASURE_KEYS)
+    updates = ", ".join("%s = COALESCE(excluded.%s, %s)" % (k, k, k) for k in _MEASURE_KEYS)
+    con = get_db()
+    try:
+        con.execute(
+            "INSERT INTO measurements(uid, date, %s) VALUES(?, ?, %s) "
+            "ON CONFLICT(uid, date) DO UPDATE SET %s" % (cols, placeholders, updates),
+            (_uid(), day, *[vals.get(k) for k in _MEASURE_KEYS]),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return jsonify({"ok": True})
+
+
+@app.get("/api/measurements")
+def list_measurements():
+    """Recent body measurements for this device (most-recent first) + the latest + the earliest in range,
+       so the client can show 'waist 38\" (-2\" since you started)'."""
+    try:
+        days = max(1, min(366, int(request.args.get("days", "180"))))
+    except (TypeError, ValueError):
+        days = 180
+    cutoff = (date.today() - timedelta(days=days - 1)).isoformat()
+    con = get_db()
+    try:
+        rows = con.execute(
+            "SELECT date, waist, hip, chest, arm, thigh, neck FROM measurements "
+            "WHERE uid = ? AND date >= ? ORDER BY date DESC", (_uid(), cutoff)).fetchall()
+    finally:
+        con.close()
+    out = [dict(r) for r in rows]
+    return jsonify({"measurements": out, "latest": (out[0] if out else None),
+                    "earliest": (out[-1] if out else None)})
 
 
 @app.post("/api/myrecipes")

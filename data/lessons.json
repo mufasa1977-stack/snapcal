@@ -1,0 +1,116 @@
+{
+  "lessons": [
+    {
+      "id": 1,
+      "topic": "Mindset",
+      "title": "Progress, not perfection",
+      "body": "One off day doesn't erase your week — it's the average that moves the scale. The people who succeed aren't the ones who never slip; they're the ones who get right back to the next good choice without a guilt spiral.",
+      "tip": "Today, if a meal doesn't go to plan, just make the very next one a little better. No starting-over Monday needed."
+    },
+    {
+      "id": 2,
+      "topic": "Protein",
+      "title": "Anchor every meal with protein",
+      "body": "Protein keeps you full longer than carbs or fat, protects muscle while you lose fat, and takes more energy just to digest. Most people under-eat it — especially at breakfast.",
+      "tip": "Add one protein source to your next meal: eggs, Greek yogurt, chicken, tofu, cottage cheese, or a shake."
+    },
+    {
+      "id": 3,
+      "topic": "Hunger",
+      "title": "Hungry, or just bored?",
+      "body": "Real hunger builds slowly and any food sounds good. Emotional hunger comes on fast and craves something specific. Learning the difference is one of the highest-leverage skills in weight loss.",
+      "tip": "Before your next snack, pause 5 minutes and drink a glass of water. If you're still hungry after, eat — mindfully."
+    },
+    {
+      "id": 4,
+      "topic": "Environment",
+      "title": "Make the easy choice the healthy one",
+      "body": "Willpower is unreliable; your environment runs 24/7. You eat what's visible and convenient. Top performers don't out-discipline temptation — they remove it.",
+      "tip": "Move one tempting food out of sight, and put one healthy food (fruit, nuts, pre-cut veg) where you'll see it first."
+    },
+    {
+      "id": 5,
+      "topic": "NEAT",
+      "title": "Steps are the secret weapon",
+      "body": "Non-exercise movement — walking, standing, fidgeting — can burn more calories than your workouts. For a desk job, this is the biggest lever you have, and it's gentle on the joints.",
+      "tip": "Take a 5-10 minute walk after one meal today. Bonus: it blunts the post-meal blood-sugar spike."
+    },
+    {
+      "id": 6,
+      "topic": "Sleep",
+      "title": "Short sleep makes you hungrier",
+      "body": "One bad night raises the hunger hormone ghrelin and lowers fullness signals — you'll crave more carbs and sugar the next day. Sleep isn't separate from your diet; it's part of it.",
+      "tip": "Pick a consistent lights-out time tonight, even 20 minutes earlier than usual."
+    },
+    {
+      "id": 7,
+      "topic": "Mindful eating",
+      "title": "Slow down — fullness is on a delay",
+      "body": "It takes about 20 minutes for your gut to tell your brain it's full. Eat fast and you'll blow past 'satisfied' before the signal arrives. Slowing down is free portion control.",
+      "tip": "At your next meal, put your fork down between bites for the first few minutes."
+    },
+    {
+      "id": 8,
+      "topic": "Drinks",
+      "title": "Liquid calories don't fill you up",
+      "body": "Soda, juice, sweet coffee, and alcohol add up fast and barely register as 'food' to your body — so you eat the same amount on top of them. They're the quietest source of extra calories.",
+      "tip": "Swap one sugary or alcoholic drink today for water, sparkling water, or unsweetened tea."
+    },
+    {
+      "id": 9,
+      "topic": "Eating out",
+      "title": "Decide before you arrive",
+      "body": "Menus are designed to tempt you in the moment. The strongest move is choosing your meal before you walk in, while your goals — not your cravings — are in charge.",
+      "tip": "Going out today? Open the menu now and pick a protein-forward option in advance. Ask Coach Cal what to order."
+    },
+    {
+      "id": 10,
+      "topic": "Self-talk",
+      "title": "Talk to yourself like a friend",
+      "body": "Shame doesn't create lasting change — it usually triggers the next binge. The way you talk to yourself after a slip predicts whether you bounce back or spiral.",
+      "tip": "If you catch harsh self-talk today, reframe it: 'I'm learning what works for me,' not 'I failed again.'"
+    },
+    {
+      "id": 11,
+      "topic": "Fiber",
+      "title": "Fiber is fullness for almost no calories",
+      "body": "Vegetables, fruit, beans, and whole grains add bulk and slow digestion, so you feel full on fewer calories — and they feed a healthy gut. Most people get half what they need.",
+      "tip": "Add one extra serving of veg or fruit to a meal today. Volume first, then the rest."
+    },
+    {
+      "id": 12,
+      "topic": "Planning",
+      "title": "Future-you eats what present-you prepped",
+      "body": "Decisions made when you're hungry and tired are rarely your best ones. A little planning when you're calm removes dozens of willpower battles later.",
+      "tip": "Spend two minutes deciding what your next breakfast or lunch will be — and make sure the ingredients are on hand."
+    },
+    {
+      "id": 13,
+      "topic": "The scale",
+      "title": "The scale lies day to day",
+      "body": "Body weight swings 2-5 lbs from water, salt, carbs, and hormones — none of it fat. Weigh-ins are data, not a verdict. The trend over weeks is the truth.",
+      "tip": "Judge progress by the multi-week trend (SnapCal's Smart Targets uses it), not a single morning's number."
+    },
+    {
+      "id": 14,
+      "topic": "Habits",
+      "title": "Stack a new habit onto an old one",
+      "body": "New habits stick best when glued to something you already do automatically. You don't need more motivation — you need a reliable trigger.",
+      "tip": "Pick one: 'After I pour my morning coffee, I'll log my breakfast.' Tie a healthy action to an existing routine."
+    },
+    {
+      "id": 15,
+      "topic": "Cravings",
+      "title": "Cravings are waves — they crest and fall",
+      "body": "A craving feels permanent but usually peaks and fades within 15-20 minutes. You don't have to fight it forever, just ride it out a little longer than usual.",
+      "tip": "Next craving, set a 15-minute timer and do something with your hands. Often it's gone before it rings."
+    },
+    {
+      "id": 16,
+      "topic": "Consistency",
+      "title": "80/20 beats all-or-nothing",
+      "body": "You don't need a perfect diet. Eating well about 80% of the time, consistently, beats a 'perfect' streak that collapses into a blowout. Sustainable always wins.",
+      "tip": "Plan one small, genuinely enjoyable treat this week — on purpose, without guilt. That's the 20% that keeps the 80% going."
+    }
+  ]
+}

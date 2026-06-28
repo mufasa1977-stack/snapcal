@@ -229,6 +229,21 @@
   .mr-ing-c{font-size:12.5px;color:var(--ink2)}
   .mr-total{margin:10px 2px;font-size:13.5px;color:var(--ink2)}
   .mr-ingform{margin-top:6px}
+  /* Daily lesson */
+  .lsn-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .lsn-tag{font-size:11.5px;font-weight:800;letter-spacing:.03em;color:var(--brand);text-transform:uppercase}
+  .lsn-day{font-size:12px;color:var(--ink3);font-weight:600}
+  .lsn-title{font-family:var(--serif,Georgia,serif);font-size:19px;font-weight:700;margin:8px 0 0;color:var(--ink)}
+  .lsn-body{font-size:14px;line-height:1.55;color:var(--ink2);margin-top:7px}
+  .lsn-tip{font-size:13.5px;line-height:1.5;color:var(--ink);background:var(--soft);border-radius:11px;padding:11px 13px;margin-top:11px}
+  .lsn-done{text-align:center;font-size:13px;color:var(--brand);font-weight:600;margin-top:12px}
+  /* Body measurements */
+  .ms-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .ms-fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink3);font-weight:600}
+  .ms-fld input{border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:10px 11px;font-size:15px;font-family:inherit;width:100%}
+  .ms-delta{font-weight:700;color:var(--ink3)}
+  .ms-delta.good{color:var(--brand)}
+  .ms-last{margin-top:10px;font-size:12px;color:var(--ink3);text-align:center}
   /* Gentle (ED-safe) mode: hide the numeric calorie/macro readouts, show the balance banner */
   .gentle-only{display:none}
   body.gentle .gentle-only{display:block}
@@ -999,6 +1014,10 @@
       <div id="fastBody"></div>
     </div>
 
+    <div class="card" id="lessonCard" style="display:none">
+      <div id="lessonBody"></div>
+    </div>
+
     <div class="card">
       <div class="goal-title">🔬 Nutrition facts</div>
       <div class="goal-desc" style="margin:4px 2px 0">Look up any food for real, science-backed numbers — straight from the USDA's federal nutrition database.</div>
@@ -1296,6 +1315,12 @@
       <button class="btn" id="pushTest" type="button" style="margin-top:12px;display:none">Send me a test check-in</button>
     </div>
 
+    <div class="card" id="measureCard">
+      <div class="goal-title">📏 Body measurements</div>
+      <div class="goal-desc" style="margin:4px 2px 11px">The scale can stall while you lose inches — track waist and more to see real recomp progress.</div>
+      <div id="measureBody"></div>
+    </div>
+
     <div class="card" id="healthCard">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
         <div>
@@ -1587,8 +1612,8 @@ function microsPanel(n){
   if (!n) return "";
   var groups = [
     ["Fats", [["Monounsaturated fat", n.mufa_g, "g"], ["Polyunsaturated fat", n.pufa_g, "g"], ["Trans fat", n.trans_fat_g, "g"], ["Cholesterol", n.cholesterol_mg, "mg"]]],
-    ["Minerals", [["Magnesium", n.magnesium_mg, "mg"], ["Zinc", n.zinc_mg, "mg"], ["Phosphorus", n.phosphorus_mg, "mg"]]],
-    ["Vitamins", [["Vitamin A", n.vita_mcg, "mcg"], ["Vitamin D", n.vitd_mcg, "mcg"], ["Vitamin E", n.vite_mg, "mg"], ["Vitamin K", n.vitk_mcg, "mcg"], ["Thiamin (B1)", n.b1_mg, "mg"], ["Riboflavin (B2)", n.b2_mg, "mg"], ["Niacin (B3)", n.b3_mg, "mg"], ["Vitamin B6", n.b6_mg, "mg"], ["Folate", n.folate_mcg, "mcg"], ["Vitamin B12", n.b12_mcg, "mcg"]]]
+    ["Minerals", [["Magnesium", n.magnesium_mg, "mg"], ["Zinc", n.zinc_mg, "mg"], ["Phosphorus", n.phosphorus_mg, "mg"], ["Copper", n.copper_mg, "mg"], ["Manganese", n.manganese_mg, "mg"], ["Selenium", n.selenium_mcg, "mcg"]]],
+    ["Vitamins", [["Vitamin A", n.vita_mcg, "mcg"], ["Vitamin D", n.vitd_mcg, "mcg"], ["Vitamin E", n.vite_mg, "mg"], ["Vitamin K", n.vitk_mcg, "mcg"], ["Thiamin (B1)", n.b1_mg, "mg"], ["Riboflavin (B2)", n.b2_mg, "mg"], ["Niacin (B3)", n.b3_mg, "mg"], ["Pantothenic acid (B5)", n.b5_mg, "mg"], ["Vitamin B6", n.b6_mg, "mg"], ["Folate", n.folate_mcg, "mcg"], ["Vitamin B12", n.b12_mcg, "mcg"], ["Choline", n.choline_mg, "mg"]]]
   ];
   var html = "", count = 0;
   groups.forEach(function(g){
@@ -1923,7 +1948,7 @@ function switchTab(name){
   if (name === "today") loadToday();
   if (name === "eatout") loadEatOut();
   if (name === "scan"){ updateScanHint(); loadRecents(); loadMyRecipes(); }
-  if (name === "today") renderFast();
+  if (name === "today"){ renderFast(); loadLesson(); }
   if (name === "history") loadHistory();
   if (name === "profile") loadProfile();
 }
@@ -2203,6 +2228,40 @@ document.addEventListener("click", function(e){
   var fc = e.target.closest(".fast-chip"); if (fc){ _setFastProto(int(fc.getAttribute("data-fh"))); renderFast(); return; }
   if (e.target.closest("#fastStartBtn")){ startFast(); return; }
   if (e.target.closest("#fastEndBtn")){ endFast(); return; }
+});
+
+/* ---------------- Daily behavior lesson (Noom-style CBT micro-lesson arc) ----------------
+   One short, kind, behavior-change lesson per calendar day, advancing through the arc. */
+var _lessons = null;
+function _lessonDayIndex(){ return Math.floor(Date.now() / 86400000); }   /* changes once per calendar day (UTC) */
+function loadLesson(){
+  var card = $("#lessonCard"); if (!card) return;
+  if (_lessons){ renderLesson(); return; }
+  api("/api/lessons").then(function(d){ _lessons = (d && d.lessons) || []; renderLesson(); })
+    .catch(function(){ card.style.display = "none"; });
+}
+function renderLesson(){
+  var card = $("#lessonCard"), body = $("#lessonBody");
+  if (!card || !body) return;
+  if (!_lessons || !_lessons.length){ card.style.display = "none"; return; }
+  var L = _lessons[_lessonDayIndex() % _lessons.length];
+  var readToday = false; try { readToday = localStorage.getItem("snapcal_lesson_read") === todayStr(); } catch(e){}
+  var n = (_lessonDayIndex() % _lessons.length) + 1;
+  body.innerHTML =
+    '<div class="lsn-top"><span class="lsn-tag">🌱 Daily lesson</span><span class="lsn-day">'+esc(L.topic||"")+'</span></div>'+
+    '<div class="lsn-title">'+esc(L.title)+'</div>'+
+    '<div class="lsn-body">'+esc(L.body)+'</div>'+
+    '<div class="lsn-tip"><b>Try it:</b> '+esc(L.tip)+'</div>'+
+    (readToday
+      ? '<div class="lsn-done">✓ Done for today — a new lesson lands tomorrow.</div>'
+      : '<button class="btn btn-dark" id="lessonGotItBtn" type="button" style="margin-top:12px">Got it 👍</button>');
+  card.style.display = "block";
+}
+document.addEventListener("click", function(e){
+  if (e.target && e.target.closest && e.target.closest("#lessonGotItBtn")){
+    try { localStorage.setItem("snapcal_lesson_read", todayStr()); } catch(err){}
+    renderLesson(); toast("🌱 Nice — see you tomorrow");
+  }
 });
 
 /* ---------------- Workout burn: log a workout -> calories back into today's budget ----------------
@@ -3938,7 +3997,45 @@ async function loadProfile(){
       if (ws.length) $("#pWeight").value = ws[ws.length - 1].weight;
     }
   } catch (e) { /* non-critical */ }
+  loadMeasurements();
 }
+
+/* ---------------- Body measurements (waist/hip/chest/arm/thigh/neck, inches) ---------------- */
+var MEASURE_FIELDS = [["waist","Waist"],["hip","Hip"],["chest","Chest"],["arm","Arm"],["thigh","Thigh"],["neck","Neck"]];
+var _measure = { latest:null, earliest:null };
+function loadMeasurements(){
+  var body = $("#measureBody"); if (!body) return;
+  return api("/api/measurements").then(function(d){ _measure = { latest:(d&&d.latest)||null, earliest:(d&&d.earliest)||null }; renderMeasure(); })
+    .catch(function(){ renderMeasure(); });
+}
+function renderMeasure(){
+  var body = $("#measureBody"); if (!body) return;
+  var L = _measure.latest || {}, E = _measure.earliest || {};
+  var inputs = MEASURE_FIELDS.map(function(f){
+    var k = f[0], lbl = f[1], cur = (L[k] != null ? L[k] : "");
+    var delta = "";
+    if (L[k] != null && E[k] != null && E.date !== L.date){
+      var dv = Math.round((L[k] - E[k]) * 10) / 10;
+      if (dv !== 0) delta = '<span class="ms-delta'+(dv < 0 ? ' good' : '')+'">'+(dv > 0 ? "+" : "")+dv+'"</span>';
+    }
+    return '<label class="ms-fld"><span>'+lbl+' '+delta+'</span><input type="number" inputmode="decimal" step="0.1" min="0" max="120" data-ms="'+k+'" value="'+cur+'" placeholder="in"></label>';
+  }).join("");
+  body.innerHTML = '<div class="ms-grid">'+inputs+'</div>'+
+    '<button class="btn btn-dark" id="msSaveBtn" type="button" style="margin-top:12px">Save measurements</button>'+
+    (L.date ? '<div class="ms-last">Last updated '+esc(L.date)+'</div>' : '');
+}
+async function saveMeasurements(){
+  var payload = { date: todayStr() }, any = false;
+  document.querySelectorAll("#measureBody input[data-ms]").forEach(function(i){
+    var v = (i.value||"").trim(); if (v !== ""){ payload[i.getAttribute("data-ms")] = parseFloat(v); any = true; }
+  });
+  if (!any){ toast("Enter at least one measurement", true); return; }
+  var btn = $("#msSaveBtn"); if (btn) btn.disabled = true;
+  try { await api("/api/measurements", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+    toast("✓ Measurements saved"); await loadMeasurements();
+  } catch(e){ toast(e.message || "Couldn't save", true); if (btn) btn.disabled = false; }
+}
+document.addEventListener("click", function(e){ if (e.target && e.target.closest && e.target.closest("#msSaveBtn")) saveMeasurements(); });
 
 $("#saveBtn").addEventListener("click", async function(){
   var body = {
@@ -5934,6 +6031,7 @@ function renderWeightChart(w){
   updateHealthUI();
   loadHealthToday();
   renderFast();
+  loadLesson();
   applyGentle();
   loadToday();
   /* First launch on this device → explain + request all permissions together (no surprise prompts later). */

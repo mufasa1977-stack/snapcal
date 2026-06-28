@@ -161,7 +161,11 @@ def main():
             # gate ~5x/session (forcing a re-run). Suppress ONLY this exact pattern; real JS errors
             # (TypeError/ReferenceError + any other uncaught exception) still fail the gate.
             m = (msg or "").lower()
-            return "aborterror" in m and ("maplibre" in m or "_remove" in m or "_updatestyle" in m or "signal is aborted" in m)
+            # An AbortError is a cancelled in-flight fetch/request (a tab switch or browser teardown aborts
+            # it) — never an app bug. Suppress the maplibre tile/style variants AND the generic fetch abort
+            # ("the user aborted a request") that flakes when teardown races our extra tab-load fetches.
+            return "aborterror" in m and ("maplibre" in m or "_remove" in m or "_updatestyle" in m
+                                          or "signal is aborted" in m or "user aborted a request" in m)
 
         def on_console(m):
             t = m.text.lower()
@@ -775,6 +779,44 @@ def main():
               mr["name"] == "Test bowl" and mr["cal"] == 255 and mr["items"] == 2 and mr["gone"]
               and mr["sumCal"] == 255 and mr["sumPro"] == 6,
               "name=%s cal=%s items=%s gone=%s sum=%s/%s" % (mr["name"], mr["cal"], mr["items"], mr["gone"], mr["sumCal"], mr["sumPro"]))
+
+        # body measurements (shipped 2026-06-28): POST/GET /api/measurements round-trips; same-date partial logs
+        # keep prior fields (COALESCE upsert); latest/earliest power the "since you started" delta.
+        ms = page.evaluate("""async () => {
+            var H = { 'Content-Type':'application/json', 'X-Device-Id':'gate_ms' };
+            await fetch('/api/measurements', { method:'POST', headers:H, body: JSON.stringify({ date:'2099-03-01', waist:40, hip:44 }) });
+            await fetch('/api/measurements', { method:'POST', headers:H, body: JSON.stringify({ date:'2099-03-01', chest:42 }) });   // partial, same date
+            await fetch('/api/measurements', { method:'POST', headers:H, body: JSON.stringify({ date:'2099-03-15', waist:38 }) });    // newer date
+            var g = await (await fetch('/api/measurements?days=400', { headers:H })).json();
+            var byDate = {}; (g.measurements||[]).forEach(function(m){ byDate[m.date]=m; });
+            var d1 = byDate['2099-03-01'] || {};
+            return { d1waist:d1.waist, d1hip:d1.hip, d1chest:d1.chest,
+                     latestWaist:(g.latest||{}).waist, earliestWaist:(g.earliest||{}).waist, n:(g.measurements||[]).length };
+        }""")
+        check("measurements: POST/GET round-trips; same-date partial keeps prior fields; latest/earliest set",
+              ms["d1waist"] == 40 and ms["d1hip"] == 44 and ms["d1chest"] == 42
+              and ms["latestWaist"] == 38 and ms["earliestWaist"] == 40 and ms["n"] >= 2,
+              "d1=%s/%s/%s latest=%s earliest=%s n=%s" % (ms["d1waist"], ms["d1hip"], ms["d1chest"], ms["latestWaist"], ms["earliestWaist"], ms["n"]))
+
+        # daily lesson (shipped 2026-06-28): /api/lessons feeds a daily CBT micro-lesson card; "Got it" marks
+        # it read for the day and flips to the done state.
+        lsn = page.evaluate("""async () => {
+            switchTab('today');
+            try { localStorage.removeItem('snapcal_lesson_read'); } catch(e){}
+            _lessons = null; loadLesson();
+            await new Promise(function(r){ var t=0; var iv=setInterval(function(){ t+=50; if (document.querySelector('#lessonBody .lsn-title') || t>4000){ clearInterval(iv); r(); } }, 50); });
+            var html = (document.getElementById('lessonBody')||{}).innerHTML || '';
+            var hasTitle = !!document.querySelector('#lessonBody .lsn-title');
+            var hasTip = html.indexOf('Try it:') >= 0;
+            var btn = document.getElementById('lessonGotItBtn'); var hadBtn = !!btn;
+            if (btn) btn.click();
+            var doneHtml = (document.getElementById('lessonBody')||{}).innerHTML || '';
+            return { count: (_lessons||[]).length, hasTitle: hasTitle, hasTip: hasTip, hadBtn: hadBtn,
+                     done: doneHtml.indexOf('Done for today') >= 0, flag: !!localStorage.getItem('snapcal_lesson_read') };
+        }""")
+        check("lesson: daily CBT micro-lesson renders (title+tip); 'Got it' marks read + shows done state",
+              lsn["count"] >= 10 and lsn["hasTitle"] and lsn["hasTip"] and lsn["hadBtn"] and lsn["done"] and lsn["flag"],
+              "count=%s title=%s tip=%s done=%s flag=%s" % (lsn["count"], lsn["hasTitle"], lsn["hasTip"], lsn["done"], lsn["flag"]))
 
         # onboarding: first run shows #onboard; "Maybe later" sets the flag (lsSet namespaces snapcal_c_) + hides
         onb = page.evaluate("""() => {
