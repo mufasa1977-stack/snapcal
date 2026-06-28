@@ -2170,6 +2170,41 @@ def push_run():
     return jsonify({"sent": sent, "skipped": skipped, "dead": dead, "failed": failed, "total": len(rows)})
 
 
+@app.post("/api/push/test")
+def push_test():
+    """Send ONE check-in to the CALLING device immediately — bypasses the time-window + once-per-slot dedupe so a
+       user (or Tariq dogfooding) can confirm notifications work right now. Device-scoped: it can only push to its
+       OWN subscription (X-Device-Id), so it can't be used to spam others — no shared secret needed."""
+    con = get_db()
+    try:
+        row = con.execute("SELECT * FROM push_subs WHERE uid = ?", (_uid(),)).fetchone()
+    finally:
+        con.close()
+    if not row:
+        return jsonify({"error": "not_subscribed"}), 404
+    if not VAPID_PRIVATE:
+        return jsonify({"error": "push_not_configured"}), 503
+    try:
+        sub = json.loads(row["sub_json"])
+    except Exception:  # noqa: BLE001
+        return jsonify({"error": "bad_subscription"}), 400
+    local = _push_local_now(row["tz_offset_min"])
+    block = _brief_block(local.hour * 60 + local.minute)  # nearest block even outside a push window
+    body = _push_text_for(row, block)
+    result = _push_send(sub, {"title": "Test check-in 🔔", "body": body, "url": "/"})
+    if result == "ok":
+        return jsonify({"ok": True})
+    if result == "dead":
+        con = get_db()
+        try:
+            con.execute("DELETE FROM push_subs WHERE uid = ?", (_uid(),))
+            con.commit()
+        finally:
+            con.close()
+        return jsonify({"error": "subscription_expired"}), 410
+    return jsonify({"error": "send_failed"}), 502
+
+
 # ---- Coach Cal's VOICE: Gemini TTS, cached by text so common/repeated lines cost nothing after the 1st play ----
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 TTS_VOICE_DEFAULT = "Charon"

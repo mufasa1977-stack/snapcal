@@ -1200,6 +1200,7 @@
         <button class="btn btn-dark" id="pushToggle" type="button" style="margin-top:0;width:auto;padding:12px 18px">Turn on</button>
       </div>
       <div class="goal-desc" id="pushHint" style="margin:10px 2px 0;font-size:11.5px;display:none"></div>
+      <button class="btn" id="pushTest" type="button" style="margin-top:12px;display:none">Send me a test check-in</button>
     </div>
 
     <div class="card">
@@ -3659,8 +3660,9 @@ async function _pushSubObj(){
   catch (e) { return null; }
 }
 async function updatePushUI(){
-  var card = $("#pushCard"), st = $("#pushStatus"), btn = $("#pushToggle"), hint = $("#pushHint");
+  var card = $("#pushCard"), st = $("#pushStatus"), btn = $("#pushToggle"), hint = $("#pushHint"), testBtn = $("#pushTest");
   if (!card || !st || !btn) return;
+  if (testBtn) testBtn.style.display = "none";   // only shown when check-ins are ON (below)
   // iOS web push only works for an INSTALLED PWA (iOS 16.4+). Tell iPhone users to Add to Home Screen first.
   if (_isIOS() && !_isStandalone()){
     btn.style.display = "none";
@@ -3686,6 +3688,7 @@ async function updatePushUI(){
   st.textContent = on ? "On · morning, midday & evening nudges from Coach Cal."
                       : "Coach Cal nudges you morning, midday & evening — even when the app is closed.";
   btn.textContent = on ? "Turn off" : "Turn on";
+  if (testBtn) testBtn.style.display = on ? "" : "none";
 }
 async function enablePush(){
   if (!isPremium()){ openPaywall(); return; }
@@ -3736,6 +3739,20 @@ async function disablePush(){
     var sub = await _pushSubObj();
     if (sub && Notification.permission === "granted") disablePush();
     else enablePush();
+  });
+  var tbtn = $("#pushTest");
+  if (tbtn) tbtn.addEventListener("click", async function(){
+    tbtn.disabled = true; var old = tbtn.textContent; tbtn.textContent = "Sending…";
+    try {
+      await api("/api/push/test", { method: "POST" });
+      toast("🔔 Test check-in sent — watch for the notification");
+    } catch (e){
+      var m = (e && e.message) || "";
+      toast(/not_subscribed/.test(m) ? "Turn on check-ins first" :
+            /configured/.test(m)      ? "Server isn’t set up for push yet" :
+                                        "Couldn’t send a test — try again");
+    }
+    tbtn.disabled = false; tbtn.textContent = old;
   });
 })();
 
