@@ -815,6 +815,8 @@
       </button>
     </div>
 
+    <div id="todayCoach"></div>
+
     <div class="card ring-wrap">
       <div class="ring-box">
         <svg viewBox="0 0 200 200" aria-hidden="true">
@@ -2156,6 +2158,7 @@ function renderToday(){
   renderMacro("fat", int(todayData.totals.fat_g), int(profile.fat_g));
 
   schedulePrefetchCoach();
+  loadBriefing();
 
   var list = $("#mealsList");
   if (!todayData.meals.length) {
@@ -3037,6 +3040,55 @@ function speak(text){
   _ttsQueue = _ttsChunks(text);
   _ttsOn = true; _ttsStarted = false;
   _playChunk(text);
+}
+
+/* ---- Coach Cal DAILY MENTOR: a proactive, time-aware briefing at the top of Today.
+   Cached per (date + time-block) so it bills at most ~4x/day, never on every reopen. ---- */
+function _briefBlock(){
+  var h = new Date().getHours();
+  if (h < 11) return "morning";
+  if (h < 16) return "midday";
+  if (h < 21) return "evening";
+  return "late";
+}
+function _briefName(){
+  if (profile && profile.name) return String(profile.name);
+  try { return localStorage.getItem("snapcal_name") || ""; } catch(e){ return ""; }
+}
+function loadBriefing(){
+  var host = $("#todayCoach"); if (!host || typeof todayData === "undefined") return;
+  var block = _briefBlock();
+  var key = "brief_" + todayStr() + "_" + block;
+  var cached = null; try { cached = localStorage.getItem(key); } catch(e){}
+  if (cached){ _renderBriefing(cached, block); return; }
+  var dgoal = Math.max(int(profile.daily_calories), 1);
+  var eaten = int(todayData.totals.calories);
+  var payload = {
+    name: _briefName(), goal: goal, diet: dietLabel(_diet), allergies: allergyLabels(),
+    daily_calories: dgoal, remaining_calories: dgoal - eaten, eaten_calories: eaten,
+    protein_eaten_g: int(todayData.totals.protein_g), protein_target_g: int(profile.protein_g),
+    local_time: (function(){ try { return new Date().toLocaleTimeString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch(e){ return ""; } })()
+  };
+  api("/api/briefing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+    .then(function(r){ var t = (r && r.text) || ""; if (t){ try { localStorage.setItem(key, t); } catch(e){} _renderBriefing(t, block); } })
+    .catch(function(){});
+}
+function _renderBriefing(text, block){
+  var host = $("#todayCoach"); if (!host) return;
+  var icon = { morning: "🌅", midday: "☀️", evening: "🌙", late: "😴" }[block] || "💬";
+  host.innerHTML = '<div class="card" style="padding:14px 15px;margin-bottom:12px">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">' +
+      '<span style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#60A5FA,#2563EB);display:inline-flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="15" height="15" fill="#fff" aria-hidden="true"><rect x="2.5" y="9" width="8.6" height="5" rx="2.2"/><path fill-rule="evenodd" clip-rule="evenodd" d="M14 7a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm0 4.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg></span>' +
+      '<b style="font-size:14px">Coach Cal</b><span style="font-size:15px;margin-left:auto">' + icon + '</span>' +
+    '</div>' +
+    '<div style="font-size:14px;line-height:1.5">' + esc(text) + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:11px">' +
+      '<button id="briefChat" type="button" class="btn btn-dark" style="margin:0;flex:1;padding:9px">Talk to Coach Cal</button>' +
+      '<button id="briefSpeak" type="button" style="flex:0 0 auto;border:1.5px solid var(--line);background:transparent;color:var(--ink);border-radius:11px;padding:0 14px;font-weight:800;font-family:inherit;cursor:pointer" aria-label="Hear it">🔊</button>' +
+    '</div>' +
+  '</div>';
+  var c = $("#briefChat"); if (c) c.addEventListener("click", function(){ try { openCoachSheet(); } catch(e){} });
+  var s = $("#briefSpeak"); if (s) s.addEventListener("click", function(){ try { speak(text); } catch(e){} });
 }
 function _playChunk(fullText){
   if (!_ttsOn || !_ttsQueue.length){ _ttsOn = false; return; }

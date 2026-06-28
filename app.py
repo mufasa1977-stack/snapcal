@@ -1864,6 +1864,97 @@ def chat():
     return jsonify({"reply": reply or "I'm here — what can I help you with?"})
 
 
+# ---------- Coach Cal as a DAILY MENTOR: proactive time-aware briefing (the app's soul) ----------
+BRIEF_MODEL = "gemini-2.5-flash-lite"  # briefings are short + frequent + cached -> cheap model is fine (no place/city reasoning)
+_BLOCK_HINT = {
+    "morning": "It's morning. Greet them warmly, state today's target, and give ONE easy win to start strong (protein at breakfast, water, a short walk).",
+    "midday":  "It's midday. Note how they're doing vs target and how much room is left, then nudge a high-protein lunch.",
+    "evening": "It's evening. Quick review vs target — if they have room suggest a solid protein dinner; if over, reassure and set tomorrow up. Keep protein in focus.",
+    "late":    "It's late. Gently wrap the day: did they hit protein? remind to log dinner if not, one calming note to rest. Keep it light.",
+}
+
+
+def _brief_block(minutes):
+    if minutes is None:
+        return "midday"
+    if minutes < 11 * 60:
+        return "morning"
+    if minutes < 16 * 60:
+        return "midday"
+    if minutes < 21 * 60:
+        return "evening"
+    return "late"
+
+
+def _brief_fallback(block, name, daily, remaining, pe, pt, gd):
+    nm = (" " + name) if name else ""
+    rem = max(0, remaining)
+    left_p = max(0, pt - pe)
+    if block == "morning":
+        return ("Morning" + nm + "! Let's make today count - aim for about " + str(daily) + " cal and " + str(pt) +
+                "g protein for " + gd + ". Easy win: get protein in at breakfast and a glass of water. I've got you.")
+    if block == "midday":
+        return ("Midday check" + nm + " - you've got about " + str(rem) + " cal and " + str(left_p) +
+                "g protein left today. Make lunch a lean protein with veggies and you're right on track.")
+    if block == "evening":
+        if remaining > 0:
+            return ("Evening" + nm + " - nice work today. You've still got ~" + str(rem) + " cal of room, so a solid "
+                    "protein dinner fits perfectly. Aim to land near " + str(pt) + "g protein.")
+        return ("Evening" + nm + " - you're at your calorie goal for today, that's discipline. Keep dinner light and "
+                "protein-forward, and we'll tighten tomorrow. Proud of you.")
+    return ("Winding down" + nm + " - log dinner if you haven't, and check you hit your protein (" + str(pe) + "/" +
+            str(pt) + "g). Tomorrow's a fresh start - rest up.")
+
+
+@app.post("/api/briefing")
+def briefing():
+    d = request.get_json(silent=True) or {}
+    goal = str(d.get("goal") or "maintain").strip().lower()
+    if goal not in GOAL_LABELS:
+        goal = "maintain"
+    gd = GOAL_LABELS[goal]
+    name = re.sub(r"[^A-Za-z .'-]", "", str(d.get("name") or "")).strip()[:24]
+    lt = str(d.get("local_time") or "").strip()[:24]
+    _wd, minutes = _parse_local_time(lt) if lt else (None, None)
+    block = _brief_block(minutes)
+    daily = _int(d.get("daily_calories"), 2000)
+    remaining = _int(d.get("remaining_calories"), daily)
+    eaten = _int(d.get("eaten_calories"), 0)
+    pe = _int(d.get("protein_eaten_g"), 0)
+    pt = _int(d.get("protein_target_g"), 0)
+    diet = _norm_diet(d.get("diet")) or "no specific diet"
+    allergies = ", ".join(_norm_allergies(d.get("allergies"))) or "none"
+    fb = _brief_fallback(block, name, daily, remaining, pe, pt, gd)
+    prompt = (
+        "You are Coach Cal, a warm, upbeat health MENTOR (not a generic chatbot) checking in on your client"
+        + ((" " + name) if name else "") + ". Their goal: " + gd + ". Diet: " + diet + ". Allergies: " + allergies + ". "
+        "Today so far: eaten " + str(eaten) + " of " + str(daily) + " cal (" + str(max(0, remaining)) + " left), "
+        "protein " + str(pe) + " of " + str(pt) + "g. " + _BLOCK_HINT.get(block, _BLOCK_HINT["midday"]) +
+        " RULES: 2-3 sentences, under 320 characters, plain text (NO markdown, NO bullets), specific to their actual "
+        "numbers, encouraging and NEVER judgmental, end with ONE concrete next action. Never suggest a food they're allergic to."
+    )
+    try:
+        from google.genai import types
+        client = get_gemini_client()
+        cfg = types.GenerateContentConfig(max_output_tokens=200, temperature=0.5,
+                                          thinking_config=types.ThinkingConfig(thinking_budget=0))
+        txt = ""
+        for mdl in (BRIEF_MODEL, CHAT_MODEL):
+            try:
+                resp = client.models.generate_content(model=mdl, contents=[prompt], config=cfg)
+                txt = (resp.text or "").strip()
+                if txt:
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        if not txt:
+            raise ValueError("empty")
+        txt = txt.replace("**", "").replace("*", "").replace("—", " - ").replace("–", "-").strip()[:400]
+        return jsonify({"block": block, "text": txt})
+    except Exception:  # noqa: BLE001
+        return jsonify({"block": block, "text": fb, "degraded": True})
+
+
 # ---- Coach Cal's VOICE: Gemini TTS, cached by text so common/repeated lines cost nothing after the 1st play ----
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 TTS_VOICE_DEFAULT = "Charon"
