@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SnapCal — 3D Real</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070710; --card:rgba(22,24,38,.62); --line:rgba(255,255,255,.09);
+    --ink:#EEF0F6; --ink2:#A6ABC2; --ink3:#6b7088;
+    --gold:#F5C36B; --blue:#6E8AFF; --teal:#5BC0EB;
+    --pro:#5BC0EB; --carb:#F4B860; --fat:#E5897E;
+    --good:#42D69A; --ok:#F4B860; --warn:#F0795B;
+    --hi:inset 0 1px 0 rgba(255,255,255,.07);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{background:var(--bg);height:100%}
+  body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;color:var(--ink);overflow-x:hidden}
+  .num{font-variant-numeric:tabular-nums}
+  .phone{position:relative;width:100%;max-width:440px;min-height:100dvh;margin:0 auto;overflow:hidden;
+    background:radial-gradient(120% 50% at 50% 0%, #11132a 0%, #0a0a16 46%, #070710 100%)}
+
+  /* ===== live 3D hero ===== */
+  .hero{position:relative;height:430px;margin-bottom:-46px}
+  #scene{position:absolute;inset:0;width:100%;height:100%;z-index:2}
+  .bloom{position:absolute;left:50%;top:176px;width:330px;height:330px;transform:translate(-50%,-50%);z-index:1;
+    background:radial-gradient(circle, rgba(245,195,107,.34) 0%, rgba(110,138,255,.20) 34%, rgba(110,138,255,0) 66%);
+    filter:blur(18px);animation:breathe 6s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.8;transform:translate(-50%,-50%) scale(1)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}}
+  .herofade{position:absolute;left:0;right:0;bottom:0;height:150px;z-index:3;pointer-events:none;
+    background:linear-gradient(180deg, rgba(7,7,16,0) 0%, rgba(7,7,16,.55) 55%, var(--bg) 100%)}
+
+  .topbar{position:absolute;z-index:5;left:20px;right:20px;top:18px;display:flex;align-items:center;justify-content:space-between}
+  .topbar .hi{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:.04em}
+  .topbar h1{font-size:19px;font-weight:800;letter-spacing:-.03em;margin-top:1px}
+  .av{width:36px;height:36px;border-radius:50%;background:conic-gradient(from 200deg,#F5C36B,#6E8AFF,#5BC0EB,#F5C36B);padding:2px}
+  .av i{display:flex;width:100%;height:100%;border-radius:50%;background:#14152a;align-items:center;justify-content:center;font-weight:800;font-size:14px;font-style:normal}
+
+  .readout{position:absolute;z-index:5;left:0;right:0;bottom:34px;text-align:center;pointer-events:none}
+  .readout .big{font-size:62px;font-weight:800;letter-spacing:-.04em;line-height:.9;
+    text-shadow:0 2px 30px rgba(110,138,255,.45)}
+  .readout .u{font-size:12px;font-weight:600;color:var(--ink2);letter-spacing:.18em;margin-top:8px}
+  .readout .chip{display:inline-flex;align-items:center;gap:6px;margin-top:11px;padding:5px 12px;border-radius:999px;
+    background:rgba(66,214,154,.12);border:1px solid rgba(66,214,154,.3);color:var(--good);font-size:12px;font-weight:700}
+  .readout .chip .d{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 7px var(--good)}
+
+  /* ===== glass dashboard ===== */
+  .body{position:relative;z-index:4;padding:0 16px 130px}
+  .glass{background:var(--card);border:1px solid var(--line);border-radius:22px;
+    backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);
+    box-shadow:0 18px 40px rgba(0,0,0,.5),var(--hi)}
+
+  .strip{display:flex;padding:14px 6px;margin-bottom:13px}
+  .strip .s{flex:1;text-align:center;position:relative}
+  .strip .s+.s::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:1px;background:rgba(255,255,255,.08)}
+  .strip .v{font-size:18px;font-weight:800;letter-spacing:-.02em}
+  .strip .k{font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.12em;margin-top:3px}
+
+  .macros{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-bottom:13px}
+  .mac{padding:14px 6px 12px;display:flex;flex-direction:column;align-items:center;border-radius:18px}
+  .ring{position:relative;width:60px;height:60px}.ring svg{transform:rotate(-90deg)}
+  .ring .c{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+  .mac .nm{font-size:12px;font-weight:700;margin-top:8px;color:var(--ink)}
+  .mac .of{font-size:10.5px;font-weight:600;color:var(--ink3);margin-top:1px}
+
+  .coach{position:relative;padding:15px 15px 13px;margin-bottom:13px;border-radius:22px;overflow:hidden}
+  .coach::before{content:"";position:absolute;inset:0;background:radial-gradient(80% 90% at 0 0,rgba(245,195,107,.14),transparent 58%);pointer-events:none}
+  .coach .h{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  .coach .badge{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(145deg,#ffd98c,var(--gold));box-shadow:0 5px 13px rgba(245,195,107,.4)}
+  .coach .badge svg{width:17px;height:17px;stroke:#3a2a10}
+  .coach .t{font-size:14px;font-weight:800}.coach .s{font-size:11px;font-weight:600;color:var(--gold)}
+  .coach p{font-size:13px;line-height:1.5;color:var(--ink2);font-weight:500}
+  .coach p b{color:var(--ink);font-weight:700}
+
+  .scan{display:flex;align-items:center;gap:13px;width:100%;border:none;cursor:pointer;font-family:inherit;
+    background:linear-gradient(135deg,#ffd98c,var(--gold) 55%,#e6a945);border-radius:20px;padding:15px 17px;margin-bottom:22px;
+    box-shadow:0 14px 30px rgba(245,195,107,.4),inset 0 1px 0 rgba(255,255,255,.5)}
+  .scan .ic{width:42px;height:42px;border-radius:12px;background:rgba(60,40,10,.18);display:flex;align-items:center;justify-content:center}
+  .scan .ic svg{width:22px;height:22px;stroke:#3a2a10}
+  .scan .t{flex:1;text-align:left;color:#3a2a10}
+  .scan .t b{display:block;font-size:15.5px;font-weight:800}.scan .t span{font-size:12px;font-weight:600;opacity:.8}
+  .scan .arr{color:#3a2a10;font-size:19px;opacity:.7}
+
+  .sec{display:flex;align-items:center;justify-content:space-between;margin:0 4px 11px}
+  .sec h2{font-size:17px;font-weight:800;letter-spacing:-.02em}
+  .sec a{font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none}
+  .meal{display:flex;align-items:center;gap:12px;padding:10px 12px;margin-bottom:9px;border-radius:18px}
+  .meal .ph{width:44px;height:44px;border-radius:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:20px;border:1px solid rgba(255,255,255,.06)}
+  .meal .mid{flex:1;min-width:0}
+  .meal .nm{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meal .mt{font-size:11px;font-weight:600;color:var(--ink3);margin-top:2px}
+  .meal .rt{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+  .meal .kc{font-size:13.5px;font-weight:800}.meal .kc s{font-size:9.5px;color:var(--ink3);text-decoration:none;margin-left:1px}
+  .coin{width:29px;height:29px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:800;color:#08080f}
+
+  .nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;pointer-events:none;z-index:20}
+  .navbar{pointer-events:auto;display:flex;align-items:center;gap:5px;margin-bottom:20px;padding:8px 11px;
+    background:rgba(18,19,32,.7);border:1px solid rgba(255,255,255,.09);border-radius:23px;
+    backdrop-filter:blur(22px) saturate(150%);box-shadow:0 12px 34px rgba(0,0,0,.55)}
+  .nb{width:48px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--ink3);cursor:pointer}
+  .nb.on{color:var(--ink)} .nb svg{width:20px;height:20px} .nb span{font-size:9px;font-weight:700}
+  .fab{width:52px;height:52px;border-radius:17px;margin:0 2px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,#ffd98c,var(--gold));box-shadow:0 10px 22px rgba(245,195,107,.5),inset 0 1px 0 rgba(255,255,255,.5)}
+  .fab svg{width:25px;height:25px;stroke:#3a2a10}
+
+  @media (prefers-reduced-motion:reduce){.bloom{animation:none}}
+</style>
+<script type="importmap">
+{ "imports": { "three":"https://unpkg.com/three@0.184.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.184.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div class="phone">
+
+  <!-- live 3D hero -->
+  <div class="hero">
+    <div class="bloom"></div>
+    <canvas id="scene"></canvas>
+    <div class="herofade"></div>
+    <div class="topbar">
+      <div><div class="hi">Tuesday, Jun 23</div><h1>Good evening, Tariq</h1></div>
+      <div class="av"><i>T</i></div>
+    </div>
+    <div class="readout">
+      <div class="big num" id="big">1,420</div>
+      <div class="u">CALORIES LEFT</div>
+      <div class="chip"><span class="d"></span>On track for today</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="glass strip">
+      <div class="s"><div class="v num">580</div><div class="k">EATEN</div></div>
+      <div class="s"><div class="v num">2,000</div><div class="k">GOAL</div></div>
+      <div class="s"><div class="v num">120</div><div class="k">BURNED</div></div>
+    </div>
+
+    <div class="macros">
+      <div class="glass mac"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="6"/><circle cx="30" cy="30" r="24" fill="none" stroke="var(--pro)" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="52.8"/></svg><div class="c" style="color:var(--pro)">65%</div></div><div class="nm">Protein</div><div class="of num">98/150g</div></div>
+      <div class="glass mac"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="6"/><circle cx="30" cy="30" r="24" fill="none" stroke="var(--carb)" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="90.5"/></svg><div class="c" style="color:var(--carb)">40%</div></div><div class="nm">Carbs</div><div class="of num">80/200g</div></div>
+      <div class="glass mac"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="6"/><circle cx="30" cy="30" r="24" fill="none" stroke="var(--fat)" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="105.6"/></svg><div class="c" style="color:var(--fat)">30%</div></div><div class="nm">Fat</div><div class="of num">20/65g</div></div>
+    </div>
+
+    <div class="glass coach">
+      <div class="h"><div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 6V3M5 8 3.5 6.5M19 8l1.5-1.5"/><circle cx="12" cy="14" r="2.2"/></svg></div><div><div class="t">Coach Cal</div><div class="s">Your move right now</div></div></div>
+      <p>You've got <b>1,420 left</b> and you're 52g short on protein. A <b>grilled chicken bowl</b> closes the gap perfectly.</p>
+    </div>
+
+    <button class="scan">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L8 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-4l-1.5-2Z"/><circle cx="12" cy="13" r="4"/></svg></span>
+      <span class="t"><b>Snap a meal</b><span>Calories &amp; macros in 2 seconds</span></span>
+      <span class="arr">›</span>
+    </button>
+
+    <div class="sec"><h2>Today's meals</h2><a href="#">See all</a></div>
+    <div class="glass meal"><div class="ph" style="background:linear-gradient(145deg,#1d2a1f,#16201a)">🥗</div><div class="mid"><div class="nm">Grilled chicken &amp; quinoa bowl</div><div class="mt">P 42g · C 38g · F 14g · 1:10 PM</div></div><div class="rt"><div class="kc num">420<s>cal</s></div><div class="coin" style="background:var(--good)">92</div></div></div>
+    <div class="glass meal"><div class="ph" style="background:linear-gradient(145deg,#2a2415,#201b12)">🥑</div><div class="mid"><div class="nm">Avocado toast &amp; eggs</div><div class="mt">P 18g · C 32g · F 22g · 8:30 AM</div></div><div class="rt"><div class="kc num">390<s>cal</s></div><div class="coin" style="background:var(--ok)">71</div></div></div>
+    <div class="glass meal"><div class="ph" style="background:linear-gradient(145deg,#2a1a18,#201413)">🍩</div><div class="mid"><div class="nm">Glazed donut</div><div class="mt">P 4g · C 34g · F 14g · 10:45 AM</div></div><div class="rt"><div class="kc num">270<s>cal</s></div><div class="coin" style="background:var(--warn)">28</div></div></div>
+  </div>
+</div>
+
+<div class="nav"><div class="navbar">
+  <div class="nb on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span>Home</span></div>
+  <div class="nb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Trends</span></div>
+  <div class="fab"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+  <div class="nb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 6V3M5 8 3.5 6.5M19 8l1.5-1.5"/><circle cx="12" cy="14" r="2.2"/></svg><span>Coach</span></div>
+  <div class="nb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><span>Profile</span></div>
+</div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const canvas=document.getElementById('scene');
+const W=()=>canvas.clientWidth, H=()=>canvas.clientHeight;
+const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(W(),H(),false);
+renderer.setClearAlpha(0);
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(38, W()/H(), 0.1, 100);
+camera.position.set(0,0,5.2);
+const pmrem=new THREE.PMREMGenerator(renderer);
+scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+
+const group=new THREE.Group(); scene.add(group);
+
+// glowing energy core
+const core=new THREE.Mesh(
+  new THREE.IcosahedronGeometry(0.84,2),
+  new THREE.MeshStandardMaterial({color:0xffe6b0,emissive:0xffb347,emissiveIntensity:2.4,roughness:.35,metalness:.1})
+);
+group.add(core);
+
+// faceted glass / liquid-metal shell around the core
+const shell=new THREE.Mesh(
+  new THREE.IcosahedronGeometry(1.32,1),
+  new THREE.MeshPhysicalMaterial({color:0x9fb4ff,metalness:.55,roughness:.06,clearcoat:1,clearcoatRoughness:.04,
+    iridescence:1,iridescenceIOR:1.5,iridescenceThicknessRange:[120,520],envMapIntensity:2.6,
+    transparent:true,opacity:.62,side:THREE.DoubleSide})
+);
+group.add(shell);
+
+// thin reflective bands (orbit rings)
+const ringMat=new THREE.MeshPhysicalMaterial({color:0xffffff,metalness:1,roughness:.04,clearcoat:1,envMapIntensity:2.8});
+for(let i=0;i<3;i++){
+  const r=new THREE.Mesh(new THREE.TorusGeometry(1.55+i*0.06,0.012,24,200),ringMat);
+  r.rotation.x=1.1+i*0.5; r.rotation.y=i*0.7; group.add(r);
+}
+
+// particle streams
+const N=420, pos=new Float32Array(N*3), col=new Float32Array(N*3);
+const cGold=new THREE.Color(0xffce86), cBlue=new THREE.Color(0x7c9bff);
+for(let i=0;i<N;i++){
+  const rad=1.5+Math.random()*1.7, th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1);
+  pos[i*3]=rad*Math.sin(ph)*Math.cos(th); pos[i*3+1]=rad*Math.cos(ph)*0.8; pos[i*3+2]=rad*Math.sin(ph)*Math.sin(th);
+  const c=Math.random()<0.5?cGold:cBlue; col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
+}
+const pg=new THREE.BufferGeometry();
+pg.setAttribute('position',new THREE.BufferAttribute(pos,3));
+pg.setAttribute('color',new THREE.BufferAttribute(col,3));
+const particles=new THREE.Points(pg,new THREE.PointsMaterial({size:0.035,vertexColors:true,transparent:true,opacity:.9,
+  blending:THREE.AdditiveBlending,depthWrite:false}));
+group.add(particles);
+
+// lights
+const key=new THREE.DirectionalLight(0xffe7c0,2.2); key.position.set(3,3,4); scene.add(key);
+const rim=new THREE.DirectionalLight(0x6e8aff,2.4); rim.position.set(-3,-1.5,2); scene.add(rim);
+scene.add(new THREE.AmbientLight(0xffffff,.18));
+const pt=new THREE.PointLight(0xffb347,2.2,12); pt.position.set(0,0,0); group.add(pt);
+
+let pX=0,pY=0,tX=0,tY=0;
+addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect();
+  tX=((e.clientX-r.left)/r.width*2-1); tY=((e.clientY-r.top)/r.height*2-1);});
+addEventListener('deviceorientation',e=>{if(e.gamma!=null){tX=Math.max(-1,Math.min(1,e.gamma/22));tY=Math.max(-1,Math.min(1,(e.beta-45)/22));}});
+
+function resize(){renderer.setSize(W(),H(),false);camera.aspect=W()/H();camera.updateProjectionMatrix();}
+addEventListener('resize',resize);
+
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+let t=0;
+function loop(){
+  pX+=(tX-pX)*0.06; pY+=(tY-pY)*0.06; t+=0.0045;
+  group.rotation.y = (reduce?0.5:t) + pX*0.5;
+  group.rotation.x = -0.12 + pY*0.4;
+  particles.rotation.y = -t*1.3;
+  shell.rotation.y = t*0.6; shell.rotation.z = t*0.3;
+  const pulse=1+Math.sin(t*7)*0.04; core.scale.setScalar(reduce?1:pulse);
+  pt.intensity=2.0+Math.sin(t*7)*0.5;
+  renderer.render(scene,camera);
+  if(!reduce) requestAnimationFrame(loop);
+}
+loop();
+// render a couple extra frames even in reduced-motion so it's not blank
+if(reduce){renderer.render(scene,camera);}
+
+// count-up
+const big=document.getElementById('big');
+if(!reduce){let v=0;const tgt=1420;const t0=performance.now();
+ (function up(now){const k=Math.min(1,(now-t0)/1100),e=1-Math.pow(1-k,3);big.textContent=Math.round(tgt*e).toLocaleString();if(k<1)requestAnimationFrame(up);})(t0);}
+</script>
+</body>
+</html>

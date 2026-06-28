@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SnapCal — Bright Premium</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F1ECE2; --bg2:#F6F2EA; --card:#FBF9F4; --line:#E7E0D2;
+    --ink:#2A332C; --ink2:#6E756B; --ink3:#A7A99B;
+    --sage:#6E8870; --sage-d:#566E58; --sage-l:#9DB39C; --gold:#C2A368;
+    --track:#E6E0D2;
+    --good:#6E8870; --ok:#C2A368; --warn:#C77B5B;
+    --ease:cubic-bezier(.22,.61,.36,1);
+    --sh:0 10px 30px rgba(70,62,44,.09);
+    --sh2:0 18px 44px rgba(70,62,44,.13);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+  html,body{height:100%;background:var(--bg)}
+  body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    color:var(--ink);display:flex;justify-content:center}
+  .num{font-variant-numeric:tabular-nums}
+  .phone{position:relative;width:100%;max-width:440px;min-height:100dvh;background:var(--bg);overflow:hidden}
+
+  /* hero art */
+  .hero{position:relative;height:362px}
+  .hero .img{position:absolute;inset:0;background:url('/img/hero_bright_ceramic.png') center 72% / cover no-repeat}
+  .hero .fade{position:absolute;left:0;right:0;bottom:0;height:120px;background:linear-gradient(180deg,rgba(241,236,226,0),var(--bg) 95%)}
+  .hero .topscrim{position:absolute;left:0;right:0;top:0;height:120px;background:linear-gradient(180deg,rgba(243,239,231,.92),rgba(243,239,231,0))}
+  .hero .top{position:absolute;z-index:2;left:22px;right:22px;top:22px;display:flex;align-items:flex-start;justify-content:space-between}
+  .hero .top .d{font-size:12px;font-weight:600;color:#8a8576;letter-spacing:.06em;text-transform:uppercase}
+  .hero .top h1{font-family:"Fraunces",serif;font-size:27px;font-weight:600;letter-spacing:-.01em;margin-top:4px;color:#3a4038}
+  .hero .top .av{width:40px;height:40px;border-radius:50%;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:15px;color:var(--sage-d);box-shadow:var(--sh)}
+
+  .body{position:relative;padding:0 18px 40px;margin-top:-6px}
+
+  /* ring */
+  .ringwrap{display:flex;flex-direction:column;align-items:center;margin-bottom:8px}
+  .stage{position:relative;width:286px;height:286px;touch-action:none}
+  .stage svg{position:absolute;inset:0}
+  .knob{position:absolute;width:26px;height:26px;border-radius:50%;background:#fff;border:3px solid var(--sage);
+    box-shadow:0 5px 14px rgba(86,110,88,.4),0 1px 2px rgba(0,0,0,.12);transform:translate(-50%,-50%);cursor:grab;z-index:3}
+  .knob:active{cursor:grabbing}
+  .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .ctr .pre{font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.18em}
+  .ctr .big{font-size:66px;font-weight:800;letter-spacing:-.04em;line-height:.94;color:var(--ink)}
+  .ctr .lbl{font-size:12.5px;font-weight:600;color:var(--ink2);margin-top:5px}
+  .ctr .hint{display:flex;align-items:center;gap:6px;margin-top:14px;font-size:11px;font-weight:600;color:var(--ink2);
+    background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 12px;box-shadow:var(--sh)}
+  .ctr .hint svg{width:12px;height:12px;stroke:var(--sage)}
+
+  /* stat row */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px 10px 14px;display:flex;flex-direction:column;
+    align-items:center;gap:9px;box-shadow:var(--sh)}
+  .stat .ic{width:36px;height:36px;border-radius:50%;background:#EFEDE3;display:flex;align-items:center;justify-content:center}
+  .stat .ic svg{width:18px;height:18px;stroke:var(--sage-d);fill:none}
+  .stat .v{font-size:16px;font-weight:800;letter-spacing:-.02em}
+  .stat .k{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:.02em}
+
+  /* coach */
+  .coach{display:flex;align-items:center;gap:13px;margin-top:14px;background:var(--card);border:1px solid var(--line);
+    border-radius:22px;padding:15px 16px;box-shadow:var(--sh);position:relative;overflow:hidden}
+  .coach::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--sage-l),var(--gold))}
+  .coach .badge{width:42px;height:42px;border-radius:13px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(145deg,#7e977f,var(--sage-d));box-shadow:0 7px 16px rgba(86,110,88,.32)}
+  .coach .badge svg{width:21px;height:21px;stroke:#fff;fill:none}
+  .coach .t b{font-size:14px;font-weight:800;display:block;letter-spacing:-.01em}
+  .coach .t span{font-size:12.5px;color:var(--ink2);font-weight:500;line-height:1.45;display:block;margin-top:2px}
+  .coach .t span em{font-style:normal;color:var(--sage-d);font-weight:700}
+
+  .sec{display:flex;align-items:center;justify-content:space-between;margin:24px 4px 12px}
+  .sec h2{font-family:"Fraunces",serif;font-size:19px;font-weight:600;letter-spacing:-.01em}
+  .sec a{font-size:12.5px;font-weight:700;color:var(--sage-d);text-decoration:none}
+  .meal{display:flex;align-items:center;gap:13px;background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:11px 13px;margin-bottom:10px;box-shadow:var(--sh)}
+  .meal .ph{width:46px;height:46px;border-radius:13px;flex:0 0 auto;background-size:cover;background-position:center;border:1px solid var(--line)}
+  .meal .mid{flex:1;min-width:0}
+  .meal .nm{font-size:14px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meal .mt{font-size:11.5px;font-weight:600;color:var(--ink3);margin-top:2px}
+  .meal .rt{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+  .meal .kc{font-size:14px;font-weight:800;letter-spacing:-.02em}.meal .kc s{font-size:10px;color:var(--ink3);text-decoration:none;margin-left:1px}
+  .score{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800}
+  .score .dot{width:8px;height:8px;border-radius:50%}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="hero">
+    <div class="img"></div>
+    <div class="topscrim"></div>
+    <div class="fade"></div>
+    <div class="top">
+      <div><div class="d">Tuesday · June 23</div><h1>Good morning, Tariq</h1></div>
+      <div class="av">T</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="ringwrap">
+      <div class="stage" id="stage">
+        <svg width="286" height="286" viewBox="0 0 286 286">
+          <defs>
+            <linearGradient id="grad" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0" stop-color="#9DB39C"/><stop offset="1" stop-color="#566E58"/>
+            </linearGradient>
+          </defs>
+          <path d="M58.7 227.3 A119 119 0 1 1 227.3 227.3" fill="none" stroke="var(--track)" stroke-width="14" stroke-linecap="round"/>
+          <path id="prog" d="M58.7 227.3 A119 119 0 1 1 227.3 227.3" fill="none" stroke="url(#grad)" stroke-width="14"
+            stroke-linecap="round" pathLength="100" stroke-dasharray="61 100"/>
+        </svg>
+        <div class="knob" id="knob"></div>
+        <div class="ctr">
+          <div class="pre">CALORIES LEFT</div>
+          <div class="big num" id="big">1,650</div>
+          <div class="lbl">of 2,000 today</div>
+          <div class="hint"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>Drag to set your target</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><span class="ic"><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3-1 4-1 6 0 1 1 2 2 2 1.4 0 2-1 2-2 1.8 1.4 3 3.6 3 6a6 6 0 1 1-12 0c0-2.6 1.6-4.6 3-6 .4 1.6 1.8 1.6 1.8 0 0-2.6 .9-4.4 1.2-6Z"/></svg></span><span class="v num">350</span><span class="k">Burned</span></div>
+      <div class="stat"><span class="ic"><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20c-2 0-3-1.6-3-4s.4-5 2-6 3 .8 3 3-1 5-2 7Z"/><path d="M16 22c-1.6 0-2-1.6-2-3.5s.8-4 1-6"/><path d="M14 6c0-2 1-3 2.6-3S19 4.6 19 6.6s-.8 3.6-2.6 4.4"/></svg></span><span class="v num">6,420</span><span class="k">Steps</span></div>
+      <div class="stat"><span class="ic"><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.4 6 11a6 6 0 0 1-12 0c0-4.6 6-11 6-11Z"/></svg></span><span class="v num">5</span><span class="k">Glasses</span></div>
+    </div>
+
+    <div class="coach">
+      <span class="badge"><svg viewBox="0 0 24 24" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 6V3M5 8 3.5 6.5M19 8l1.5-1.5"/><circle cx="12" cy="14" r="2.2"/></svg></span>
+      <span class="t"><b>Coach Cal</b><span>You're 52g short on protein — a <em>grilled chicken bowl</em> closes the gap perfectly.</span></span>
+    </div>
+
+    <div class="sec"><h2>Today's meals</h2><a href="#">See all</a></div>
+    <div class="meal"><div class="ph" style="background-image:linear-gradient(145deg,#dfe6da,#cdd8c8)"></div><div class="mid"><div class="nm">Grilled chicken &amp; quinoa bowl</div><div class="mt">P 42g · C 38g · F 14g · 1:10 PM</div></div><div class="rt"><div class="kc num">420<s>cal</s></div><div class="score" style="color:var(--good)"><span class="dot" style="background:var(--good)"></span>92</div></div></div>
+    <div class="meal"><div class="ph" style="background-image:linear-gradient(145deg,#efe6cf,#e6d6b6)"></div><div class="mid"><div class="nm">Avocado toast &amp; eggs</div><div class="mt">P 18g · C 32g · F 22g · 8:30 AM</div></div><div class="rt"><div class="kc num">390<s>cal</s></div><div class="score" style="color:var(--ok)"><span class="dot" style="background:var(--ok)"></span>71</div></div></div>
+    <div class="meal"><div class="ph" style="background-image:linear-gradient(145deg,#efd9cf,#e6c2b2)"></div><div class="mid"><div class="nm">Glazed donut</div><div class="mt">P 4g · C 34g · F 14g · 10:45 AM</div></div><div class="rt"><div class="kc num">270<s>cal</s></div><div class="score" style="color:var(--warn)"><span class="dot" style="background:var(--warn)"></span>28</div></div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var MAX=3000;
+  var stage=document.getElementById('stage'), prog=document.getElementById('prog'),
+      knob=document.getElementById('knob'), big=document.getElementById('big');
+  var R=119, CX=143, CY=143, START=225, SWEEP=270;
+  var frac=1650/MAX;
+  function render(){
+    prog.setAttribute('stroke-dasharray',(frac*100).toFixed(2)+' 100');
+    var deg=START+frac*SWEEP, rad=deg*Math.PI/180;
+    var x=CX+R*Math.sin(rad), y=CY-R*Math.cos(rad);
+    knob.style.left=(x/286*100)+'%'; knob.style.top=(y/286*100)+'%';
+    big.textContent=Math.round(frac*MAX).toLocaleString();
+  }
+  render();
+  function setFromPoint(cx,cy){
+    var r=stage.getBoundingClientRect();
+    var dx=cx-(r.left+r.width/2), dy=cy-(r.top+r.height/2);
+    var deg=Math.atan2(dx,-dy)*180/Math.PI; if(deg<0)deg+=360;
+    var pos;
+    if(deg>=START) pos=deg-START;
+    else if(deg<=START-360+SWEEP) pos=deg+(360-START);
+    else pos=(deg<180)?SWEEP:0;
+    frac=Math.max(0,Math.min(1,pos/SWEEP)); render();
+  }
+  var drag=false;
+  stage.addEventListener('pointerdown',function(e){drag=true;stage.setPointerCapture(e.pointerId);setFromPoint(e.clientX,e.clientY);});
+  stage.addEventListener('pointermove',function(e){if(drag)setFromPoint(e.clientX,e.clientY);});
+  var stop=function(){drag=false;};
+  stage.addEventListener('pointerup',stop); stage.addEventListener('pointercancel',stop);
+  window.__set=function(c){frac=c/MAX;render();};
+})();
+</script>
+</body>
+</html>

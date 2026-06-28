@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SnapCal — Bright Ring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F8F5; --glow:#FFFFFF; --card:#FFFFFF; --line:#E7EDE9;
+    --ink:#16241D; --ink2:#5C6B63; --ink3:#9AA8A0;
+    --g1:#3BE6A6; --g2:#12B5C9; --green:#10B981; --flame:#FF8A4C; --water:#4FB6F5; --steps:#9B7BFF;
+    --track:#E8EEEA;
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+  html,body{height:100%;background:var(--bg)}
+  body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    color:var(--ink);display:flex;justify-content:center}
+  .num{font-variant-numeric:tabular-nums}
+  .phone{position:relative;width:100%;max-width:440px;min-height:100dvh;padding:26px 20px 40px;
+    background:radial-gradient(120% 60% at 50% 0%, var(--glow) 0%, var(--bg) 60%)}
+
+  .top{display:flex;align-items:center;justify-content:space-between;margin:2px 4px 6px}
+  .top .d{font-size:13px;font-weight:600;color:var(--ink3)}
+  .top h1{font-size:24px;font-weight:800;letter-spacing:-.03em;margin-top:2px}
+  .top .av{width:42px;height:42px;border-radius:50%;background:linear-gradient(140deg,var(--g1),var(--g2));padding:2px;box-shadow:0 6px 16px rgba(18,181,201,.3)}
+  .top .av i{display:flex;width:100%;height:100%;border-radius:50%;background:#fff;align-items:center;justify-content:center;font-weight:800;font-size:15px;font-style:normal;color:var(--green)}
+
+  /* ring */
+  .stage{position:relative;width:300px;height:300px;margin:18px auto 6px;touch-action:none}
+  .stage svg{position:absolute;inset:0}
+  .knob{position:absolute;width:30px;height:30px;border-radius:50%;background:#fff;
+    border:4px solid var(--g1);box-shadow:0 6px 16px rgba(18,181,201,.45),0 1px 2px rgba(0,0,0,.15);
+    transform:translate(-50%,-50%);cursor:grab;z-index:3}
+  .knob:active{cursor:grabbing}
+  .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .ctr .pre{font-size:12px;font-weight:700;color:var(--ink3);letter-spacing:.16em}
+  .ctr .big{font-size:68px;font-weight:800;letter-spacing:-.04em;line-height:.92;background:linear-gradient(135deg,#0e9c79,#0aa6bf);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .ctr .lbl{font-size:13px;font-weight:600;color:var(--ink2);letter-spacing:.02em;margin-top:4px}
+  .ctr .hint{display:flex;align-items:center;gap:6px;margin-top:14px;font-size:11.5px;font-weight:600;color:var(--ink3);
+    background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 12px;box-shadow:0 3px 10px rgba(20,40,30,.06)}
+  .ctr .hint svg{width:13px;height:13px;stroke:var(--g2)}
+
+  /* health/fitness stat row */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:26px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:15px 10px 13px;display:flex;flex-direction:column;
+    align-items:center;gap:8px;box-shadow:0 6px 18px rgba(20,40,30,.05)}
+  .stat .ic{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center}
+  .stat .ic svg{width:20px;height:20px}
+  .stat .v{font-size:16px;font-weight:800;letter-spacing:-.02em}
+  .stat .k{font-size:11px;font-weight:600;color:var(--ink3)}
+  .i-flame{background:rgba(255,138,76,.13)} .i-flame svg{stroke:var(--flame)}
+  .i-steps{background:rgba(155,123,255,.13)} .i-steps svg{stroke:var(--steps)}
+  .i-water{background:rgba(79,182,245,.13)} .i-water svg{stroke:var(--water)}
+
+  .move{display:flex;align-items:center;gap:13px;margin-top:16px;background:linear-gradient(120deg,#eafff6,#e7fbff);
+    border:1px solid #d6f2e9;border-radius:22px;padding:15px 16px}
+  .move .badge{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+    background:linear-gradient(140deg,var(--g1),var(--g2));box-shadow:0 8px 18px rgba(18,181,201,.35)}
+  .move .badge svg{width:22px;height:22px;stroke:#fff}
+  .move .t b{font-size:14px;font-weight:800;display:block}
+  .move .t span{font-size:12.5px;color:var(--ink2);font-weight:500}
+
+  .tag{display:block;text-align:center;margin-top:22px;font-size:12px;color:var(--ink3);font-weight:500}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="top">
+    <div><div class="d">Tuesday, June 23</div><h1>Good morning, Tariq</h1></div>
+    <div class="av"><i>T</i></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg width="300" height="300" viewBox="0 0 300 300">
+      <defs>
+        <linearGradient id="grad" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stop-color="#3BE6A6"/><stop offset="1" stop-color="#12B5C9"/>
+        </linearGradient>
+      </defs>
+      <path d="M61.5 238.5 A125 125 0 1 1 238.5 238.5" fill="none" stroke="var(--track)" stroke-width="18" stroke-linecap="round"/>
+      <path id="prog" d="M61.5 238.5 A125 125 0 1 1 238.5 238.5" fill="none" stroke="url(#grad)" stroke-width="18"
+        stroke-linecap="round" pathLength="100" stroke-dasharray="61 100"/>
+    </svg>
+    <div class="knob" id="knob"></div>
+    <div class="ctr">
+      <div class="pre">CALORIES LEFT</div>
+      <div class="big num" id="big">1,650</div>
+      <div class="lbl">of 2,000 today</div>
+      <div class="hint"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>Drag the ring to set your day</div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="ic i-flame"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1 3-1 4-1 6 0 1 1 2 2 2 1.5 0 2-1 2-2 2 1.5 4 4 4 7a7 7 0 1 1-14 0c0-3 2-5 3-7 .5 2 2 2 2 0 0-3 1-5 2-6Z"/></svg></span><span class="v num">350</span><span class="k">Burned</span></div>
+    <div class="stat"><span class="ic i-steps"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 19c-2 0-3-2-3-4s0-5 2-6 3 1 3 3-1 5-2 7Z"/><path d="M17 21c-2 0-2-2-2-4s1-4 1-6"/><path d="M13 5c0-2 1-3 3-3s3 2 3 4-1 4-3 5"/></svg></span><span class="v num">6,420</span><span class="k">Steps</span></div>
+    <div class="stat"><span class="ic i-water"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z"/></svg></span><span class="v num">5</span><span class="k">Glasses</span></div>
+  </div>
+
+  <div class="move">
+    <span class="badge"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5h11M6.5 17.5h11M4 6.5h.01M20 6.5h.01M4 17.5h.01M20 17.5h.01M9 12h6M7 9.5v5M17 9.5v5"/></svg></span>
+    <span class="t"><b>You're on a 12-day streak 🔥</b><span>Keep moving — 1,650 calories to play with today.</span></span>
+  </div>
+
+  <span class="tag">Spin the ring up or down to set today's target</span>
+</div>
+
+<script>
+(function(){
+  var MAX=3000, GOAL=2000;
+  var stage=document.getElementById('stage'), prog=document.getElementById('prog'),
+      knob=document.getElementById('knob'), big=document.getElementById('big');
+  var R=125, CX=150, CY=150;           // svg user units; stage is 300x300 => 1:1 with px
+  var START=225, SWEEP=270;            // degrees clockwise-from-top: arc from 7:30 around to 4:30
+  var frac=1650/MAX;
+
+  function render(){
+    prog.setAttribute('stroke-dasharray', (frac*100).toFixed(2)+' 100');
+    var deg=START+frac*SWEEP, rad=deg*Math.PI/180;
+    var x=CX+R*Math.sin(rad), y=CY-R*Math.cos(rad);
+    knob.style.left=(x/300*100)+'%'; knob.style.top=(y/300*100)+'%';
+    big.textContent=Math.round(frac*MAX).toLocaleString();
+  }
+  render();
+
+  function setFromPoint(clientX,clientY){
+    var r=stage.getBoundingClientRect();
+    var dx=clientX-(r.left+r.width/2), dy=clientY-(r.top+r.height/2);
+    var deg=Math.atan2(dx,-dy)*180/Math.PI; if(deg<0)deg+=360;   // clockwise from top, 0..360
+    var pos;
+    if(deg>=START) pos=deg-START;                 // 225..360 -> 0..135
+    else if(deg<=START-360+SWEEP) pos=deg+(360-START); // 0..135 -> 135..270
+    else pos=(deg<180)?SWEEP:0;                    // bottom gap -> snap to nearest end
+    frac=Math.max(0,Math.min(1,pos/SWEEP));
+    render();
+  }
+
+  var drag=false;
+  stage.addEventListener('pointerdown',function(e){drag=true;stage.setPointerCapture(e.pointerId);setFromPoint(e.clientX,e.clientY);});
+  stage.addEventListener('pointermove',function(e){if(drag)setFromPoint(e.clientX,e.clientY);});
+  var stop=function(){drag=false;};
+  stage.addEventListener('pointerup',stop); stage.addEventListener('pointercancel',stop);
+
+  // expose for screenshot driving
+  window.__set=function(cal){frac=cal/MAX;render();};
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SnapCal — Spin Wheel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EDE6D8; --card:#FFFFFF; --line:#ECE4D4;
+    --ink:#1A211C; --ink2:#49514A; --ink3:#79806F;
+    --sage:#2FA877; --sage-d:#1E8C63; --sage-l:#7FCBA2; --gold:#D49A33;
+    --track:#ECE5D6; --tick:#D7CFBD; --tickM:#B9B19D;
+    --sh:0 16px 36px rgba(40,34,20,.13),0 3px 9px rgba(40,34,20,.06);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+  html,body{height:100%;background:var(--bg)}
+  body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    color:var(--ink);display:flex;justify-content:center}
+  .num{font-variant-numeric:tabular-nums}
+  .serif{font-family:"Fraunces",serif}
+  .phone{position:relative;width:100%;max-width:440px;min-height:100dvh;padding:24px 18px 40px;
+    background:radial-gradient(120% 40% at 100% 0%,#F4EEE2 0%,var(--bg) 55%)}
+  .top{display:flex;align-items:center;justify-content:space-between;margin:2px 2px 18px}
+  .top .d{font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase}
+  .top h1{font-size:25px;font-weight:600;letter-spacing:-.01em;margin-top:3px}
+
+  .ringcard{background:var(--card);border:1px solid var(--line);border-radius:26px;box-shadow:var(--sh);padding:22px 16px 20px}
+  .stage{position:relative;width:288px;height:288px;margin:0 auto;touch-action:none;cursor:grab}
+  .stage:active{cursor:grabbing}
+  .stage svg{position:absolute;inset:0;pointer-events:none}
+  .pointer{position:absolute;left:50%;top:2px;transform:translateX(-50%);z-index:4;pointer-events:none}
+  .pointer svg{width:26px;height:20px}
+  .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;padding:0 46px}
+  .ctr .pre{font-size:10.5px;font-weight:800;color:var(--ink3);letter-spacing:.16em}
+  .ctr .big{font-size:58px;font-weight:800;letter-spacing:-.04em;line-height:.96;margin-top:3px}
+  .ctr .sub{font-size:12.5px;font-weight:600;color:var(--ink2);margin-top:7px}
+  .ctr .sub b{color:var(--sage-d);font-weight:800}
+  .pm{display:flex;align-items:center;justify-content:center;gap:20px;margin-top:13px;pointer-events:auto}
+  .pm button{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--sage-d);
+    font-size:18px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;
+    box-shadow:0 3px 9px rgba(40,34,20,.12);font-family:inherit;transition:transform .08s,background .12s}
+  .pm button:active{transform:scale(.86);background:var(--bg)}
+  .hint{text-align:center;font-size:10.5px;font-weight:700;color:var(--ink3);letter-spacing:.04em;margin-top:16px;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="top"><div><div class="d">Tuesday · June 23</div><h1 class="serif">Good morning, Tariq</h1></div></div>
+
+  <div class="ringcard">
+    <div class="stage" id="stage">
+      <svg width="288" height="288" viewBox="0 0 288 288">
+        <defs><linearGradient id="prog" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#7FCBA2"/><stop offset="1" stop-color="#1E8C63"/></linearGradient></defs>
+        <g transform="rotate(-90 144 144)">
+          <circle cx="144" cy="144" r="96" fill="none" stroke="var(--track)" stroke-width="9"/>
+          <circle id="parc" cx="144" cy="144" r="96" fill="none" stroke="url(#prog)" stroke-width="9" stroke-linecap="round" pathLength="100" stroke-dasharray="20 100"/>
+        </g>
+        <g id="ticks"></g>
+      </svg>
+      <div class="pointer"><svg viewBox="0 0 26 20"><path d="M13 19 L3 3 Q13 9 23 3 Z" fill="#1E8C63"/></svg></div>
+      <div class="ctr">
+        <div class="pre">DAILY CALORIE GOAL</div>
+        <div class="big num" id="big">2,000</div>
+        <div class="sub" id="sub"><b>1,200</b> eaten · <b>800</b> left today</div>
+        <div class="pm"><button id="minus" aria-label="lower">&minus;</button><button id="plus" aria-label="raise">+</button></div>
+      </div>
+    </div>
+    <div class="hint">Spin the wheel to set your goal</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var NS='http://www.w3.org/2000/svg', MAX=6000, EATEN=1200, CX=144, CY=144;
+  var PER_DEG=1000/360;            // one full spin ≈ 1000 cal (deliberate, not twitchy)
+  var stage=document.getElementById('stage'), ticks=document.getElementById('ticks'),
+      big=document.getElementById('big'), sub=document.getElementById('sub'), parc=document.getElementById('parc');
+  var goalRaw=2000, goal=2000;
+
+  (function(){ var rO=131;
+    for(var i=0;i<60;i++){ var maj=(i%5===0), a=i*6*Math.PI/180, rI=maj?114:121;
+      var ln=document.createElementNS(NS,'line');
+      ln.setAttribute('x1',(CX+rO*Math.sin(a)).toFixed(1));ln.setAttribute('y1',(CY-rO*Math.cos(a)).toFixed(1));
+      ln.setAttribute('x2',(CX+rI*Math.sin(a)).toFixed(1));ln.setAttribute('y2',(CY-rI*Math.cos(a)).toFixed(1));
+      ln.setAttribute('stroke',maj?'var(--tickM)':'var(--tick)');ln.setAttribute('stroke-width',maj?'3':'2');ln.setAttribute('stroke-linecap','round');
+      ticks.appendChild(ln);
+    }})();
+
+  function fmt(n){return n.toLocaleString();}
+  function render(){
+    goal=Math.round(goalRaw/10)*10;
+    ticks.setAttribute('transform','rotate('+(goalRaw*0.36).toFixed(2)+' '+CX+' '+CY+')');
+    big.textContent=fmt(goal);
+    var left=goal-EATEN;
+    sub.innerHTML='<b>'+fmt(EATEN)+'</b> eaten · <b>'+fmt(Math.max(0,left))+'</b> '+(left>=0?'left today':'over');
+    parc.setAttribute('stroke-dasharray',(Math.max(0,Math.min(100,EATEN/goal*100))).toFixed(1)+' 100');
+  }
+  function setRaw(v){ goalRaw=Math.max(0,Math.min(MAX,v)); render(); }
+  setRaw(2000);
+
+  // spin: relative rotation drives the value; a tap (no movement) changes nothing
+  function ang(cx,cy){ var r=stage.getBoundingClientRect();
+    return Math.atan2(cx-(r.left+r.width/2), -(cy-(r.top+r.height/2)))*180/Math.PI; }
+  var dragging=false, last=0;
+  stage.addEventListener('pointerdown',function(e){ if(e.target.closest('.pm'))return;
+    dragging=true; last=ang(e.clientX,e.clientY); stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove',function(e){ if(!dragging)return;
+    var a=ang(e.clientX,e.clientY), d=a-last; if(d>180)d-=360; if(d<-180)d+=360; last=a; setRaw(goalRaw+d*PER_DEG); });
+  var stop=function(){dragging=false;};
+  stage.addEventListener('pointerup',stop); stage.addEventListener('pointercancel',stop);
+
+  var SEQ=[1,5,10,20,50], taps=0, lastT=-9999, resetT;
+  function bump(dir){ var now=performance.now(); if(now-lastT>700)taps=0;
+    var s=SEQ[Math.min(taps,SEQ.length-1)]; taps++; lastT=now; setRaw(goal+dir*s);
+    clearTimeout(resetT); resetT=setTimeout(function(){taps=0;},900); }
+  document.getElementById('minus').addEventListener('click',function(){bump(-1);});
+  document.getElementById('plus').addEventListener('click',function(){bump(1);});
+  window.__set=function(g){setRaw(g);};
+})();
+</script>
+</body>
+</html>

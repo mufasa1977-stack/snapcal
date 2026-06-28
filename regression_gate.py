@@ -733,6 +733,28 @@ def main():
               psh["hasKey"] and psh["testStatus"] == 404 and psh["testErr"] == "not_subscribed",
               "hasKey=%s status=%s err=%s" % (psh["hasKey"], psh["testStatus"], psh["testErr"]))
 
+        # workout burn (shipped 2026-06-28): POST then GET /api/exercise round-trips burned cals + DELETE clears;
+        # and the burned total adds BACK into the calorie budget (the calorie ring shows more remaining).
+        wk = page.evaluate("""async () => {
+            var H = { 'Content-Type':'application/json', 'X-Device-Id':'gate_wo' };
+            var post = await (await fetch('/api/exercise', { method:'POST', headers:H, body: JSON.stringify({ date:'2099-02-02', name:'Walk', minutes:30, calories:250 }) })).json();
+            var g1 = await (await fetch('/api/exercise?date=2099-02-02', { headers:H })).json();
+            await fetch('/api/exercise/' + post.id, { method:'DELETE', headers:H });
+            var g2 = await (await fetch('/api/exercise?date=2099-02-02', { headers:H })).json();
+            // budget math: burned cals increase "remaining" on the ring (add-only; 0 when none logged)
+            switchTab('today'); setGentle(false);
+            profile.daily_calories = 2000; todayData.totals = { calories:500, protein_g:0, carbs_g:0, fat_g:0 };
+            todayData.burned = 0; todayData.workouts = []; renderToday();
+            var before = parseInt((document.getElementById('ringBig').textContent||'0').replace(/[^0-9]/g,''), 10);
+            todayData.burned = 300; renderToday();
+            var after = parseInt((document.getElementById('ringBig').textContent||'0').replace(/[^0-9]/g,''), 10);
+            todayData.burned = 0; renderToday();
+            return { burned1: g1.burned, n1: (g1.workouts||[]).length, burned2: g2.burned, before: before, after: after };
+        }""")
+        check("workout: POST/GET/DELETE /api/exercise round-trips; burned cals add back into the budget",
+              wk["burned1"] == 250 and wk["n1"] == 1 and wk["burned2"] == 0 and (wk["after"] - wk["before"]) == 300,
+              "burned=%s->del %s, ring +%s" % (wk["burned1"], wk["burned2"], wk["after"] - wk["before"]))
+
         # onboarding: first run shows #onboard; "Maybe later" sets the flag (lsSet namespaces snapcal_c_) + hides
         onb = page.evaluate("""() => {
             try { localStorage.removeItem('snapcal_c_snapcal_onboarded'); } catch(e){}

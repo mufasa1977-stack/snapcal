@@ -203,11 +203,24 @@
   .fast-bar-fg{height:100%;width:0;background:var(--brand);border-radius:6px;transition:width 1s linear}
   .fast-bar-fg.fast-done{background:var(--gold,#c9a23a)}
   .fast-eat{text-align:center;font-size:12.5px;color:var(--ink2)}
+  /* Workout burn */
+  .wo-chips{display:flex;flex-wrap:wrap;gap:7px}
+  .wo-chip{border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 13px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer}
+  .wo-chip.on{border-color:var(--brand);background:var(--soft);color:var(--brand)}
+  .wo-form{display:flex;gap:9px;margin-top:11px}
+  .wo-fld{flex:1;display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink3);font-weight:600}
+  .wo-fld input{border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:10px 11px;font-size:15px;font-family:inherit;width:100%}
+  .wo-total{margin-top:11px;text-align:center;font-size:13px;color:var(--ink2)}
+  .wo-list{margin-top:11px;display:flex;flex-direction:column;gap:6px}
+  .wo-li{display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--soft);border-radius:11px}
+  .wo-li-n{flex:1;font-weight:600;font-size:14px}
+  .wo-li-m{font-size:12.5px;color:var(--ink2)}
+  .wo-del{flex:0 0 auto;border:none;background:transparent;color:var(--ink3);font-size:20px;line-height:1;cursor:pointer;padding:0 2px}
   /* Gentle (ED-safe) mode: hide the numeric calorie/macro readouts, show the balance banner */
   .gentle-only{display:none}
   body.gentle .gentle-only{display:block}
   body.gentle .ring-center .big, body.gentle .ring-center .lbl, body.gentle .cal-steps,
-  body.gentle .ring-meta, body.gentle .macro-rings, body.gentle #scanHint{display:none}
+  body.gentle .ring-meta, body.gentle .macro-rings, body.gentle #scanHint, body.gentle #workoutCard{display:none}
   body.gentle .ring-wrap .ring-box:after{content:"🌿";font-size:40px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
   body.gentle .ring-box{position:relative}
   .gal-btn{
@@ -960,6 +973,12 @@
       <div class="goal-title">🏃 Move</div>
       <div class="goal-desc" style="margin:4px 2px 10px">Low-impact workouts + desk-break stretches, built for your level. No gym, joint-friendly.</div>
       <button class="btn btn-dark" id="moveOpenBtn" type="button" style="margin-top:0">Start moving</button>
+    </div>
+
+    <div class="card" id="workoutCard">
+      <div class="goal-title">🔥 Workouts</div>
+      <div class="goal-desc" style="margin:4px 2px 10px">Log a workout to earn calories back into today's budget.</div>
+      <div id="workoutBody"></div>
     </div>
 
     <div class="card" id="fastCard">
@@ -1896,11 +1915,13 @@ async function loadToday(){
     var data = await api("/api/meals?date=" + todayStr());
     todayData = {
       meals: (data && data.meals) || [],
-      totals: (data && data.totals) || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+      totals: (data && data.totals) || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+      burned: todayData.burned || 0, workouts: todayData.workouts || []
     };
     renderToday();
     loadStreak();
     loadWater();
+    loadWorkouts();
   } catch (e) {
     toast(e.message, true);
   }
@@ -2049,6 +2070,71 @@ document.addEventListener("click", function(e){
   if (e.target.closest("#fastStartBtn")){ startFast(); return; }
   if (e.target.closest("#fastEndBtn")){ endFast(); return; }
 });
+
+/* ---------------- Workout burn: log a workout -> calories back into today's budget ----------------
+   Calories are estimated from METs x bodyweight x time (the standard kcal = MET*kg*hours), editable
+   before logging. Low-impact-first activity list to match a knee-safe user. */
+var WORKOUT_ACTS = [
+  { key:"walk",     label:"🚶 Walk",       met:3.5, min:30 },
+  { key:"strength", label:"💪 Strength",   met:5.0, min:45 },
+  { key:"bike",     label:"🚴 Bike",       met:6.0, min:30 },
+  { key:"swim",     label:"🏊 Swim",       met:6.0, min:30 },
+  { key:"elliptical",label:"🌀 Elliptical",met:5.0, min:30 },
+  { key:"yoga",     label:"🧘 Yoga",       met:2.8, min:30 }
+];
+var _woAct = WORKOUT_ACTS[0];
+function _bodyKg(){ var lb = int(localStorage.getItem("snapcal_weight")); return (lb > 0 ? lb : 175) * 0.453592; }
+function _estBurn(met, minutes){ return Math.max(1, Math.round(met * _bodyKg() * (Math.max(0, minutes) / 60))); }
+function loadWorkouts(){
+  return api("/api/exercise?date=" + todayStr()).then(function(d){
+    todayData.workouts = (d && d.workouts) || [];
+    todayData.burned = int(d && d.burned);
+    renderWorkout(); renderToday();   /* burned changed -> refresh the budget ring */
+  }).catch(function(){ renderWorkout(); });
+}
+function renderWorkout(){
+  var body = $("#workoutBody"); if (!body) return;
+  var chips = WORKOUT_ACTS.map(function(a){ return '<button type="button" class="wo-chip'+(a.key===_woAct.key?' on':'')+'" data-wo="'+a.key+'">'+a.label+'</button>'; }).join("");
+  var est = _estBurn(_woAct.met, _woAct.min);
+  var list = (todayData.workouts || []).map(function(w){
+    return '<div class="wo-li"><span class="wo-li-n">'+esc(w.name)+'</span>'+
+      '<span class="wo-li-m">'+(w.minutes?int(w.minutes)+' min · ':'')+int(w.calories)+' cal</span>'+
+      '<button class="wo-del" type="button" data-wodel="'+int(w.id)+'" aria-label="Remove workout">&times;</button></div>';
+  }).join("");
+  body.innerHTML =
+    '<div class="wo-chips">'+chips+'</div>'+
+    '<div class="wo-form">'+
+      '<label class="wo-fld"><span>Minutes</span><input id="woMin" type="number" inputmode="numeric" min="1" max="600" value="'+_woAct.min+'"></label>'+
+      '<label class="wo-fld"><span>Calories</span><input id="woCal" type="number" inputmode="numeric" min="1" max="5000" value="'+est+'"></label>'+
+    '</div>'+
+    '<button class="btn btn-dark" id="woLogBtn" type="button" style="margin-top:10px">Log workout</button>'+
+    (todayData.burned ? '<div class="wo-total">🔥 <b>'+int(todayData.burned)+'</b> cal earned back today</div>' : '')+
+    (list ? '<div class="wo-list">'+list+'</div>' : '');
+}
+function _woSyncCal(){ var m=$("#woMin"), c=$("#woCal"); if (m && c) c.value = _estBurn(_woAct.met, int(m.value)); }
+async function logWorkout(){
+  var m = $("#woMin"), c = $("#woCal");
+  var minutes = int(m && m.value), calories = int(c && c.value);
+  if (calories <= 0){ toast("Enter the calories burned", true); return; }
+  var btn = $("#woLogBtn"); if (btn) btn.disabled = true;
+  try {
+    await api("/api/exercise", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ date: todayStr(), time: nowTime(), name: _woAct.label.replace(/^[^ ]+ /,""), minutes: minutes, calories: calories }) });
+    toast("🔥 Logged — "+calories+" cal back");
+    await loadWorkouts();
+  } catch(e){ toast(e.message || "Couldn't log it", true); if (btn) btn.disabled = false; }
+}
+async function deleteWorkout(id){
+  try { await api("/api/exercise/"+id, { method:"DELETE" }); await loadWorkouts(); }
+  catch(e){ toast("Couldn't remove it", true); }
+}
+document.addEventListener("click", function(e){
+  if (!e.target.closest) return;
+  var wc = e.target.closest(".wo-chip"); if (wc){ var k=wc.getAttribute("data-wo"); _woAct = WORKOUT_ACTS.filter(function(a){return a.key===k;})[0]||_woAct; renderWorkout(); return; }
+  if (e.target.closest("#woLogBtn")){ logWorkout(); return; }
+  var wd = e.target.closest(".wo-del"); if (wd){ deleteWorkout(int(wd.getAttribute("data-wodel"))); return; }
+});
+document.addEventListener("input", function(e){ if (e.target && e.target.id === "woMin") _woSyncCal(); });
 
 /* ---------------- Move module (low-impact workouts + desk breaks) ---------------- */
 var _routines = null;
@@ -2348,7 +2434,8 @@ function provBadge(m){
 
 function renderToday(){
   var eaten = int(todayData.totals.calories);
-  var goal = Math.max(int(profile.daily_calories), 1);
+  var burned = int(todayData.burned);   /* workouts earn calories back into the budget (0 when none logged) */
+  var goal = Math.max(int(profile.daily_calories) + burned, 1);
   var remaining = goal - eaten;
   var frac = Math.min(Math.max(eaten / goal, 0), 1);
 

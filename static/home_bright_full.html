@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SnapCal — Bright Full</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EDE6D8; --card:#FFFFFF; --line:#ECE4D4;
+    --ink:#1A211C; --ink2:#49514A; --ink3:#79806F;
+    --sage:#2FA877; --sage-d:#1E8C63; --sage-l:#7FCBA2; --gold:#D49A33; --clay:#DB5F3C;
+    --track:#ECE5D6;
+    --ease:cubic-bezier(.22,.61,.36,1);
+    --sh:0 16px 36px rgba(40,34,20,.14),0 3px 9px rgba(40,34,20,.07);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+  html,body{height:100%;background:var(--bg)}
+  body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    color:var(--ink);display:flex;justify-content:center}
+  .num{font-variant-numeric:tabular-nums}
+  .serif{font-family:"Fraunces",serif}
+  .phone{position:relative;width:100%;max-width:440px;min-height:100dvh;background:
+    radial-gradient(120% 40% at 100% 0%, #F6F2EA 0%, var(--bg) 55%);padding:20px 18px 40px}
+
+  .top{display:flex;align-items:center;justify-content:space-between;margin:2px 2px 16px}
+  .top .d{font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase}
+  .top h1{font-size:25px;font-weight:600;letter-spacing:-.01em;margin-top:3px}
+  .top .av{width:42px;height:42px;border-radius:50%;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:15px;color:var(--sage-d);box-shadow:var(--sh)}
+
+  /* three quick icons */
+  .quick{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .qt{display:flex;flex-direction:column;align-items:center;gap:9px;padding:15px 8px 13px;border-radius:20px;background:var(--card);
+    border:1px solid var(--line);box-shadow:var(--sh);cursor:pointer;font-family:inherit;transition:transform .12s}
+  .qt:active{transform:translateY(2px) scale(.98)}
+  .qt .qi{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;
+    background:linear-gradient(145deg,#7e977f,var(--sage-d));box-shadow:0 6px 14px rgba(79,102,81,.34)}
+  .qt .qi svg{width:22px;height:22px;stroke:#fff;fill:none}
+  .qt .ql{font-size:12.5px;font-weight:700;color:var(--ink)}
+
+  /* ring card */
+  .ringcard{background:var(--card);border:1px solid var(--line);border-radius:26px;box-shadow:var(--sh);padding:20px 16px 22px;margin-bottom:14px}
+  .stage{position:relative;width:272px;height:272px;margin:0 auto;touch-action:none}
+  .stage svg{position:absolute;inset:0}
+  .knob{position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid var(--sage);
+    box-shadow:0 5px 13px rgba(79,102,81,.5),0 1px 2px rgba(0,0,0,.12);transform:translate(-50%,-50%);cursor:grab;z-index:3}
+  .knob:active{cursor:grabbing}
+  .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;padding:0 38px}
+  .ctr .pre{font-size:11px;font-weight:800;color:var(--ink3);letter-spacing:.14em}
+  .ctr .big{font-size:58px;font-weight:800;letter-spacing:-.04em;line-height:.96;margin-top:4px}
+  .ctr .sub{font-size:12.5px;font-weight:600;color:var(--ink2);margin-top:7px}
+  .ctr .sub b{color:var(--sage-d);font-weight:800}
+  .pm{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:13px;pointer-events:auto}
+  .pm button{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--sage-d);
+    font-size:18px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;
+    box-shadow:0 3px 9px rgba(70,62,44,.12);font-family:inherit;transition:transform .08s,background .12s}
+  .pm button:active{transform:scale(.86);background:var(--bg)}
+  .hint{text-align:center;font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.05em;margin-top:13px;text-transform:uppercase}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--sh)}
+  .macrocard{padding:16px 16px 14px;margin-bottom:14px}
+  .mhead{margin-bottom:15px}
+  .mhead b{font-size:15px;font-weight:800;letter-spacing:-.01em}
+  .mhead span{display:block;font-size:12px;font-weight:600;color:var(--ink2);margin-top:2px}
+  .mrings{display:flex;justify-content:space-around;align-items:flex-start}
+  .mac{display:flex;flex-direction:column;align-items:center;gap:1px;flex:1}
+  .mring{position:relative;width:84px;height:84px;margin-bottom:6px}
+  .mring svg{transform:rotate(-90deg)}
+  .mring .c{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;letter-spacing:-.02em}
+  .mname{font-size:13px;font-weight:700}
+  .msub{font-size:11px;font-weight:600;color:var(--ink2)}
+  .mgo{font-size:10.5px;font-weight:700;color:var(--sage-d);margin-top:1px}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-bottom:14px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:13px 8px 11px;display:flex;flex-direction:column;
+    align-items:center;gap:7px;box-shadow:var(--sh)}
+  .stat .ic{width:32px;height:32px;border-radius:50%;background:#ECEAE0;display:flex;align-items:center;justify-content:center}
+  .stat .ic svg{width:16px;height:16px;stroke:var(--sage-d);fill:none}
+  .stat .v{font-size:15px;font-weight:800;letter-spacing:-.02em}
+  .stat .k{font-size:11px;font-weight:600;color:var(--ink2)}
+
+  .chart{padding:16px 16px 14px;margin-bottom:14px}
+  .chart .ch{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+  .chart .ch b{font-size:15px;font-weight:800;letter-spacing:-.01em}
+  .chart .ch span{font-size:11.5px;font-weight:600;color:var(--ink2)} .chart .ch span em{font-style:normal;color:var(--sage-d);font-weight:800}
+  .bars{display:flex;align-items:flex-end;justify-content:space-between;height:72px;gap:8px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+  .bar i{width:100%;max-width:20px;border-radius:6px 6px 3px 3px;background:var(--sage-l);display:block}
+  .bar.hi i{background:linear-gradient(180deg,var(--gold),#9a7b40)}
+  .bar b{font-size:9.5px;font-weight:700;color:var(--ink3)}
+
+  .coach{display:flex;align-items:center;gap:13px;padding:15px 16px;box-shadow:var(--sh);position:relative;overflow:hidden;margin-bottom:24px}
+  .coach::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--sage-l),var(--gold))}
+  .coach .badge{width:42px;height:42px;border-radius:13px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(145deg,#7e977f,var(--sage-d));box-shadow:0 7px 16px rgba(79,102,81,.34)}
+  .coach .badge svg{width:21px;height:21px;stroke:#fff;fill:none}
+  .coach .t b{font-size:14px;font-weight:800;display:block;letter-spacing:-.01em}
+  .coach .t span{font-size:12.5px;color:var(--ink2);font-weight:500;line-height:1.45;display:block;margin-top:2px}
+  .coach .t span em{font-style:normal;color:var(--sage-d);font-weight:700}
+
+  .sec{display:flex;align-items:center;justify-content:space-between;margin:0 4px 12px}
+  .sec h2{font-size:19px;font-weight:600;letter-spacing:-.01em}
+  .sec a{font-size:12.5px;font-weight:700;color:var(--sage-d);text-decoration:none}
+  .meal{display:flex;align-items:center;gap:13px;padding:11px 13px;margin-bottom:10px;box-shadow:var(--sh)}
+  .meal .ph{width:46px;height:46px;border-radius:13px;flex:0 0 auto;background-size:cover;border:1px solid var(--line)}
+  .meal .mid{flex:1;min-width:0}
+  .meal .nm{font-size:14px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meal .mt{font-size:11.5px;font-weight:600;color:var(--ink2);margin-top:2px}
+  .meal .rt{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+  .meal .kc{font-size:14px;font-weight:800;letter-spacing:-.02em}.meal .kc s{font-size:10px;color:var(--ink3);text-decoration:none;margin-left:1px}
+  .score{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800}.score .dot{width:8px;height:8px;border-radius:50%}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="top">
+    <div><div class="d">Tuesday · June 23</div><h1 class="serif">Good morning, Tariq</h1></div>
+    <div class="av">T</div>
+  </div>
+
+  <div class="quick">
+    <button class="qt"><span class="qi"><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 6V3M5 8 3.5 6.5M19 8l1.5-1.5"/><circle cx="12" cy="14" r="2.2"/></svg></span><span class="ql">Coach Cal</span></button>
+    <button class="qt"><span class="qi"><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 3h2l2.4 12a2 2 0 0 0 2 1.6h8a2 2 0 0 0 2-1.6L21 7H6"/></svg></span><span class="ql">Grocery</span></button>
+    <button class="qt"><span class="qi"><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15a0 0 0 0 1 0 0H5Z"/><path d="M9 8h7M9 12h7M9 16h4"/></svg></span><span class="ql">Meal Plan</span></button>
+  </div>
+
+  <div class="ringcard">
+    <div class="stage" id="stage">
+      <svg width="272" height="272" viewBox="0 0 272 272">
+        <defs><linearGradient id="cal" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#7FCBA2"/><stop offset="1" stop-color="#1E8C63"/></linearGradient></defs>
+        <g transform="rotate(-90 136 136)">
+          <circle cx="136" cy="136" r="118" fill="none" stroke="var(--track)" stroke-width="16"/>
+          <circle id="prog" cx="136" cy="136" r="118" fill="none" stroke="url(#cal)" stroke-width="16" stroke-linecap="round" pathLength="100" stroke-dasharray="33 100"/>
+        </g>
+      </svg>
+      <div class="knob" id="knob"></div>
+      <div class="ctr">
+        <div class="pre">DAILY CALORIE GOAL</div>
+        <div class="big num" id="big">2,000</div>
+        <div class="sub" id="sub"><b>1,200</b> eaten · <b>800</b> left today</div>
+        <div class="pm"><button id="minus" aria-label="lower goal">&minus;</button><button id="plus" aria-label="raise goal">+</button></div>
+      </div>
+    </div>
+    <div class="hint">Drag the ring · tap − / + to fine-tune</div>
+  </div>
+
+  <div class="card macrocard">
+    <div class="mhead"><b>Your macros today</b><span>How much you've eaten of each daily goal — and what's left.</span></div>
+    <div class="mrings">
+      <div class="mac">
+        <div class="mring"><svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="33" fill="none" stroke="var(--track)" stroke-width="7"/><circle cx="42" cy="42" r="33" fill="none" stroke="#2FA877" stroke-width="8" stroke-linecap="round" pathLength="100" stroke-dasharray="65 100"/></svg><div class="c">98g</div></div>
+        <div class="mname">Protein</div><div class="msub">of 150g</div><div class="mgo">52g to go</div>
+      </div>
+      <div class="mac">
+        <div class="mring"><svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="33" fill="none" stroke="var(--track)" stroke-width="7"/><circle cx="42" cy="42" r="33" fill="none" stroke="#D49A33" stroke-width="8" stroke-linecap="round" pathLength="100" stroke-dasharray="40 100"/></svg><div class="c">80g</div></div>
+        <div class="mname">Carbs</div><div class="msub">of 200g</div><div class="mgo">120g to go</div>
+      </div>
+      <div class="mac">
+        <div class="mring"><svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="33" fill="none" stroke="var(--track)" stroke-width="7"/><circle cx="42" cy="42" r="33" fill="none" stroke="#DB5F3C" stroke-width="8" stroke-linecap="round" pathLength="100" stroke-dasharray="30 100"/></svg><div class="c">20g</div></div>
+        <div class="mname">Fat</div><div class="msub">of 65g</div><div class="mgo">45g to go</div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="card coach">
+    <span class="badge"><svg viewBox="0 0 24 24" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 6V3M5 8 3.5 6.5M19 8l1.5-1.5"/><circle cx="12" cy="14" r="2.2"/></svg></span>
+    <span class="t"><b>Coach Cal</b><span>New here? You've got <em>800 calories</em> and <em>52g protein</em> left — a grilled chicken bowl fits perfectly.</span></span>
+  </div>
+
+  <div class="sec"><h2 class="serif">Today's meals</h2><a href="#">See all</a></div>
+  <div class="card meal"><div class="ph" style="background-image:url('https://loremflickr.com/160/160/grilled,chicken,bowl,quinoa')"></div><div class="mid"><div class="nm">Grilled chicken &amp; quinoa bowl</div><div class="mt">P 42g · C 38g · F 14g · 1:10 PM</div></div><div class="rt"><div class="kc num">420<s>cal</s></div><div class="score" style="color:var(--sage-d)"><span class="dot" style="background:var(--sage-d)"></span>92</div></div></div>
+  <div class="card meal"><div class="ph" style="background-image:url('https://loremflickr.com/160/160/avocado,toast,egg')"></div><div class="mid"><div class="nm">Avocado toast &amp; eggs</div><div class="mt">P 18g · C 32g · F 22g · 8:30 AM</div></div><div class="rt"><div class="kc num">390<s>cal</s></div><div class="score" style="color:var(--gold)"><span class="dot" style="background:var(--gold)"></span>71</div></div></div>
+  <div class="card meal"><div class="ph" style="background-image:url('https://loremflickr.com/160/160/glazed,donut')"></div><div class="mid"><div class="nm">Glazed donut</div><div class="mt">P 4g · C 34g · F 14g · 10:45 AM</div></div><div class="rt"><div class="kc num">270<s>cal</s></div><div class="score" style="color:var(--clay)"><span class="dot" style="background:var(--clay)"></span>28</div></div></div>
+</div>
+
+<script>
+(function(){
+  var MAX=6000, EATEN=1200;
+  var stage=document.getElementById('stage'), prog=document.getElementById('prog'), knob=document.getElementById('knob'),
+      big=document.getElementById('big'), sub=document.getElementById('sub');
+  var R=118, CX=136, CY=136, goal=2000;
+  function fmt(n){return n.toLocaleString();}
+  function render(){
+    var frac=Math.max(0,Math.min(1,goal/MAX));
+    prog.setAttribute('stroke-dasharray',(frac*100).toFixed(2)+' 100');
+    var deg=frac*360, rad=deg*Math.PI/180, x=CX+R*Math.sin(rad), y=CY-R*Math.cos(rad);
+    knob.style.left=(x/272*100)+'%'; knob.style.top=(y/272*100)+'%';
+    big.textContent=fmt(goal);
+    var left=goal-EATEN;
+    sub.innerHTML='<b>'+fmt(EATEN)+'</b> eaten · <b>'+fmt(Math.max(0,left))+'</b> '+(left>=0?'left today':'over');
+  }
+  function setGoal(g){goal=Math.max(0,Math.min(MAX,Math.round(g)));render();}
+  render();
+
+  // accelerating tap stepper: 1,5,10,20,50 — escalates while you keep tapping, resets after a pause
+  var SEQ=[1,5,10,20,50], taps=0, last=-99999, resetT;
+  function bump(dir){
+    var now=performance.now();
+    if(now-last>700) taps=0;
+    var s=SEQ[Math.min(taps,SEQ.length-1)];
+    taps++; last=now;
+    setGoal(goal + dir*s);
+    clearTimeout(resetT); resetT=setTimeout(function(){taps=0;},900);
+  }
+  document.getElementById('minus').addEventListener('click',function(){bump(-1);});
+  document.getElementById('plus').addEventListener('click',function(){bump(1);});
+
+  // drag the ring (ignore taps on the +/- buttons)
+  function setFromPoint(cx,cy){
+    var r=stage.getBoundingClientRect(), dx=cx-(r.left+r.width/2), dy=cy-(r.top+r.height/2);
+    var deg=Math.atan2(dx,-dy)*180/Math.PI; if(deg<0)deg+=360;
+    setGoal(Math.round(deg/360*MAX/10)*10);
+  }
+  var drag=false;
+  stage.addEventListener('pointerdown',function(e){if(e.target.closest('.pm'))return;drag=true;stage.setPointerCapture(e.pointerId);setFromPoint(e.clientX,e.clientY);});
+  stage.addEventListener('pointermove',function(e){if(drag)setFromPoint(e.clientX,e.clientY);});
+  var stop=function(){drag=false;}; stage.addEventListener('pointerup',stop); stage.addEventListener('pointercancel',stop);
+  window.__set=function(g){setGoal(g);}; window.__bump=bump;
+})();
+</script>
+</body>
+</html>

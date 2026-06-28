@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SnapCal — Real 3D Ring Preview</title>
+<style>
+  body{margin:0;background:#F1F0EB;color:#16201C;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;overflow:hidden;-webkit-user-select:none;user-select:none}
+  h1{font-size:18px;font-weight:800;margin:0 0 4px}
+  .sub{color:#5B6661;font-size:13px;margin:0 0 18px}
+  #wrap{position:relative;width:330px;height:330px;touch-action:none}
+  #ringCanvas{position:absolute;inset:0;z-index:1;cursor:grab}
+  #ringCanvas:active{cursor:grabbing}
+  #center{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  #center .big{font-size:48px;font-weight:850;letter-spacing:-.02em;line-height:1}
+  #center .lbl{font-size:14px;color:#5B6661;font-weight:600;margin-top:4px}
+  #sparkle{position:absolute;width:70px;height:70px;transform:translate(-50%,-50%);opacity:0;pointer-events:none;z-index:4;transition:opacity .18s;filter:drop-shadow(0 0 11px rgba(255,255,255,1))}
+  #sparkle svg{width:100%;height:100%;display:block;animation:twinkle 1.0s ease-in-out infinite}
+  #sparkle path,#sparkle circle{fill:#fff}
+  @keyframes twinkle{0%,100%{transform:scale(.75) rotate(0deg);opacity:.78}50%{transform:scale(1.2) rotate(18deg);opacity:1}}
+  #toggles{margin-top:22px;display:flex;gap:10px}
+  #toggles button{border:1px solid #d8d8d2;background:#fff;border-radius:22px;padding:11px 18px;font-size:14px;font-weight:750;cursor:pointer;font-family:inherit;box-shadow:0 2px 6px rgba(20,32,28,.08)}
+  #toggles button:active{transform:scale(.95)}
+  .hint{margin-top:16px;color:#8A938F;font-size:13px}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+  <h1>Real 3D ring — rub around it ✋</h1>
+  <p class="sub">Chrome metal · a ray of light follows your finger</p>
+  <div id="wrap">
+    <canvas id="ringCanvas"></canvas>
+    <div id="sparkle" aria-hidden="true"><svg viewBox="0 0 100 100"><path d="M50 0 L53 47 L100 50 L53 53 L50 100 L47 53 L0 50 L47 47 Z"/><circle cx="50" cy="50" r="7"/></svg></div>
+    <div id="center"><div class="big">2,000</div><div class="lbl">Calories remaining</div></div>
+  </div>
+  <div id="toggles">
+    <button data-c="16777215">Chrome</button>
+    <button data-c="15986400">White Gold</button>
+    <button data-c="16767882">Yellow Gold</button>
+  </div>
+  <p class="hint">Drag around the ring — the glint rakes the chrome where you touch</p>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const canvas = document.getElementById('ringCanvas');
+const W = 330, H = 330;
+
+const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true, powerPreference:'high-performance' });
+renderer.setSize(W, H);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearAlpha(0);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(34, W / H, 0.1, 100);
+camera.position.set(0, 0, 3.7);
+
+// the load-bearing step: a studio environment for the metal to REFLECT (zero download)
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+// the ring = a real 3D torus, white-gold metal
+const geo = new THREE.TorusGeometry(1.0, 0.125, 64, 260);
+const mat = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff, metalness: 1.0, roughness: 0.015,
+  envMapIntensity: 2.0, clearcoat: 0.7, clearcoatRoughness: 0.03
+});
+const ring = new THREE.Mesh(geo, mat);
+ring.rotation.x = 0.12;   // nearly head-on (facing you), a hair of tilt so the tube's roundness reads
+scene.add(ring);
+
+const dir = new THREE.DirectionalLight(0xffffff, 2.2); dir.position.set(2, 3, 2.5); scene.add(dir);
+scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+
+let dragging = false;
+const sparkle = document.getElementById('sparkle');
+function rub(e){
+  const rc = canvas.getBoundingClientRect();
+  const dx = e.clientX - (rc.left + rc.width / 2);
+  const dy = e.clientY - (rc.top + rc.height / 2);
+  const d = Math.hypot(dx, dy) || 1;
+  // the ring itself stays PERFECTLY still — your finger is purely the sparkle of light riding the band
+  const R = 138;
+  sparkle.style.left = (rc.width / 2 + dx / d * R) + 'px';
+  sparkle.style.top  = (rc.height / 2 + dy / d * R) + 'px';
+  sparkle.style.opacity = '1';
+}
+canvas.addEventListener('pointerdown', e => { dragging = true; canvas.setPointerCapture(e.pointerId); rub(e); });
+canvas.addEventListener('pointermove', e => { if (dragging) rub(e); });
+const stop = () => { dragging = false; sparkle.style.opacity = '0'; };
+canvas.addEventListener('pointerup', stop);
+canvas.addEventListener('pointercancel', stop);
+
+// Accessibility: honor the OS "reduce motion" setting. The ring is already idle (only
+// the user's finger moves the glint), so the continuous rAF is purely idle churn — skip it
+// and render one static frame. We still re-render on demand (color swap) so nothing freezes.
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function loop(){
+  renderer.render(scene, camera);   // ring sits still until you touch it — only YOUR finger moves the light
+  requestAnimationFrame(loop);
+}
+if (prefersReducedMotion) {
+  renderer.render(scene, camera);   // single static frame — no continuous spin/idle loop
+} else {
+  loop();
+}
+
+document.querySelectorAll('#toggles button').forEach(b => {
+  b.addEventListener('click', () => {
+    mat.color.setHex(parseInt(b.dataset.c, 10));
+    if (prefersReducedMotion) renderer.render(scene, camera);  // re-render the static frame so the color swap still shows
+  });
+});
+</script>
+</body>
+</html>

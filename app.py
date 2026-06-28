@@ -442,6 +442,21 @@ def init_db():
                    created TEXT
                )"""
         )
+        # Logged workouts (the "exercise gives calories back" model every serious tracker has). Kept in its OWN
+        # table — NOT as negative-calorie meals — so it never pollutes macros / recents / export / the meal list.
+        # Today's burned total is added back to the calorie budget on the client.
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS exercise(
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   uid TEXT,
+                   date TEXT,
+                   time TEXT,
+                   name TEXT,
+                   minutes INTEGER,
+                   calories INTEGER,
+                   created TEXT
+               )"""
+        )
         # Migration: store the full rich breakdown per meal so History can show it.
         cols = [r[1] for r in con.execute("PRAGMA table_info(meals)").fetchall()]
         if "detail_json" not in cols:
@@ -3039,6 +3054,55 @@ def recent_foods():
         if len(out) >= 15:
             break
     return jsonify({"recents": out})
+
+
+@app.post("/api/exercise")
+def add_exercise():
+    """Log a workout for a day. Burned calories are added BACK into that day's calorie budget on the client
+       (MyFitnessPal's exercise model) — stored separately from food so macros/recents/export stay clean."""
+    d = request.get_json(silent=True) or {}
+    day = str(d.get("date") or date.today().isoformat())[:10]
+    name = (str(d.get("name") or "Workout")).strip()[:60] or "Workout"
+    minutes = max(0, min(1440, _int(d.get("minutes"))))
+    calories = max(0, min(10000, _int(d.get("calories"))))
+    con = get_db()
+    try:
+        cur = con.execute(
+            "INSERT INTO exercise(uid, date, time, name, minutes, calories, created) VALUES(?,?,?,?,?,?,?)",
+            (_uid(), day, str(d.get("time") or ""), name, minutes, calories, datetime.utcnow().isoformat()),
+        )
+        con.commit()
+        return jsonify({"id": cur.lastrowid})
+    finally:
+        con.close()
+
+
+@app.get("/api/exercise")
+def list_exercise():
+    """Today's (or a given day's) logged workouts for this device + the total calories burned."""
+    day = request.args.get("date") or date.today().isoformat()
+    con = get_db()
+    try:
+        rows = con.execute(
+            "SELECT id, date, time, name, minutes, calories FROM exercise WHERE date = ? AND uid = ? ORDER BY id",
+            (day, _uid()),
+        ).fetchall()
+    finally:
+        con.close()
+    workouts = [dict(r) for r in rows]
+    burned = sum(_int(w.get("calories")) for w in workouts)
+    return jsonify({"workouts": workouts, "burned": burned})
+
+
+@app.delete("/api/exercise/<int:ex_id>")
+def delete_exercise(ex_id):
+    con = get_db()
+    try:
+        con.execute("DELETE FROM exercise WHERE id = ? AND uid = ?", (ex_id, _uid()))
+        con.commit()
+    finally:
+        con.close()
+    return jsonify({"ok": True})
 
 
 @app.get("/api/export.csv")

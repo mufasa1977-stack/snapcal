@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SnapCal — Meet Cal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070810; --card:#121420; --card2:#161827; --elev:#1c1f30;
+    --line:#262a3d; --ink:#ECEDF2; --ink2:#A2A8BC; --ink3:#666d85;
+    --accent:#6E8AFF; --accent2:#8AA0FF; --teal:#5BC0EB;
+    --pro:#5BC0EB; --carb:#F4B860; --fat:#E5897E;
+    --good:#42D69A; --ok:#F4B860; --warn:#F0795B;
+    --hi:inset 0 1px 0 rgba(255,255,255,.06);
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{background:var(--bg);height:100%}
+  body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;color:var(--ink);overflow:hidden}
+  .num{font-variant-numeric:tabular-nums}
+
+  /* ====== the 3D world ====== */
+  .world{position:relative;width:100%;max-width:460px;height:100dvh;margin:0 auto;overflow:hidden;
+    perspective:1100px;perspective-origin:50% 38%;background:var(--bg)}
+  .layer{position:absolute;inset:-8% -8%;will-change:transform}
+
+  /* far background — aurora */
+  .aurora .orb{position:absolute;border-radius:50%;filter:blur(46px);opacity:.85}
+  .o1{width:340px;height:340px;left:-70px;top:-40px;background:radial-gradient(circle,#3550ff,transparent 68%)}
+  .o2{width:300px;height:300px;right:-80px;top:120px;background:radial-gradient(circle,#12a6c8,transparent 70%)}
+  .o3{width:320px;height:320px;left:30px;bottom:-90px;background:radial-gradient(circle,#7a44ff,transparent 70%)}
+  .o4{width:200px;height:200px;right:10px;bottom:40px;background:radial-gradient(circle,#1f7a6b,transparent 72%)}
+  .vign{position:absolute;inset:0;background:
+     radial-gradient(120% 80% at 50% 30%, transparent 40%, rgba(7,8,16,.55) 78%, rgba(7,8,16,.9) 100%)}
+
+  /* star/grid mid layer */
+  .grid{background-image:radial-gradient(rgba(255,255,255,.05) 1px, transparent 1px);
+    background-size:26px 26px;mask-image:radial-gradient(80% 70% at 50% 40%,#000,transparent 75%);opacity:.7}
+
+  /* ====== dashboard deck (mid, real 3D depth between cards) ====== */
+  .deck{position:absolute;left:18px;right:18px;top:74px;transform-style:preserve-3d;will-change:transform}
+  .card{position:absolute;left:0;right:0;border-radius:24px;
+    background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+    box-shadow:0 26px 50px rgba(0,0,0,.55),var(--hi);will-change:transform}
+  .card .glow{position:absolute;inset:0;border-radius:24px;pointer-events:none}
+
+  .c-hero{top:0;padding:14px 16px 14px;transform:translateZ(58px)}
+  .c-hero .glow{background:radial-gradient(60% 50% at 50% 36%,rgba(110,138,255,.20),transparent 70%)}
+  .gauge{position:relative;width:188px;height:150px;margin:2px auto 0}
+  .gauge svg{display:block}
+  .tip{position:absolute;width:13px;height:13px;border-radius:50%;background:#dbe6ff;
+    box-shadow:0 0 7px 2px rgba(150,178,255,.95),0 0 18px 6px rgba(110,138,255,.6);transform:translate(-50%,-50%)}
+  .gctr{position:absolute;inset:0 0 18px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .gctr .big{font-size:50px;font-weight:800;letter-spacing:-.035em;line-height:.9}
+  .gctr .u{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:.16em;margin-top:6px}
+  .hstrip{display:flex;border-top:1px solid var(--line);margin-top:6px;padding-top:11px}
+  .hstrip .s{flex:1;text-align:center;font-size:0}
+  .hstrip .v{font-size:15px;font-weight:800}.hstrip .k{font-size:9px;font-weight:700;color:var(--ink3);letter-spacing:.1em;margin-top:2px}
+
+  .c-mac{padding:13px 12px;transform:translateZ(30px)}
+  .macrow{display:flex;justify-content:space-around}
+  .mac{display:flex;flex-direction:column;align-items:center}
+  .ring{position:relative;width:54px;height:54px}.ring svg{transform:rotate(-90deg)}
+  .ring .c{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+  .mac .nm{font-size:11px;font-weight:700;margin-top:6px;color:var(--ink2)}
+
+  .c-coach{padding:14px 15px;transform:translateZ(44px)}
+  .c-coach .glow{background:radial-gradient(80% 90% at 0% 0%,rgba(110,138,255,.18),transparent 60%)}
+  .cc-h{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+  .cc-badge{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(145deg,var(--accent2),var(--accent));box-shadow:0 5px 12px rgba(110,138,255,.45)}
+  .cc-badge svg{width:16px;height:16px}
+  .cc-t{font-size:13.5px;font-weight:800}.cc-s{font-size:11px;font-weight:600;color:var(--accent2)}
+  .c-coach p{font-size:12.5px;line-height:1.45;color:var(--ink2);font-weight:500}
+  .c-coach p b{color:var(--ink);font-weight:700}
+
+  .c-scan{display:flex;align-items:center;gap:12px;padding:14px 16px;transform:translateZ(76px);
+    background:linear-gradient(135deg,var(--accent2),var(--accent) 62%,#5a78f0);border:none}
+  .c-scan .ic{width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center}
+  .c-scan .ic svg{width:20px;height:20px}
+  .c-scan .t b{display:block;font-size:14.5px;font-weight:800;color:#fff}
+  .c-scan .t span{font-size:11px;font-weight:600;color:rgba(255,255,255,.85)}
+  .c-scan .arr{margin-left:auto;color:#fff;font-size:18px;opacity:.85}
+
+  /* ====== foreground chrome ====== */
+  .fg{pointer-events:none}
+  .topbar{position:absolute;left:22px;right:22px;top:20px;display:flex;align-items:center;justify-content:space-between}
+  .topbar .hi{font-size:11px;font-weight:600;color:var(--ink3)}
+  .topbar h1{font-size:20px;font-weight:800;letter-spacing:-.03em}
+  .topbar .av{width:36px;height:36px;border-radius:50%;background:conic-gradient(from 200deg,#6E8AFF,#8AA0FF,#5BC0EB,#6E8AFF);padding:2px}
+  .topbar .av i{display:flex;width:100%;height:100%;border-radius:50%;background:#15171b;align-items:center;justify-content:center;font-weight:800;font-size:14px;font-style:normal}
+
+  /* ====== Cal — the assistant ====== */
+  .coachL{position:absolute;z-index:46;will-change:transform}
+  .cal{position:relative;width:96px;height:96px;cursor:pointer}
+  .cal .halo{position:absolute;inset:-22px;border-radius:50%;
+    background:radial-gradient(circle,rgba(110,138,255,.4),transparent 64%);filter:blur(6px);animation:pulse 3.4s var(--ease) infinite}
+  .cal .orb{position:absolute;inset:0;border-radius:50%;
+    background:
+      radial-gradient(38% 32% at 36% 28%, #ffffff 0%, rgba(255,255,255,.0) 40%),
+      radial-gradient(80% 80% at 64% 72%, #4258d6 0%, rgba(66,88,214,0) 60%),
+      radial-gradient(circle at 50% 45%, #8aa0ff 0%, #6E8AFF 42%, #4a63e6 78%, #34409c 100%);
+    box-shadow:inset 0 -10px 22px rgba(20,24,60,.6), inset 0 8px 16px rgba(255,255,255,.35),
+      0 18px 34px rgba(40,55,160,.55), 0 0 26px rgba(110,138,255,.5);
+    animation:bob 4s var(--ease) infinite}
+  .cal .eye{position:absolute;top:42%;width:11px;height:14px;border-radius:50%;background:#0b1024;
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.25)}
+  .cal .eye.l{left:32%}.cal .eye.r{right:32%}
+  .cal .eye::after{content:"";position:absolute;top:2px;left:2.5px;width:4px;height:4px;border-radius:50%;background:#cfe0ff}
+  .cal .mouth{position:absolute;left:50%;top:60%;width:18px;height:9px;transform:translateX(-50%);
+    border-bottom:3px solid #0b1024;border-radius:0 0 18px 18px}
+  .cal .spark{position:absolute;right:-2px;top:-4px;width:20px;height:20px;color:#fff;filter:drop-shadow(0 0 6px #8aa0ff);animation:tw 2.6s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  @keyframes pulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:.9;transform:scale(1.08)}}
+  @keyframes tw{0%,100%{transform:scale(.8) rotate(0);opacity:.7}50%{transform:scale(1.15) rotate(18deg);opacity:1}}
+
+  .bubble{position:absolute;z-index:41;max-width:264px;background:rgba(24,27,42,.86);
+    border:1px solid #313650;border-radius:18px;padding:13px 15px;backdrop-filter:blur(16px) saturate(150%);
+    box-shadow:0 18px 40px rgba(0,0,0,.55),var(--hi);will-change:transform,opacity}
+  .bubble .nm{font-size:11px;font-weight:800;color:var(--accent2);letter-spacing:.04em;margin-bottom:3px}
+  .bubble .tx{font-size:13.5px;line-height:1.5;font-weight:500;color:var(--ink)}
+  .bubble .tx b{font-weight:800}
+  .bubble .tail{position:absolute;width:16px;height:16px;background:inherit;border-left:1px solid #313650;border-top:1px solid #313650;
+    transform:rotate(45deg)}
+
+  /* ====== welcome overlay ====== */
+  .welcome{position:absolute;z-index:60;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+    padding:0 26px 56px;background:linear-gradient(180deg,rgba(7,8,16,0) 30%,rgba(7,8,16,.55) 62%,rgba(7,8,16,.92) 100%)}
+  .welcome.hide{display:none}
+  .wc-cal{margin-bottom:18px}
+  .welcome h2{font-size:27px;font-weight:800;letter-spacing:-.03em;text-align:center;line-height:1.15}
+  .welcome h2 em{font-style:normal;background:linear-gradient(120deg,#8aa0ff,#5BC0EB);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .welcome p{font-size:14.5px;line-height:1.5;color:var(--ink2);text-align:center;margin-top:10px;font-weight:500;max-width:330px}
+  .wc-btns{display:flex;flex-direction:column;gap:11px;width:100%;max-width:330px;margin-top:24px}
+  .btn{border:none;font-family:inherit;border-radius:16px;padding:16px;font-size:15px;font-weight:800;cursor:pointer;transition:transform .14s var(--ease)}
+  .btn:active{transform:scale(.97)}
+  .btn.primary{background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff;box-shadow:0 14px 28px rgba(110,138,255,.45)}
+  .btn.ghost{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink2)}
+
+  /* ====== tour spotlight + controls ====== */
+  .spot{position:absolute;z-index:30;border-radius:22px;pointer-events:none;
+    box-shadow:0 0 0 9999px rgba(6,7,12,.80);border:1.5px solid var(--accent2);
+    transition:all .45s var(--ease);opacity:0}
+  .spot.on{opacity:1}
+  .tourbar{position:absolute;z-index:50;left:22px;right:22px;bottom:30px;display:none;align-items:center;justify-content:space-between}
+  .tourbar.on{display:flex}
+  .dots{display:flex;gap:6px}
+  .dots i{width:7px;height:7px;border-radius:50%;background:#39405c;display:block;transition:.3s}
+  .dots i.on{background:var(--accent2);width:18px;border-radius:4px}
+  .tnext{background:linear-gradient(135deg,var(--accent2),var(--accent));border:none;color:#fff;font-family:inherit;
+    font-size:14px;font-weight:800;border-radius:14px;padding:12px 22px;cursor:pointer}
+  .tskip{background:none;border:none;color:var(--ink3);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer}
+
+  .world.welcoming #calLayer{display:none}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<div class="world welcoming" id="world">
+
+  <!-- far: aurora -->
+  <div class="layer aurora" data-depth="7">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div><div class="orb o4"></div>
+  </div>
+  <div class="layer vign"></div>
+  <div class="layer grid" data-depth="14"></div>
+
+  <!-- mid: dashboard deck (3D) -->
+  <div class="deck" id="deck">
+    <div class="card c-hero" id="t-hero" style="height:236px">
+      <div class="glow"></div>
+      <div class="gauge" id="gauge">
+        <svg width="188" height="150" viewBox="0 0 188 150">
+          <defs><linearGradient id="arc" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="#5BC0EB"/><stop offset="0.55" stop-color="#6E8AFF"/><stop offset="1" stop-color="#8AA0FF"/>
+          </linearGradient></defs>
+          <path d="M22 140 A72 72 0 1 1 166 140" fill="none" stroke="#1f2334" stroke-width="14" stroke-linecap="round"/>
+          <path id="prog" d="M22 140 A72 72 0 1 1 166 140" fill="none" stroke="url(#arc)" stroke-width="14"
+            stroke-linecap="round" pathLength="100" stroke-dasharray="29 100"/>
+        </svg>
+        <div class="tip" id="tip"></div>
+        <div class="gctr"><div class="big num" id="big">1,420</div><div class="u">CALORIES LEFT</div></div>
+      </div>
+      <div class="hstrip">
+        <div class="s"><div class="v num">580</div><div class="k">EATEN</div></div>
+        <div class="s"><div class="v num">2,000</div><div class="k">GOAL</div></div>
+        <div class="s"><div class="v num">120</div><div class="k">BURNED</div></div>
+      </div>
+    </div>
+
+    <div class="card c-mac" id="t-mac" style="top:252px;height:96px">
+      <div class="macrow">
+        <div class="mac"><div class="ring"><svg width="54" height="54"><circle cx="27" cy="27" r="22" fill="none" stroke="#1f2334" stroke-width="5"/><circle cx="27" cy="27" r="22" fill="none" stroke="var(--pro)" stroke-width="5" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="48.4"/></svg><div class="c" style="color:var(--pro)">65%</div></div><div class="nm">Protein</div></div>
+        <div class="mac"><div class="ring"><svg width="54" height="54"><circle cx="27" cy="27" r="22" fill="none" stroke="#1f2334" stroke-width="5"/><circle cx="27" cy="27" r="22" fill="none" stroke="var(--carb)" stroke-width="5" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="82.9"/></svg><div class="c" style="color:var(--carb)">40%</div></div><div class="nm">Carbs</div></div>
+        <div class="mac"><div class="ring"><svg width="54" height="54"><circle cx="27" cy="27" r="22" fill="none" stroke="#1f2334" stroke-width="5"/><circle cx="27" cy="27" r="22" fill="none" stroke="var(--fat)" stroke-width="5" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="96.7"/></svg><div class="c" style="color:var(--fat)">30%</div></div><div class="nm">Fat</div></div>
+      </div>
+    </div>
+
+    <div class="card c-coach" id="t-coach" style="top:362px;height:104px">
+      <div class="glow"></div>
+      <div class="cc-h"><div class="cc-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 6V3M5 8 3.5 6.5M19 8l1.5-1.5"/><circle cx="12" cy="14" r="2.2"/></svg></div><div><div class="cc-t">Coach Cal</div><div class="cc-s">Your move right now</div></div></div>
+      <p>You've got <b>1,420 left</b> and you're 52g short on protein. A <b>grilled chicken bowl</b> closes the gap perfectly.</p>
+    </div>
+
+    <button class="card c-scan" id="t-scan" style="top:480px;height:66px">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L8 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-4l-1.5-2Z"/><circle cx="12" cy="13" r="4"/></svg></span>
+      <span class="t"><b>Snap a meal</b><span>Calories &amp; macros in 2 seconds</span></span>
+      <span class="arr">›</span>
+    </button>
+  </div>
+
+  <!-- foreground chrome -->
+  <div class="layer fg" data-depth="30">
+    <div class="topbar">
+      <div><div class="hi">Tuesday, Jun 23</div><h1>Good evening, Tariq</h1></div>
+      <div class="av"><i>T</i></div>
+    </div>
+  </div>
+
+  <!-- Cal the assistant -->
+  <div class="coachL" id="calLayer" data-depth="42" style="left:50%;top:46%;transform:translate(-50%,-50%)">
+    <div class="cal" id="cal">
+      <div class="halo"></div>
+      <div class="orb"></div>
+      <div class="eye l"></div><div class="eye r"></div><div class="mouth"></div>
+      <svg class="spark" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6L12 2Z"/></svg>
+    </div>
+  </div>
+
+  <!-- speech bubble (tour) -->
+  <div class="bubble" id="bubble" style="opacity:0;left:24px;top:120px">
+    <div class="nm">CAL</div>
+    <div class="tx" id="btx"></div>
+    <div class="tail" id="tail" style="left:30px;bottom:-8px"></div>
+  </div>
+
+  <!-- tour spotlight -->
+  <div class="spot" id="spot"></div>
+  <div class="tourbar" id="tourbar">
+    <button class="tskip" id="skip">Skip</button>
+    <div class="dots" id="dots"></div>
+    <button class="tnext" id="next">Next</button>
+  </div>
+
+  <!-- welcome -->
+  <div class="welcome" id="welcome">
+    <div class="wc-cal">
+      <div class="cal" style="width:108px;height:108px">
+        <div class="halo"></div><div class="orb"></div>
+        <div class="eye l"></div><div class="eye r"></div><div class="mouth"></div>
+        <svg class="spark" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6L12 2Z"/></svg>
+      </div>
+    </div>
+    <h2>Hey Tariq 👋<br>I'm <em>Cal</em>, your coach.</h2>
+    <p>I'll turn every photo into calories, macros and a smart next move. Want the 20-second tour?</p>
+    <div class="wc-btns">
+      <button class="btn primary" id="startTour">Show me around</button>
+      <button class="btn ghost" id="explore">I'll explore myself</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var world=document.getElementById('world'), deck=document.getElementById('deck');
+  var layers=[].slice.call(document.querySelectorAll('.layer[data-depth]'));
+  var calLayer=document.getElementById('calLayer');
+
+  /* ---- parallax depth ---- */
+  var tX=0.30, tY=-0.18, cX=0, cY=0, calCentered=true;   // default offset so depth shows on load/screenshot
+  world.addEventListener('pointermove',function(e){
+    var r=world.getBoundingClientRect();
+    tX=((e.clientX-r.left)/r.width*2-1);
+    tY=((e.clientY-r.top)/r.height*2-1);
+  });
+  window.addEventListener('deviceorientation',function(e){
+    if(e.gamma!=null){tX=Math.max(-1,Math.min(1,e.gamma/26));tY=Math.max(-1,Math.min(1,(e.beta-45)/26));}
+  });
+  function frame(){
+    cX+=(tX-cX)*0.07; cY+=(tY-cY)*0.07;
+    layers.forEach(function(l){var d=+l.dataset.depth;l.style.transform='translate3d('+(-cX*d)+'px,'+(-cY*d)+'px,0)';});
+    var cd=+calLayer.dataset.depth;
+    calLayer.style.transform=(calCentered?'translate(-50%,-50%) ':'')+'translate3d('+(-cX*cd)+'px,'+(-cY*cd)+'px,0)';
+    deck.style.transform='translate3d('+(-cX*20)+'px,'+(-cY*20)+'px,0) rotateX('+(-cY*5)+'deg) rotateY('+(cX*7)+'deg)';
+    requestAnimationFrame(frame);
+  }
+  frame();
+
+  /* ---- hero arc tip ---- */
+  var prog=document.getElementById('prog'), tip=document.getElementById('tip'), gauge=document.getElementById('gauge');
+  (function(){var tot=prog.getTotalLength(),pt=prog.getPointAtLength(tot*0.29);
+   tip.style.left=pt.x+'px';tip.style.top=pt.y+'px';})();
+
+  /* ---- Cal positioning helper ---- */
+  function moveCal(x,y,scale){
+    calLayer.style.left=x+'px'; calLayer.style.top=y+'px';
+    calLayer.querySelector('.cal').style.transform='scale('+(scale||0.66)+')';
+  }
+
+  /* ---- guided tour ---- */
+  var steps=[
+    {el:'t-hero',  tx:"This big number is your <b>fuel for today</b> — calories left to eat. The ring glows fuller as you log meals."},
+    {el:'t-mac',   tx:"Your three fuels: <b>protein, carbs, fat</b>. Keep the rings topped up and you're eating balanced — no math needed."},
+    {el:'t-coach', tx:"This is <b>me</b>. After every meal I tell you the <b>one smart move</b> — a swap, a snack, what to order out."},
+    {el:'t-scan',  tx:"The magic button. <b>Point it at any plate</b> and I'll have the calories in about 2 seconds. Try it anytime."}
+  ];
+  var welcome=document.getElementById('welcome'), bubble=document.getElementById('bubble'),
+      btx=document.getElementById('btx'), tail=document.getElementById('tail'),
+      spot=document.getElementById('spot'), tourbar=document.getElementById('tourbar'),
+      dots=document.getElementById('dots'), nextBtn=document.getElementById('next'), skipBtn=document.getElementById('skip');
+  var i=0;
+  steps.forEach(function(_,k){var d=document.createElement('i');if(k===0)d.className='on';dots.appendChild(d);});
+
+  function showStep(n){
+    i=n; var s=steps[n], el=document.getElementById(s.el);
+    var wr=world.getBoundingClientRect(), r=el.getBoundingClientRect();
+    var x=r.left-wr.left, y=r.top-wr.top, w=r.width, h=r.height, pad=8;
+    spot.style.left=(x-pad)+'px'; spot.style.top=(y-pad)+'px';
+    spot.style.width=(w+pad*2)+'px'; spot.style.height=(h+pad*2)+'px';
+    spot.classList.add('on');
+    btx.innerHTML=s.tx;
+    // bubble + Cal below the spotlight (or above if low)
+    var below=y+h+150 < wr.height;
+    var by=below ? (y+h+86) : (y-150);
+    var bl=Math.max(16,Math.min(wr.width-280, x));
+    bubble.style.left=bl+'px';
+    bubble.style.top=by+'px'; bubble.style.opacity='1';
+    tail.style.top=below?'-8px':'auto'; tail.style.bottom=below?'auto':'-8px';
+    tail.style.left='44px';
+    calCentered=false;
+    calLayer.style.left=(bl-12)+'px'; calLayer.style.top=(by-40)+'px'; calLayer.style.right='auto'; calLayer.style.bottom='auto';
+    calLayer.querySelector('.cal').style.transform='scale(.5)';
+    [].forEach.call(dots.children,function(d,k){d.className=k===n?'on':'';});
+    nextBtn.textContent = n===steps.length-1 ? "Let's go" : "Next";
+  }
+  function startTour(){
+    world.classList.remove('welcoming');
+    welcome.classList.add('hide'); tourbar.classList.add('on');
+    showStep(0);
+  }
+  function endTour(){
+    spot.classList.remove('on'); bubble.style.opacity='0'; tourbar.classList.remove('on');
+    // park Cal bottom-right as a floating helper
+    calCentered=false;
+    calLayer.style.left='auto'; calLayer.style.right='18px'; calLayer.style.top='auto'; calLayer.style.bottom='90px';
+    calLayer.querySelector('.cal').style.transform='scale(.62)';
+  }
+  document.getElementById('startTour').addEventListener('click',startTour);
+  document.getElementById('explore').addEventListener('click',function(){world.classList.remove('welcoming');welcome.classList.add('hide');endTour();});
+  nextBtn.addEventListener('click',function(){ i<steps.length-1 ? showStep(i+1) : endTour(); });
+  skipBtn.addEventListener('click',endTour);
+  document.getElementById('cal').addEventListener('click',function(){ if(welcome.classList.contains('hide')) startTour(); });
+
+  /* expose for screenshot driving */
+  window.__tour=showStep; window.__start=startTour; window.__end=endTour;
+})();
+</script>
+</body>
+</html>
