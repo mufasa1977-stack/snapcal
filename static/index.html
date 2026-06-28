@@ -187,6 +187,13 @@
   .cam-btn svg{width:38px;height:38px}
   .cam-btn .t1{font-size:17px;font-weight:700}
   .cam-btn .t2{font-size:13px;opacity:.7}
+  .recent-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:none;cursor:pointer;
+    background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:8px;font-family:inherit}
+  .recent-row:last-child{margin-bottom:0}
+  .recent-name{flex:1;font-size:14px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .recent-meta{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+  .recent-plus{flex:none;width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;font-size:17px;display:flex;align-items:center;justify-content:center;line-height:1}
+  .recent-adding{opacity:.5}
   .gal-btn{
     width:100%;margin-top:10px;border:none;cursor:pointer;
     background:var(--card);color:var(--ink);border-radius:var(--r);
@@ -1019,6 +1026,12 @@
       <button class="btn btn-dark" id="qaAddBtn" type="button" style="margin-top:14px">Add to today&rsquo;s log</button>
     </div>
 
+    <div class="card" id="recentsCard" style="display:none;margin-top:12px">
+      <div class="goal-title">🔁 Recent foods</div>
+      <div class="goal-desc" style="margin:4px 2px 10px">Tap to log again in one tap — no re-typing.</div>
+      <div id="recentsList"></div>
+    </div>
+
     <div class="card" id="previewCard" style="margin-top:14px;position:relative">
       <button class="scan-x" id="previewClose" type="button" aria-label="Close">&times;</button>
       <img id="previewImg" alt="Food preview">
@@ -1818,7 +1831,7 @@ function switchTab(name){
   window.scrollTo(0, 0);
   if (name === "today") loadToday();
   if (name === "eatout") loadEatOut();
-  if (name === "scan") updateScanHint();
+  if (name === "scan"){ updateScanHint(); loadRecents(); }
   if (name === "history") loadHistory();
   if (name === "profile") loadProfile();
 }
@@ -1901,6 +1914,41 @@ if ($("#qaAddBtn")) $("#qaAddBtn").addEventListener("click", async function(){
     switchTab("today");
   } catch (e){ toast(e.message || "Couldn't add it", true); }
   finally { btn.disabled = false; }
+});
+
+/* ---------------- Recent foods: re-log a repeat meal in ONE tap ---------------- */
+function recentRowHTML(r, i){
+  var macros = [r.protein_g ? r.protein_g + "p" : "", r.carbs_g ? r.carbs_g + "c" : "", r.fat_g ? r.fat_g + "f" : ""].filter(Boolean).join(" · ");
+  return '<button class="recent-row" type="button" data-i="' + i + '">' +
+    '<span class="recent-name">' + esc(r.name) + '</span>' +
+    '<span class="recent-meta">' + int(r.calories) + ' cal' + (macros ? ' · ' + esc(macros) : '') + '</span>' +
+    '<span class="recent-plus">+</span></button>';
+}
+var _recents = [];
+function loadRecents(){
+  var card = $("#recentsCard"), list = $("#recentsList"); if (!card || !list) return;
+  return api("/api/recents").then(function(d){
+    _recents = (d && d.recents) || [];
+    if (!_recents.length){ card.style.display = "none"; return; }
+    list.innerHTML = _recents.map(recentRowHTML).join("");
+    card.style.display = "block";
+  }).catch(function(){ card.style.display = "none"; });
+}
+if ($("#recentsList")) $("#recentsList").addEventListener("click", async function(e){
+  var row = e.target.closest(".recent-row"); if (!row) return;
+  var r = _recents[int(row.dataset.i)]; if (!r) return;
+  row.disabled = true; row.classList.add("recent-adding");
+  try {
+    await api("/api/meals", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: todayStr(), time: nowTime(), name: r.name,
+        calories: int(r.calories), protein_g: int(r.protein_g), carbs_g: int(r.carbs_g), fat_g: int(r.fat_g),
+        items_json: JSON.stringify([{ name: r.name, calories: int(r.calories), protein_g: int(r.protein_g), carbs_g: int(r.carbs_g), fat_g: int(r.fat_g) }]),
+        source: r.source || "Recent", accuracy_tier: r.accuracy_tier || "estimate"
+      }) });
+    toast("✓ Logged " + r.name);
+    switchTab("today");
+  } catch (err){ toast(err.message || "Couldn't log it", true); row.disabled = false; row.classList.remove("recent-adding"); }
 });
 
 /* ---------------- Move module (low-impact workouts + desk breaks) ---------------- */

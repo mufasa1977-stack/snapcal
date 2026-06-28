@@ -2998,6 +2998,34 @@ def list_meals():
     return jsonify({"meals": meals, "totals": totals})
 
 
+@app.get("/api/recents")
+def recent_foods():
+    """Distinct recently-logged foods for this device (most-recent first) so the user can re-log a repeat meal in
+       ONE tap — the completeness/retention feature every serious tracker has. Deduped by name."""
+    con = get_db()
+    try:
+        rows = con.execute(
+            """SELECT name, calories, protein_g, carbs_g, fat_g, source, accuracy_tier
+               FROM meals WHERE uid = ? AND name IS NOT NULL AND TRIM(name) <> ''
+               ORDER BY date DESC, time DESC, id DESC LIMIT 200""",
+            (_uid(),),
+        ).fetchall()
+    finally:
+        con.close()
+    seen, out = set(), []
+    for r in rows:
+        key = (r["name"] or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append({"name": r["name"], "calories": _int(r["calories"]), "protein_g": _int(r["protein_g"]),
+                    "carbs_g": _int(r["carbs_g"]), "fat_g": _int(r["fat_g"]),
+                    "source": r["source"], "accuracy_tier": r["accuracy_tier"]})
+        if len(out) >= 15:
+            break
+    return jsonify({"recents": out})
+
+
 @app.delete("/api/meals/<int:meal_id>")
 def delete_meal(meal_id):
     con = get_db()
