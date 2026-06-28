@@ -1519,6 +1519,12 @@ function _mapOFF(code, j){
   }
   function r1(x){ return x == null ? null : Math.round(x * 10) / 10; }
   var sodium = val("sodium");
+  // whole-package math: calories per gram x total package grams (so we can show "the whole box")
+  var totalG = parseFloat(p.product_quantity); totalG = isNaN(totalG) ? null : totalG;
+  var servG = servGrams || (parseFloat(p.serving_quantity) || null);
+  var perGram = (hasServ && servG) ? (cal / servG) : (!hasServ ? (cal / 100) : null);
+  var pkgServ = (servG && totalG && totalG > servG * 1.5) ? Math.round(totalG / servG) : null;
+  var pkgCal = (pkgServ && pkgServ >= 2 && perGram) ? Math.round(perGram * totalG) : null;
   return {
     found: true, code: code,
     name: (p.product_name || "").trim() || "Packaged food",
@@ -1528,13 +1534,53 @@ function _mapOFF(code, j){
     calories: Math.round(cal), protein_g: r1(protein), carbs_g: r1(carbs), fat_g: r1(fat),
     fiber_g: r1(val("fiber")), sugar_g: r1(val("sugars")), sat_fat_g: r1(val("saturated-fat")),
     sodium_mg: sodium != null ? Math.round(sodium * 1000) : null,
+    pkg_servings: pkgServ, pkg_calories: pkgCal,
+    allergens: (p.allergens_tags || []).map(function(t){ return String(t).replace(/^[a-z]{2}:/, ""); }),
     source: "Open Food Facts", accuracy_tier: estimated ? "ESTIMATED" : "EXACT", estimated: estimated
   };
+}
+/* Rule-based coach take for a scanned product — works WITHOUT Gemini credits: goal-aware verdict + an
+   allergy-safe, similar-tasting healthier swap. */
+function _foodVerdict(d){
+  var sugar = d.sugar_g || 0, sat = d.sat_fat_g || 0, sodium = d.sodium_mg || 0, prot = d.protein_g || 0, fib = d.fiber_g || 0;
+  var name = ((d.name || "") + " " + (d.brand || "")).toLowerCase();
+  var treaty = (sugar >= 10) || (sat >= 5) || (sodium >= 400 && prot < 5);
+  var solid = (prot >= 10 && sugar < 8) || (fib >= 4 && sugar < 10);
+  var allerg = (typeof allergyLabels === "function" ? allergyLabels() : []).map(function(s){ return String(s).toLowerCase(); });
+  function safe(s){ return !allerg.some(function(a){ return a && s.toLowerCase().indexOf(a) >= 0; }); }
+  var swaps = [];
+  if (/popcorn|crunch|caramel|kettle|toffee/.test(name)) swaps = ["air-popped popcorn with a little cinnamon", "a small handful of nuts with a few dark-chocolate chips"];
+  else if (/chip|crisp|cheeto|puff|dorito|frito|pretzel|cracker/.test(name)) swaps = ["air-popped popcorn", "roasted chickpeas", "baked veggie straws"];
+  else if (/cookie|brownie|cake|candy|chocolate|donut|doughnut|gummy|pastry/.test(name)) swaps = ["a couple squares of dark chocolate", "Greek yogurt with berries"];
+  else if (/soda|cola|soft drink|energy drink|lemonade/.test(name)) swaps = ["sparkling water with lime", "a zero-sugar version"];
+  else if (/ice cream|gelato/.test(name)) swaps = ["a protein ice cream (Halo Top / Nick's)", "Greek-yogurt bark"];
+  else if (/cereal|granola/.test(name)) swaps = ["plain Greek yogurt with berries", "overnight oats"];
+  else if (treaty && sugar >= 8) swaps = ["fruit with a few nuts", "Greek yogurt with a drizzle of honey"];
+  else if (treaty) swaps = ["air-popped popcorn", "roasted chickpeas"];
+  var swap = swaps.filter(safe)[0] || "";
+  var costly = (goal === "lose_weight" || goal === "recomp" || goal === "glp1");
+  if (solid && !treaty) return { icon: "✅", line: "Solid pick" + (prot >= 10 ? " — good protein" : "") + ". This fits your plan.", swap: "" };
+  if (treaty) return { icon: "🍫", line: "Tasty treat, not an everyday choice" + (sugar >= 10 ? (" — high in sugar (" + int(sugar) + "g/serving)") : (sat >= 5 ? " — high in saturated fat" : "")) + ". " + (costly ? "Keep the portion small so it still fits your goal." : "Fine in moderation."), swap: swap };
+  return { icon: "👍", line: "Reasonable in a normal portion.", swap: swap };
+}
+function _barcodeCoach(d){
+  var html = "";
+  if (d.pkg_servings && d.pkg_servings >= 2 && d.pkg_calories){
+    html += '<div style="margin-top:11px;padding:10px 12px;background:var(--soft);border-radius:11px;font-size:12.5px;line-height:1.45">' +
+      '<b>' + int(d.calories) + ' cal</b> for one serving (' + esc(d.serving) + '). ' +
+      'Eat the whole package (about ' + d.pkg_servings + ' servings) and it’s <b>' + int(d.pkg_calories) + ' cal</b>.' +
+      '</div>';
+  }
+  var v = _foodVerdict(d);
+  if (v.line) html += '<div style="margin-top:9px;font-size:13px;line-height:1.45">' + v.icon + ' ' + esc(v.line) +
+    (v.swap ? ' <b>Try instead:</b> ' + esc(v.swap) + '.' : '') + '</div>';
+  html += '<div style="margin-top:9px;font-size:12px;color:var(--ink3)">👉 Don’t forget to log it — tap “Add to today”.</div>';
+  return html;
 }
 /* Look up ONE Open Food Facts code (browser-side; our server is network-blocked from OFF). Returns a mapped
    product or null. */
 function _offProduct(code){
-  var fields = "product_name,brands,serving_size,nutriments,image_front_small_url";
+  var fields = "product_name,brands,serving_size,nutriments,image_front_small_url,product_quantity,serving_quantity,allergens_tags";
   return fetch("https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(code) + ".json?fields=" + fields, { headers: { "Accept": "application/json" } })
     .then(function(r){ return r.json(); })
     .then(function(j){ var d = _mapOFF(code, j); return d.found ? d : null; })
@@ -1576,16 +1622,23 @@ function renderBarcodeResult(d){
     if (go) go.addEventListener("click", function(){ var ni = $("#nutriInput"); if (ni){ try{ ni.scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){} ni.focus(); } });
     _seeIt(); return;
   }
+  // allergy safety: warn if the product's allergens overlap what the user flagged
+  var myAllerg = (typeof allergyLabels === "function" ? allergyLabels() : []).map(function(s){ return String(s).toLowerCase(); });
+  var tags = (d.allergens || []).map(function(t){ return t.toLowerCase(); });
+  var hits = myAllerg.filter(function(a){ var aw = a.replace(/s$/, ""); return aw && tags.some(function(t){ return t.indexOf(aw) >= 0 || aw.indexOf(t) >= 0; }); });
+  var warn = hits.length ? '<div style="margin:4px 0 8px;padding:9px 11px;background:rgba(220,53,69,.16);color:#ff6b6b;border-radius:10px;font-size:12.5px;font-weight:800">⚠️ Contains ' + esc(hits.join(", ")) + ' — you flagged this as an allergy. Skip it.</div>' : '';
   res.innerHTML = '<div class="nf-card">' +
     '<div class="nf-food">' + esc(d.name) + (d.brand ? ' <span style="color:var(--ink3);font-weight:600">&middot; ' + esc(d.brand) + '</span>' : '') + '</div>' +
     '<div class="nf-serv">Per ' + esc(d.serving) + ' &middot; ' + (d.estimated
       ? '<b style="color:#c77d20">≈ Estimated from the label</b>'
       : '<b style="color:var(--brand)">✓ Verified label data</b>') + '</div>' +
+    warn +
     (d.estimated ? '<div style="font-size:11.5px;color:var(--ink3);margin:-2px 0 6px">The listed calories looked off, so we recalculated them from the protein/carbs/fat on the label.</div>' : '') +
     nfRow("Calories", d.calories, "kcal") + nfRow("Protein", d.protein_g, "g") + nfRow("Carbs", d.carbs_g, "g") +
     nfRow("Fiber", d.fiber_g, "g") + nfRow("Sugar", d.sugar_g, "g") + nfRow("Fat", d.fat_g, "g") +
     nfRow("Saturated fat", d.sat_fat_g, "g") + nfRow("Sodium", d.sodium_mg, "mg") +
-    '<div class="nf-src">Source: ' + esc(d.source) + ' &middot; exact barcode data, not an estimate</div>' +
+    '<div class="nf-src">Source: ' + esc(d.source) + (d.estimated ? ' &middot; calories estimated from the label' : ' &middot; exact barcode label data') + '</div>' +
+    _barcodeCoach(d) +
     '<button id="bcAdd" type="button" class="btn btn-dark" style="margin-top:12px">Add to today</button>' +
   '</div>';
   var add = bcEl("bcAdd"); if (add) add.addEventListener("click", function(){ addBarcodeToToday(d); });
