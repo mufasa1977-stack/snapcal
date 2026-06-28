@@ -480,6 +480,10 @@
   .nf-micros>summary:before{content:"▸ ";font-size:11px}
   .nf-micros[open]>summary:before{content:"▾ "}
   .nf-grp{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin-top:8px;padding-top:6px}
+  .nf-net span:first-child{color:var(--brand);font-weight:700}
+  .nf-net span:last-child{color:var(--brand)}
+  .netcarb-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:11px 13px;background:var(--soft);border:1px solid var(--line);border-radius:11px;font-size:13.5px;color:var(--ink);cursor:pointer}
+  .netcarb-row input{width:20px;height:20px;accent-color:var(--brand);cursor:pointer;flex:none}
   .nf-empty{font-size:13.5px;color:var(--ink2);text-align:center;padding:6px;line-height:1.45}
   .locp-overlay{position:fixed;inset:0;z-index:9999;background:rgba(15,20,30,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:22px}
   .locp-card{background:var(--card);border-radius:20px;max-width:340px;width:100%;padding:26px 22px 18px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:locpIn .25s ease}
@@ -1525,6 +1529,7 @@ function lookupNutrition(){
       '<div class="nf-food">' + esc(d.food) + '</div>' +
       '<div class="nf-serv">' + esc(d.serving) + '</div>' +
       nfRow("Calories", n.calories, "kcal") + nfRow("Protein", n.protein_g, "g") + nfRow("Carbs", n.carbs_g, "g") +
+      netCarbRow(n.carbs_g, n.fiber_g) +
       nfRow("Fiber", n.fiber_g, "g") + nfRow("Sugar", n.sugar_g, "g") + nfRow("Fat", n.fat_g, "g") +
       nfRow("Saturated fat", n.sat_fat_g, "g") + nfRow("Sodium", n.sodium_mg, "mg") + nfRow("Potassium", n.potassium_mg, "mg") +
       nfRow("Calcium", n.calcium_mg, "mg") + nfRow("Iron", n.iron_mg, "mg") + nfRow("Vitamin C", n.vitc_mg, "mg") +
@@ -1716,6 +1721,7 @@ function renderBarcodeResult(d){
     warn +
     (d.estimated ? '<div style="font-size:11.5px;color:var(--ink3);margin:-2px 0 6px">The listed calories looked off, so we recalculated them from the protein/carbs/fat on the label.</div>' : '') +
     nfRow("Calories", d.calories, "kcal") + nfRow("Protein", d.protein_g, "g") + nfRow("Carbs", d.carbs_g, "g") +
+    netCarbRow(d.carbs_g, d.fiber_g) +
     nfRow("Fiber", d.fiber_g, "g") + nfRow("Sugar", d.sugar_g, "g") + nfRow("Fat", d.fat_g, "g") +
     nfRow("Saturated fat", d.sat_fat_g, "g") + nfRow("Sodium", d.sodium_mg, "mg") +
     '<div class="nf-src">Source: ' + esc(d.source) + (d.estimated ? ' &middot; calories estimated from the label' : ' &middot; exact barcode label data') + '</div>' +
@@ -4012,6 +4018,15 @@ var _diet = "";
 try { _diet = localStorage.getItem("snapcal_diet") || ""; } catch(e){ _diet = ""; }
 function saveDiet(){ try { localStorage.setItem("snapcal_diet", _diet || ""); } catch(e){} }
 function dietLabel(k){ for (var i = 0; i < DIETS.length; i++){ if (DIETS[i].key === k) return DIETS[i].label; } return ""; }
+/* Net carbs (keto / low-carb): net = total carbs − fiber. Opt-in so it doesn't clutter for everyone. */
+var _netCarbs = false;
+try { _netCarbs = localStorage.getItem("snapcal_netcarbs") === "1"; } catch(e){}
+function setNetCarbs(on){ _netCarbs = !!on; try { localStorage.setItem("snapcal_netcarbs", on ? "1" : "0"); } catch(e){} }
+function netCarbRow(carbs, fiber){
+  if (!_netCarbs || carbs == null) return "";
+  var net = Math.max(0, (carbs || 0) - (fiber || 0));
+  return '<div class="nf-row nf-net"><span>Net carbs</span><span>' + fmtNum(Math.round(net * 10) / 10) + ' g</span></div>';
+}
 function dietForbids(text){
   if (!_diet) return false;
   var forbid = DIET_FORBID[_diet]; if (!forbid) return false;
@@ -4074,6 +4089,8 @@ function openAllergySheet(){
     '<div style="color:var(--ink2);font-size:13px;line-height:1.5;margin:-2px 2px 12px">Set these once. Coach Cal tailors every meal idea, grocery list, 7-day plan, and eat-out pick to fit your diet — and keeps your allergens out.</div>' +
     '<div class="allergy-seclabel">I eat <span style="color:var(--ink3);font-weight:600">(tap to set, tap again to clear)</span></div>' +
     '<div class="diet-grid">' + dietChips + '</div>' +
+    '<label class="netcarb-row"><span>🥑 Track <b>net carbs</b> <span style="color:var(--ink3);font-weight:600">— keto / low-carb (carbs − fiber)</span></span>' +
+      '<input type="checkbox" id="netCarbToggle"' + (_netCarbs ? ' checked' : '') + '></label>' +
     '<div class="allergy-seclabel" style="margin-top:14px">Allergies — keep these out</div>' +
     '<div class="allergy-grid">' + grid + '</div>' +
     '<div class="allergy-note">⚠️ <b>Do not rely on SnapCal for life-threatening allergies.</b> Allergen detection can be incomplete or wrong — always verify with the restaurant or read the product label before eating. Kitchens handle many allergens, so we can\'t guarantee an item is free of cross-contact.</div>';
@@ -4096,6 +4113,9 @@ document.addEventListener("click", function(e){
   if (dc) { selectDiet(dc.getAttribute("data-diet")); return; }
   var ac = e.target.closest(".allergy-chip");
   if (ac) { toggleAllergy(ac.getAttribute("data-allergy"), ac); }
+});
+document.addEventListener("change", function(e){
+  if (e.target && e.target.id === "netCarbToggle"){ setNetCarbs(e.target.checked); toast(e.target.checked ? "Net carbs on" : "Net carbs off"); }
 });
 document.addEventListener("keydown", function(e){
   if (e.target && e.target.id === "askCoachInput" && e.key === "Enter"){ e.preventDefault(); askCoach(); }
