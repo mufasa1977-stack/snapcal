@@ -2578,13 +2578,29 @@ def _usda_key():
 
 
 _NUTRITION_CACHE = {}
-_FDC_NUTRIENTS = {   # USDA nutrient name -> our short label
+_FDC_NUTRIENTS = {   # USDA nutrient name -> our short label. Cronometer-level depth from the SAME USDA fetch.
+    # Macros
     "Energy": "calories", "Protein": "protein_g", "Total lipid (fat)": "fat_g",
     "Carbohydrate, by difference": "carbs_g", "Fiber, total dietary": "fiber_g",
-    "Sugars, total including NLEA": "sugar_g", "Total Sugars": "sugar_g", "Sodium, Na": "sodium_mg",
-    "Fatty acids, total saturated": "sat_fat_g", "Cholesterol": "cholesterol_mg",
-    "Calcium, Ca": "calcium_mg", "Iron, Fe": "iron_mg", "Potassium, K": "potassium_mg",
+    "Sugars, total including NLEA": "sugar_g", "Total Sugars": "sugar_g",
+    # Fats (detail)
+    "Fatty acids, total saturated": "sat_fat_g",
+    "Fatty acids, total monounsaturated": "mufa_g",
+    "Fatty acids, total polyunsaturated": "pufa_g",
+    "Fatty acids, total trans": "trans_fat_g",
+    "Cholesterol": "cholesterol_mg",
+    # Minerals
+    "Sodium, Na": "sodium_mg", "Potassium, K": "potassium_mg", "Calcium, Ca": "calcium_mg",
+    "Iron, Fe": "iron_mg", "Magnesium, Mg": "magnesium_mg", "Zinc, Zn": "zinc_mg",
+    "Phosphorus, P": "phosphorus_mg",
+    # Vitamins
     "Vitamin C, total ascorbic acid": "vitc_mg",
+    "Vitamin A, RAE": "vita_mcg",
+    "Vitamin D (D2 + D3)": "vitd_mcg",
+    "Vitamin E (alpha-tocopherol)": "vite_mg",
+    "Vitamin K (phylloquinone)": "vitk_mcg",
+    "Thiamin": "b1_mg", "Riboflavin": "b2_mg", "Niacin": "b3_mg",
+    "Vitamin B-6": "b6_mg", "Folate, total": "folate_mcg", "Vitamin B-12": "b12_mcg",
 }
 
 

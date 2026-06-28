@@ -467,6 +467,12 @@
   .nf-row span:first-child{color:var(--ink2)}
   .nf-row span:last-child{font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
   .nf-src{font-size:11.5px;color:var(--ink3);margin-top:11px;font-weight:600}
+  .nf-micros{margin-top:8px;border-top:1px solid var(--line)}
+  .nf-micros>summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--brand);padding:9px 0;list-style:none}
+  .nf-micros>summary::-webkit-details-marker{display:none}
+  .nf-micros>summary:before{content:"▸ ";font-size:11px}
+  .nf-micros[open]>summary:before{content:"▾ "}
+  .nf-grp{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin-top:8px;padding-top:6px}
   .nf-empty{font-size:13.5px;color:var(--ink2);text-align:center;padding:6px;line-height:1.45}
   .locp-overlay{position:fixed;inset:0;z-index:9999;background:rgba(15,20,30,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:22px}
   .locp-card{background:var(--card);border-radius:20px;max-width:340px;width:100%;padding:26px 22px 18px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:locpIn .25s ease}
@@ -1474,6 +1480,22 @@ loadDest();
 
 /* ---------------- USDA nutrition lookup (real federal, science-backed data) ---------------- */
 function nfRow(label, val, unit){ return (val == null) ? "" : '<div class="nf-row"><span>' + esc(label) + '</span><span>' + fmtNum(val) + ' ' + esc(unit) + '</span></div>'; }
+/* Cronometer-level micronutrient panel — every vitamin/mineral USDA returns, grouped + collapsible, only what's present. */
+function microsPanel(n){
+  if (!n) return "";
+  var groups = [
+    ["Fats", [["Monounsaturated fat", n.mufa_g, "g"], ["Polyunsaturated fat", n.pufa_g, "g"], ["Trans fat", n.trans_fat_g, "g"], ["Cholesterol", n.cholesterol_mg, "mg"]]],
+    ["Minerals", [["Magnesium", n.magnesium_mg, "mg"], ["Zinc", n.zinc_mg, "mg"], ["Phosphorus", n.phosphorus_mg, "mg"]]],
+    ["Vitamins", [["Vitamin A", n.vita_mcg, "mcg"], ["Vitamin D", n.vitd_mcg, "mcg"], ["Vitamin E", n.vite_mg, "mg"], ["Vitamin K", n.vitk_mcg, "mcg"], ["Thiamin (B1)", n.b1_mg, "mg"], ["Riboflavin (B2)", n.b2_mg, "mg"], ["Niacin (B3)", n.b3_mg, "mg"], ["Vitamin B6", n.b6_mg, "mg"], ["Folate", n.folate_mcg, "mcg"], ["Vitamin B12", n.b12_mcg, "mcg"]]]
+  ];
+  var html = "", count = 0;
+  groups.forEach(function(g){
+    var rows = g[1].map(function(r){ return nfRow(r[0], r[1], r[2]); }).filter(Boolean).join("");
+    if (rows){ html += '<div class="nf-grp">' + esc(g[0]) + '</div>' + rows; count += g[1].filter(function(r){ return r[1] != null; }).length; }
+  });
+  if (!count) return "";
+  return '<details class="nf-micros"><summary>Vitamins &amp; minerals (' + count + ')</summary>' + html + '</details>';
+}
 function lookupNutrition(){
   var inp = $("#nutriInput"), res = $("#nutriResult");
   var q = (inp && inp.value || "").trim();
@@ -1493,6 +1515,7 @@ function lookupNutrition(){
       nfRow("Fiber", n.fiber_g, "g") + nfRow("Sugar", n.sugar_g, "g") + nfRow("Fat", n.fat_g, "g") +
       nfRow("Saturated fat", n.sat_fat_g, "g") + nfRow("Sodium", n.sodium_mg, "mg") + nfRow("Potassium", n.potassium_mg, "mg") +
       nfRow("Calcium", n.calcium_mg, "mg") + nfRow("Iron", n.iron_mg, "mg") + nfRow("Vitamin C", n.vitc_mg, "mg") +
+      microsPanel(n) +
       '<div class="nf-src">Source: ' + esc(d.source) + ' &middot; real federal data, not an estimate</div>' +
     '</div>';
   }).catch(function(){ if (res) res.innerHTML = '<div class="nf-card"><div class="nf-empty">Couldn’t reach the USDA database right now — try again in a moment.</div></div>'; });
@@ -2962,6 +2985,56 @@ function snapGeo(onOk, onErr, opts){
   }, function(){
     if (onErr) onErr({ code: 1, message: "dismissed" });   /* "Not now": soft, no nag — they can tap any location feature again later */
   });
+}
+
+/* ---------------- FIRST-RUN ONBOARDING: ask for all permissions up front, once ----------------
+   Instead of surprising the user with a camera prompt when they open the scanner (and a separate
+   location prompt later), we explain everything on first launch and request them together from ONE
+   tap. Gesture-backed (the "Enable" click). Sets snapcal_onboarded so it never shows again. */
+async function requestAllPerms(){
+  // 1) Notifications (daily check-ins)
+  try { if ("Notification" in window && Notification.permission === "default") await Notification.requestPermission(); } catch(e){}
+  // 2) Location (eat-out / on-route). Prime the flag so snapGeo never re-asks.
+  try {
+    lsSet("snapcal_loc_primed", 1);
+    await new Promise(function(res){ if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(){res();}, function(){res();}, { timeout: 8000 }); else res(); });
+  } catch(e){}
+  // 3) Camera (scan food / barcode). Request then immediately release the stream.
+  try { if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia){ var s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); s.getTracks().forEach(function(t){ t.stop(); }); } } catch(e){}
+  // 4) Native: Apple Health / Google Fit
+  try { if (typeof _healthNative === "function" && _healthNative() && window.Health.connect) await window.Health.connect(); } catch(e){}
+}
+function showOnboarding(){
+  var ov = document.getElementById("onboard");
+  if (!ov){
+    ov = document.createElement("div");
+    ov.id = "onboard"; ov.className = "locp-overlay";
+    ov.innerHTML =
+      '<div class="locp-card" role="dialog" aria-modal="true">' +
+        '<div class="locp-ic">👋</div>' +
+        '<div class="locp-title">Welcome to SnapCal</div>' +
+        '<div class="locp-body" style="text-align:left">Your all-in-one health coach. To work its magic, SnapCal uses:' +
+          '<div style="margin:12px 0 4px;display:flex;flex-direction:column;gap:9px">' +
+            '<div>📷 <b>Camera</b> — scan your food &amp; barcodes</div>' +
+            '<div>📍 <b>Location</b> — healthy spots near you &amp; on your drive</div>' +
+            '<div>🔔 <b>Notifications</b> — Coach Cal\'s daily check-ins</div>' +
+          '</div>' +
+          'Everything stays <b>private</b> — never shared or sold. You can change these anytime in Settings.</div>' +
+        '<button class="locp-allow" type="button">Enable &amp; get started</button>' +
+        '<button class="locp-skip" type="button">Maybe later</button>' +
+      '</div>';
+    document.body.appendChild(ov);
+  }
+  ov.style.display = "flex";
+  function done(){ ov.style.display = "none"; lsSet("snapcal_onboarded", 1); }
+  ov.querySelector(".locp-allow").onclick = async function(){
+    var b = ov.querySelector(".locp-allow"); b.disabled = true; b.textContent = "Setting up…";
+    await requestAllPerms(); done();
+    if (typeof updatePushUI === "function") updatePushUI();
+    if (typeof updateHealthUI === "function") updateHealthUI();
+    toast("You're all set 🎉");
+  };
+  ov.querySelector(".locp-skip").onclick = function(){ done(); };
 }
 
 /* Give Coach Cal real eyes: if a destination is saved, find food ALONG the drive; else just what's near now. */
@@ -5423,6 +5496,8 @@ function renderWeightChart(w){
   updateHealthUI();
   loadHealthToday();
   loadToday();
+  /* First launch on this device → explain + request all permissions together (no surprise prompts later). */
+  if (!lsGet("snapcal_onboarded")) setTimeout(showOnboarding, 600);
   /* On the native app, auto-sync today's steps in the background once Health is already connected. */
   if (_healthNative() && window.Health.isConnected && window.Health.isConnected()){
     setTimeout(function(){ window.Health.pull().then(function(d){ if (d){ api("/api/health", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(d) }).then(function(){ _renderHealthStats(d); }).catch(function(){}); } }).catch(function(){}); }, 1500);
