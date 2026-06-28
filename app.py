@@ -395,6 +395,23 @@ def init_db():
                    glasses INTEGER NOT NULL DEFAULT 0
                )"""
         )
+        # Wearable / phone health data synced from Apple Health (HealthKit) or Google Fit / Health Connect via
+        # the native build. One row per device per day. Lets Coach Cal coach on REAL movement + recovery
+        # (steps, active calories, resting HR, sleep, weight) — the all-in-one "hub" move.
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS health_metrics(
+                   uid TEXT,
+                   date TEXT,
+                   steps INTEGER,
+                   active_cal INTEGER,
+                   resting_hr INTEGER,
+                   sleep_min INTEGER,
+                   weight REAL,
+                   source TEXT,
+                   updated TEXT,
+                   PRIMARY KEY (uid, date)
+               )"""
+        )
         # Server-side daily usage counters (the HARD cost cap). The client shows "N scans left" from
         # localStorage for instant UX, but that's trivially editable — this table is the real enforcement so a
         # free user can't run up the Gemini bill on /api/analyze (vision) + /api/chat (Coach Cal). Premium = no cap.
@@ -1643,6 +1660,28 @@ def _body_clause(d):
     return s + "."
 
 
+def _health_clause(row):
+    """Feed today's REAL movement/recovery (from Apple Health / Google Fit) into Coach Cal so it coaches on it —
+       e.g. nudge a walk to hit a step goal, or factor active calories into the day. Skips silently if not synced."""
+    if not row:
+        return ""
+    bits = []
+    steps = row["steps"] if row["steps"] is not None else 0
+    if steps:
+        bits.append(f"{steps:,} steps so far")
+    if row["active_cal"]:
+        bits.append(f"~{row['active_cal']} active calories burned")
+    if row["resting_hr"]:
+        bits.append(f"resting heart rate {row['resting_hr']} bpm")
+    if row["sleep_min"]:
+        bits.append(f"{round(row['sleep_min'] / 60.0, 1)}h sleep last night")
+    if not bits:
+        return ""
+    return ("\n\nTODAY'S HEALTH DATA (synced from their phone/wearable — use it: if steps are low, suggest a short "
+            "walk toward ~7,000; factor active calories into how much room they have; never shame, just coach): "
+            + "; ".join(bits) + ".")
+
+
 _DOW2 = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
 _DOW3 = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 
@@ -1889,6 +1928,7 @@ def chat():
     if goal == "recomp":
         system += RECOMP_CHAT_CLAUSE
     system += _body_clause(d)
+    system += _health_clause(_health_today(_uid()))
     lt = str(d.get("local_time") or "").strip()[:24]
     if lt:
         system += ("\n\nThe user's current local time is " + lt + ". Make every food or meal suggestion "
@@ -2271,6 +2311,80 @@ def push_test():
             con.close()
         return jsonify({"error": "subscription_expired"}), 410
     return jsonify({"error": "send_failed"}), 502
+
+
+# ---------------------------------------------------------------- HEALTH SYNC (Apple Health / Google Fit hub)
+HEALTH_NUM_KEYS = ("steps", "active_cal", "resting_hr", "sleep_min")  # ints
+
+
+def _health_today(uid):
+    """Today's synced health row for a device (or None) — fed to Coach Cal so it coaches on real movement."""
+    con = get_db()
+    try:
+        return con.execute("SELECT * FROM health_metrics WHERE uid = ? AND date = ?",
+                          (uid, date.today().isoformat())).fetchone()
+    finally:
+        con.close()
+
+
+@app.post("/api/health")
+def health_sync():
+    """The native app pushes wearable/phone health data here (steps/active cal/resting HR/sleep/weight) for a
+       date. Upserts one row per device per day. Web build never calls this (no HealthKit/Health Connect)."""
+    d = request.get_json(silent=True) or {}
+    day = str(d.get("date") or date.today().isoformat())[:10]
+    steps = _int(d.get("steps"), 0) or None
+    active_cal = _int(d.get("active_cal"), 0) or None
+    resting_hr = _int(d.get("resting_hr"), 0) or None
+    sleep_min = _int(d.get("sleep_min"), 0) or None
+    try:
+        weight = float(d.get("weight")) if d.get("weight") not in (None, "") else None
+    except (TypeError, ValueError):
+        weight = None
+    source = re.sub(r"[^A-Za-z _-]", "", str(d.get("source") or ""))[:24] or "device"
+    con = get_db()
+    try:
+        con.execute(
+            """INSERT INTO health_metrics(uid, date, steps, active_cal, resting_hr, sleep_min, weight, source, updated)
+               VALUES(?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(uid, date) DO UPDATE SET
+                   steps=COALESCE(excluded.steps, steps),
+                   active_cal=COALESCE(excluded.active_cal, active_cal),
+                   resting_hr=COALESCE(excluded.resting_hr, resting_hr),
+                   sleep_min=COALESCE(excluded.sleep_min, sleep_min),
+                   weight=COALESCE(excluded.weight, weight),
+                   source=excluded.source, updated=excluded.updated""",
+            (_uid(), day, steps, active_cal, resting_hr, sleep_min, weight, source,
+             datetime.utcnow().isoformat()),
+        )
+        # If Health sent a fresh body weight, mirror it into the weight-trend table too (one source of truth).
+        if weight is not None:
+            con.execute("INSERT INTO weights(date, weight) VALUES(?,?) ON CONFLICT(date) DO UPDATE SET weight=excluded.weight",
+                        (day, weight))
+        con.commit()
+    finally:
+        con.close()
+    return jsonify({"ok": True})
+
+
+@app.get("/api/health")
+def health_get():
+    """Return recent synced health metrics for this device (Today card + history)."""
+    try:
+        days = max(1, min(90, int(request.args.get("days", "1"))))
+    except (TypeError, ValueError):
+        days = 1
+    cutoff = (date.today() - timedelta(days=days - 1)).isoformat()
+    con = get_db()
+    try:
+        rows = con.execute(
+            "SELECT date, steps, active_cal, resting_hr, sleep_min, weight, source FROM health_metrics "
+            "WHERE uid = ? AND date >= ? ORDER BY date DESC", (_uid(), cutoff)).fetchall()
+    finally:
+        con.close()
+    out = [dict(r) for r in rows]
+    today = next((r for r in out if r["date"] == date.today().isoformat()), None)
+    return jsonify({"days": out, "today": today})
 
 
 # ---- Coach Cal's VOICE: Gemini TTS, cached by text so common/repeated lines cost nothing after the 1st play ----

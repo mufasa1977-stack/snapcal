@@ -1203,6 +1203,24 @@
       <button class="btn" id="pushTest" type="button" style="margin-top:12px;display:none">Send me a test check-in</button>
     </div>
 
+    <div class="card" id="healthCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div>
+          <div class="goal-title" style="margin:0">🏃 Apple Health &amp; Google Fit</div>
+          <div class="goal-hint" id="healthStatus" style="margin:5px 0 0">Sync your steps so Coach Cal coaches on how much you actually move.</div>
+        </div>
+        <button class="btn btn-dark" id="healthToggle" type="button" style="margin-top:0;width:auto;padding:12px 18px">Connect</button>
+      </div>
+      <div id="healthStats" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+        <div style="display:flex;gap:18px">
+          <div><div style="font-size:22px;font-weight:800;color:var(--ink)" id="hSteps">—</div><div style="font-size:11.5px;color:var(--ink2)">steps today</div></div>
+          <div><div style="font-size:22px;font-weight:800;color:var(--ink)" id="hActive">—</div><div style="font-size:11.5px;color:var(--ink2)">active cal</div></div>
+        </div>
+        <div class="goal-desc" id="hNudge" style="margin:10px 2px 0;font-size:12px"></div>
+      </div>
+      <div class="goal-desc" id="healthHint" style="margin:10px 2px 0;font-size:11.5px;display:none"></div>
+    </div>
+
     <div class="card">
       <div class="goal-title">🔒 Privacy &amp; your data</div>
       <div class="goal-desc" style="margin:4px 2px 12px">SnapCal is general wellness guidance, not medical advice — check with your doctor before changing your diet or exercise. Your data stays yours, and you can erase it anytime.</div>
@@ -3735,6 +3753,58 @@ async function disablePush(){
   toast("Check-ins off");
   updatePushUI();
 }
+/* ---------------- HEALTH SYNC (Apple Health / Google Fit) ---------------- */
+var STEP_GOAL = 7000;
+function _healthNative(){ return !!(window.Health && window.Health.isNative); }
+function _renderHealthStats(today){
+  var box = $("#healthStats"); if (!box) return;
+  if (!today || (today.steps == null && today.active_cal == null)){ box.style.display = "none"; return; }
+  box.style.display = "block";
+  var steps = today.steps || 0, active = today.active_cal;
+  $("#hSteps").textContent = steps ? steps.toLocaleString() : "—";
+  $("#hActive").textContent = (active != null) ? active : "—";
+  var nudge = "";
+  if (steps >= STEP_GOAL) nudge = "🎉 Past " + STEP_GOAL.toLocaleString() + " steps — nice work staying active today.";
+  else if (steps > 0) nudge = (STEP_GOAL - steps).toLocaleString() + " steps to your " + STEP_GOAL.toLocaleString() + " goal — a brisk 15-min walk gets you most of the way.";
+  $("#hNudge").textContent = nudge;
+}
+async function loadHealthToday(){
+  try { var d = await api("/api/health?days=1"); _renderHealthStats(d && d.today); }
+  catch(e){ /* no data yet */ }
+}
+function updateHealthUI(){
+  var st = $("#healthStatus"), btn = $("#healthToggle"), hint = $("#healthHint");
+  if (!st || !btn) return;
+  if (!_healthNative()){
+    // Web preview can't read HealthKit/Health Connect — those live in the installed app.
+    btn.style.display = "none";
+    if (hint){ hint.style.display = "block"; hint.textContent = "Step & activity sync runs in the SnapCal app (Apple Health on iPhone, Google Fit / Health Connect on Android)."; }
+    return;
+  }
+  btn.style.display = ""; if (hint) hint.style.display = "none";
+  var on = window.Health.isConnected && window.Health.isConnected();
+  st.textContent = on ? "Connected · Coach Cal sees your steps & activity."
+                      : "Sync your steps so Coach Cal coaches on how much you actually move.";
+  btn.textContent = on ? "Sync now" : "Connect";
+}
+async function connectOrSyncHealth(){
+  if (!_healthNative()){ toast("Open the SnapCal app to connect Health"); return; }
+  var btn = $("#healthToggle"); btn.disabled = true; var old = btn.textContent; btn.textContent = "Syncing…";
+  try {
+    if (!(window.Health.isConnected && window.Health.isConnected())){
+      var ok = await window.Health.connect();
+      if (!ok){ toast("Couldn’t connect to Health"); return; }
+    }
+    var data = await window.Health.pull();
+    if (data){
+      await api("/api/health", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+      _renderHealthStats(data);
+      toast("🏃 Synced your activity");
+    }
+  } catch(e){ toast("Health sync failed"); }
+  finally { btn.disabled = false; btn.textContent = old; updateHealthUI(); }
+}
+
 (function(){
   var btn = $("#pushToggle");
   if (!btn) return;
@@ -3744,6 +3814,8 @@ async function disablePush(){
     if (sub && Notification.permission === "granted") disablePush();
     else enablePush();
   });
+  var hbtn = $("#healthToggle");
+  if (hbtn) hbtn.addEventListener("click", connectOrSyncHealth);
   var tbtn = $("#pushTest");
   if (tbtn) tbtn.addEventListener("click", async function(){
     tbtn.disabled = true; var old = tbtn.textContent; tbtn.textContent = "Sending…";
@@ -5348,7 +5420,13 @@ function renderWeightChart(w){
   updateScanHint();
   updatePremiumUI();
   updatePushUI();
+  updateHealthUI();
+  loadHealthToday();
   loadToday();
+  /* On the native app, auto-sync today's steps in the background once Health is already connected. */
+  if (_healthNative() && window.Health.isConnected && window.Health.isConnected()){
+    setTimeout(function(){ window.Health.pull().then(function(d){ if (d){ api("/api/health", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(d) }).then(function(){ _renderHealthStats(d); }).catch(function(){}); } }).catch(function(){}); }, 1500);
+  }
   setTimeout(prewarmSheets, 2500);   /* warm meal-plan + grocery in the background -> instant first tap */
 })();
 </script>

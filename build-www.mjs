@@ -24,11 +24,22 @@ await build({
   logLevel: "info",
 });
 
-// 2) inject config + billing into the frontend
+// 1b) bundle Health (HealthKit + Health Connect) -> www/health.js (exposes window.Health)
+await build({
+  entryPoints: [join(ROOT, "health.src.js")],
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  outfile: join(WWW, "health.js"),
+  logLevel: "info",
+});
+
+// 2) inject config + native bridges into the frontend
 let html = readFileSync(join(ROOT, "static", "index.html"), "utf8");
 const inject =
   `<script>window.SNAPCAL_API_BASE=${JSON.stringify(API_BASE)};</script>\n` +
-  `<script src="billing.js"></script>\n`;
+  `<script src="billing.js"></script>\n` +
+  `<script src="health.js"></script>\n`;
 html = html.includes("</head>") ? html.replace("</head>", inject + "</head>") : inject + html;
 writeFileSync(join(WWW, "index.html"), html);
 

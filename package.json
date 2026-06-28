@@ -15,6 +15,7 @@
     "@capacitor/core": "^8.4.0",
     "@capacitor/ios": "^8.4.0",
     "@revenuecat/purchases-capacitor": "^13.2.0",
+    "capacitor-health": "^8.1.2",
     "esbuild": "^0.28.1"
   }
 }
