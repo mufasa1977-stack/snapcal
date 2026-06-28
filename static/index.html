@@ -3034,8 +3034,11 @@ function stopSpeak(){
   try { if (_calAudio){ _calAudio.pause(); _calAudio = null; } } catch(e){}
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e){}
 }
-function speak(text){
+function speak(text, userInitiated){
   text = (text || "").trim(); if (!text) return;
+  // Voice (TTS) is a Premium feature — it's the biggest cost driver. Free auto-calls go silent (no spend);
+  // an explicit tap on a 🔊 button opens the paywall.
+  if (!isPremium()){ if (userInitiated) openPaywall(); return; }
   stopSpeak();
   _ttsQueue = _ttsChunks(text);
   _ttsOn = true; _ttsStarted = false;
@@ -3088,7 +3091,7 @@ function _renderBriefing(text, block){
     '</div>' +
   '</div>';
   var c = $("#briefChat"); if (c) c.addEventListener("click", function(){ try { openCoachSheet(); } catch(e){} });
-  var s = $("#briefSpeak"); if (s) s.addEventListener("click", function(){ try { speak(text); } catch(e){} });
+  var s = $("#briefSpeak"); if (s) s.addEventListener("click", function(){ try { speak(text, true); } catch(e){} });
 }
 function _playChunk(fullText){
   if (!_ttsOn || !_ttsQueue.length){ _ttsOn = false; return; }
@@ -3168,6 +3171,7 @@ function _extractArea(t){
 }
 async function sendChat(text){
   text = (text || "").trim(); if (!text) return;
+  if (!isPremium() && chatsLeft() <= 0){ openPaywall(); return; }   // free daily Coach Cal allowance used up
   voiceRender("user", text); _chatMsgs.push({ role: "user", content: text });
   var inp = $("#voiceInput"); if (inp) inp.value = "";
   if (_navIntent(text)){ var pl = _lastPlace || _closestPlace(); if (pl){ renderDirectionsLink(pl); openDirectionsTo(pl); } }   /* tappable button + auto-open */
@@ -3212,6 +3216,7 @@ async function sendChat(text){
   }
   setVoiceStatus("");
   if (d){
+    if (!isPremium()) bumpChat();   // count a billed reply against the free daily allowance
     var reply = (d && d.reply) || "I’m here — what can I help you with?";
     try { var rl = reply.toLowerCase(); (_chatNearby || []).forEach(function(p){ if (p && p.name && rl.indexOf(p.name.toLowerCase()) >= 0) _lastPlace = p; }); } catch(e){}   /* remember the place he named for "take me there" */
     voiceRender("coach", reply); _chatMsgs.push({ role: "assistant", content: reply }); speak(reply);
@@ -3530,6 +3535,15 @@ function bumpScan(){
   localStorage.setItem("snapcal_scans", JSON.stringify(s));
   updateScanHint();
 }
+/* Free Coach Cal chat cap — each reply is a billed LLM call, so free gets a daily allowance; Premium = unlimited. */
+var FREE_CHATS = 5;
+function chatState(){
+  var today = todayStr(), obj = { date: today, count: 0 };
+  try { var p = JSON.parse(localStorage.getItem("snapcal_chats")); if (p && p.date === today) obj = p; } catch (e) {}
+  return obj;
+}
+function chatsLeft(){ return Math.max(0, FREE_CHATS - chatState().count); }
+function bumpChat(){ var s = chatState(); s.count++; localStorage.setItem("snapcal_chats", JSON.stringify(s)); }
 function updateScanHint(){
   var el = $("#scanLimit"); if (!el) return;
   if (isPremium()) { el.innerHTML = '<span class="prem">★ Premium · unlimited scans</span>'; return; }
@@ -3539,16 +3553,17 @@ function updateScanHint(){
 function openPaywall(){
   var html =
     '<div class="sheet-h">SnapCal Premium</div>' +
-    '<div class="sheet-sub">You\'ve used your ' + FREE_SCANS + ' free scans today. Here\'s everything — priced honestly, no surprises.</div>' +
+    '<div class="sheet-sub">Unlock your full daily coach — Coach Cal that talks, guides your day, and never runs out. Priced honestly, cancel anytime.</div>' +
     '<div class="card">' +
-      '<div class="pw-price"><b>$4.99</b>/mo<span> · or </span><b>$29.99</b>/yr</div>' +
+      '<div class="pw-price"><b>$7.99</b>/mo<span> · or </span><b>$39.99</b>/yr</div>' +
       '<ul class="pw-list">' +
-        '<li><b>Coach Cal — smart food swaps &amp; meal ideas</b></li>' +
-        '<li><b>🍔 Eat-Out Guide — healthy orders at 15+ chains</b></li>' +
-        '<li>Unlimited photo scans</li>' +
-        '<li>All goal modes, including GLP-1</li>' +
-        '<li>Full saved history &amp; breakdowns</li>' +
-        '<li>Weight &amp; streak tracking</li>' +
+        '<li><b>🔊 Coach Cal\'s voice — hear your coach talk</b></li>' +
+        '<li><b>Daily mentor check-ins that guide your day</b></li>' +
+        '<li><b>Unlimited Coach Cal chat — swaps &amp; meal ideas</b></li>' +
+        '<li>🍔 Eat-Out Guide — healthy orders at 15+ chains</li>' +
+        '<li>Unlimited photo scans &amp; barcode</li>' +
+        '<li>All goal modes, including GLP-1 &amp; recomp</li>' +
+        '<li>Full history, weight &amp; streak tracking</li>' +
       '</ul>' +
       '<div class="pw-honest">No hidden fees. Cancel in one tap. Your logged data stays yours — free, even if you cancel.</div>' +
       '<button class="btn btn-dark" id="pwBuy" type="button">Unlock Premium</button>' +
