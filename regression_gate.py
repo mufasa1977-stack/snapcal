@@ -139,6 +139,9 @@ def main():
               i0["kcal_source"] == "hybrid" and i0["calories"] == 358 and i1["kcal_source"] == "ai"
               and 0 < hyb["total"]["band_pct"] < 0.25,
               "chicken=%scal(%s) salad=%s band=%s" % (i0["calories"], i0["kcal_source"], i1["kcal_source"], hyb["total"]["band_pct"]))
+        # micros (shipped 2026-06-28): the USDA nutrient map must stay Cronometer-level (~30 vits/minerals).
+        check("micros: USDA nutrient map covers ~30 vitamins/minerals (Cronometer-level)",
+              len(_m._FDC_NUTRIENTS) >= 28, "%d nutrients in _FDC_NUTRIENTS" % len(_m._FDC_NUTRIENTS))
     except Exception as e:  # noqa: BLE001
         check("allergy-safe scan + meal plan (in-process)", False, "exception: " + str(e)[:120])
 
@@ -592,6 +595,160 @@ def main():
         check("provenance: logged meals carry tier (EXACT stored, photo defaults ESTIMATE)",
               pv.get("exact") == "EXACT" and pv.get("est") == "ESTIMATE",
               "exact=%s photo=%s conf=%s" % (pv.get("exact"), pv.get("est"), pv.get("estConf")))
+
+        # ============================================================================
+        # 2026-06-28 SHIPPED FEATURES — per-feature regression coverage.
+        # Was the crown gap: the gate had ZERO checks for these 9 features, so any of them
+        # could silently break while the gate still reported all-green. Each check below drives
+        # the REAL app (same as the rest of the gate); a negative test proves the checks bite.
+        # ============================================================================
+
+        # recents: /api/recents -> #recentsCard rows; tapping a row re-logs (POST /api/meals)
+        rec = page.evaluate("""async () => {
+            switchTab('scan');
+            var real = window.api, posted = 0;
+            window.api = function(u, opts){
+                if (u.indexOf('/api/recents') >= 0) return Promise.resolve({ recents: [
+                    { name:'Greek yogurt', calories:120, protein_g:17, carbs_g:9, fat_g:0, source:'Recent', accuracy_tier:'estimate' },
+                    { name:'Banana', calories:105, protein_g:1, carbs_g:27, fat_g:0 } ] });
+                if (u.indexOf('/api/meals') >= 0 && opts && opts.method === 'POST'){ posted++; return Promise.resolve({ ok:true, id:1 }); }
+                return real(u, opts);
+            };
+            await loadRecents();
+            var card = document.getElementById('recentsCard');
+            var rows = document.querySelectorAll('#recentsList .recent-row');
+            var shown = !!card && card.style.display === 'block';
+            if (rows[0]) rows[0].click();
+            await new Promise(function(r){ setTimeout(r, 250); });
+            window.api = real;
+            return { shown: shown, rows: rows.length, posted: posted };
+        }""")
+        check("recents: card renders deduped rows + one-tap re-log posts a meal",
+              rec["shown"] and rec["rows"] == 2 and rec["posted"] == 1,
+              "shown=%s rows=%s posted=%s" % (rec["shown"], rec["rows"], rec["posted"]))
+
+        # NEGATIVE TEST: prove the recents check has TEETH — if /api/recents returns nothing, the card
+        # hides and rows==0, i.e. a broken feature WOULD fail the positive check above. This is the
+        # guard-the-guard: it confirms the per-feature checks actually catch a regression.
+        rec_neg = page.evaluate("""async () => {
+            var real = window.api;
+            window.api = function(u, opts){ if (u.indexOf('/api/recents') >= 0) return Promise.resolve({ recents: [] }); return real(u, opts); };
+            await loadRecents();
+            var card = document.getElementById('recentsCard');
+            window.api = real;
+            // The positive check asserts card.style.display==='block' (shown). A broken/empty feature must
+            // flip that to hidden — that's the discriminating signal proving the check has teeth.
+            return { hidden: !card || card.style.display === 'none' };
+        }""")
+        check("negative test: a BROKEN recents feature is caught (empty -> card hidden)",
+              rec_neg["hidden"], "card hidden when feed empty=%s" % rec_neg["hidden"])
+
+        # fasting: startFast -> #fastTime + #fastEat (eating window); endFast -> idle (Start button back)
+        fast = page.evaluate("""() => {
+            switchTab('today');
+            try { localStorage.removeItem('snapcal_fast'); } catch(e){}
+            startFast();
+            var t = document.getElementById('fastTime'), eat = document.getElementById('fastEat'), endb = document.getElementById('fastEndBtn');
+            var running = !!t && !!eat && !!endb && /opens at|window is open/i.test(eat.textContent);
+            endFast();
+            var idle = !!document.getElementById('fastStartBtn') && !document.getElementById('fastTime');
+            return { running: running, idle: idle };
+        }""")
+        check("fasting: start shows the live timer + eating window; end returns to idle",
+              fast["running"] and fast["idle"], "running=%s idle=%s" % (fast["running"], fast["idle"]))
+
+        # net-carbs (keto): toggle ON -> .nf-net row = carbs - fiber (floored); OFF -> hidden
+        ncb = page.evaluate("""() => {
+            setNetCarbs(true);  var on = netCarbRow(20, 5);
+            setNetCarbs(false); var off = netCarbRow(20, 5);
+            return { on: on, off: off };
+        }""")
+        check("net-carbs: ON renders 'Net carbs' = carbs-fiber; OFF hides it",
+              ("nf-net" in ncb["on"]) and ("15 g" in ncb["on"]) and ncb["off"] == "",
+              "on='%s' off='%s'" % (ncb["on"][:60], ncb["off"]))
+
+        # gentle (ED-safe) mode: ON -> #ringBig hidden + #gentleBanner shown; chat payload carries gentle:true
+        gen = page.evaluate("""async () => {
+            switchTab('today');
+            setGentle(false);
+            var bigVisOff = getComputedStyle(document.getElementById('ringBig')).display !== 'none';
+            setGentle(true);
+            var bigHidden = getComputedStyle(document.getElementById('ringBig')).display === 'none';
+            var bannerShown = getComputedStyle(document.getElementById('gentleBanner')).display !== 'none';
+            var real = window.api, sentGentle = null;
+            window.api = function(u, opts){ if (u.indexOf('/api/chat') >= 0){ try { sentGentle = JSON.parse(opts.body).gentle; } catch(e){} return Promise.resolve({ reply:'ok' }); } return real(u, opts); };
+            openVoice(); sendChat('how am I doing?');
+            await new Promise(function(r){ setTimeout(r, 300); });
+            window.api = real; closeVoice(); setGentle(false);
+            return { bigVisOff: bigVisOff, bigHidden: bigHidden, bannerShown: bannerShown, sentGentle: sentGentle };
+        }""")
+        check("gentle mode: hides the calorie ring + shows the balance banner; chat sends gentle:true",
+              gen["bigVisOff"] and gen["bigHidden"] and gen["bannerShown"] and gen["sentGentle"] is True,
+              "ringVisOff=%s ringHidden=%s banner=%s chatGentle=%s" % (gen["bigVisOff"], gen["bigHidden"], gen["bannerShown"], gen["sentGentle"]))
+
+        # micros: microsPanel renders a grouped, collapsible "Vitamins & minerals (N)" panel; empty -> hidden
+        mic = page.evaluate("""() => {
+            var html = microsPanel({ mufa_g:5, pufa_g:2, trans_fat_g:0.1, cholesterol_mg:30, magnesium_mg:40, zinc_mg:2,
+                phosphorus_mg:120, vita_mcg:300, vitd_mcg:1, vite_mg:2, vitk_mcg:10, b1_mg:0.1, b2_mg:0.2, b3_mg:1,
+                b6_mg:0.3, folate_mcg:50, b12_mcg:0.5 });
+            var m = html.match(/Vitamins &amp; minerals \\((\\d+)\\)/);
+            var none = microsPanel({});
+            return { count: m ? parseInt(m[1],10) : 0, grouped: /nf-grp/.test(html), emptyHidden: none === '' };
+        }""")
+        check("micros: 'Vitamins & minerals (N)' panel renders grouped; empty -> hidden",
+              mic["count"] >= 15 and mic["grouped"] and mic["emptyHidden"],
+              "count=%s grouped=%s emptyHidden=%s" % (mic["count"], mic["grouped"], mic["emptyHidden"]))
+
+        # export: GET /api/export.csv -> text/csv with a header row
+        exp = page.evaluate("""async () => {
+            try { var r = await fetch('/api/export.csv', { headers: { 'X-Device-Id': 'gate_export' } });
+                  var ct = r.headers.get('content-type') || ''; var txt = await r.text();
+                  return { ct: ct, firstLine: (txt.split('\\n')[0] || '').trim() }; }
+            catch(e){ return { ct: 'err:'+e.message, firstLine: '' }; }
+        }""")
+        check("export: /api/export.csv returns text/csv with a header row",
+              ("text/csv" in exp["ct"]) and exp["firstLine"].startswith("Date,Time,Food"),
+              "ct=%s header='%s'" % (exp["ct"], exp["firstLine"][:40]))
+
+        # health sync (hub move): POST then GET /api/health round-trips steps/active-cal/weight
+        hl = page.evaluate("""async () => {
+            var H = { 'Content-Type':'application/json', 'X-Device-Id':'gate_health' };
+            await fetch('/api/health', { method:'POST', headers:H, body: JSON.stringify({ steps:8200, active_cal:320, weight:181.5, source:'gate' }) });
+            var r = await fetch('/api/health', { headers:H }); var d = await r.json();
+            var t = d.today || {};
+            return { steps: t.steps, cal: t.active_cal, weight: t.weight };
+        }""")
+        check("health: POST then GET /api/health round-trips steps/active-cal/weight",
+              hl["steps"] == 8200 and hl["cal"] == 320 and abs((hl["weight"] or 0) - 181.5) < 0.01,
+              "steps=%s cal=%s weight=%s" % (hl["steps"], hl["cal"], hl["weight"]))
+
+        # push: GET /api/push/key exposes a VAPID key; POST /api/push/test with no sub -> 404 not_subscribed
+        psh = page.evaluate("""async () => {
+            var k = await (await fetch('/api/push/key')).json();
+            var tr = await fetch('/api/push/test', { method:'POST', headers:{ 'X-Device-Id':'gate_push_nosub' } });
+            var tj = await tr.json().catch(function(){ return {}; });
+            return { hasKey: !!(k && k.key), testStatus: tr.status, testErr: tj.error };
+        }""")
+        check("push: /api/push/key has a key; /api/push/test with no sub -> 404 not_subscribed",
+              psh["hasKey"] and psh["testStatus"] == 404 and psh["testErr"] == "not_subscribed",
+              "hasKey=%s status=%s err=%s" % (psh["hasKey"], psh["testStatus"], psh["testErr"]))
+
+        # onboarding: first run shows #onboard; "Maybe later" sets the flag (lsSet namespaces snapcal_c_) + hides
+        onb = page.evaluate("""() => {
+            try { localStorage.removeItem('snapcal_c_snapcal_onboarded'); } catch(e){}
+            var ex = document.getElementById('onboard'); if (ex) ex.remove();
+            showOnboarding();
+            var ov = document.getElementById('onboard');
+            var visible = !!ov && getComputedStyle(ov).display !== 'none';
+            var before = localStorage.getItem('snapcal_c_snapcal_onboarded');
+            var skip = ov && ov.querySelector('.locp-skip'); if (skip) skip.click();
+            var after = localStorage.getItem('snapcal_c_snapcal_onboarded');
+            var hidden = ov ? getComputedStyle(ov).display === 'none' : false;
+            return { visible: visible, before: before, after: after, hidden: hidden };
+        }""")
+        check("onboarding: first run shows the welcome/permissions card; 'Maybe later' sets the flag + hides",
+              onb["visible"] and not onb["before"] and onb["after"] and onb["hidden"],
+              "visible=%s flag:%s->%s hidden=%s" % (onb["visible"], onb["before"], onb["after"], onb["hidden"]))
 
         # 10. no JS errors
         check("no JS console / page errors", len(errors) == 0,
