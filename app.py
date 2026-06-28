@@ -1929,6 +1929,21 @@ def chat():
         system += RECOMP_CHAT_CLAUSE
     system += _body_clause(d)
     system += _health_clause(_health_today(_uid()))
+    if d.get("gentle"):
+        system += ("\n\nGENTLE MODE IS ON (the user finds number-tracking stressful — possible disordered-eating "
+                   "sensitivity). HARD RULES: do NOT mention calories, macros in grams, deficits, weight numbers, or "
+                   "'how much is left.' Coach BALANCE and CONSISTENCY instead — protein and whole foods as fuel (never "
+                   "a limit), gentle non-judgmental encouragement, regular balanced meals. Never tell them to eat less "
+                   "or restrict. If they sound in distress about food or body, gently suggest the NEDA Helpline "
+                   "(1-800-931-2237).")
+    fast = d.get("fasting")
+    if isinstance(fast, dict) and fast.get("hours"):
+        el = _int(fast.get("elapsed_min"), 0)
+        system += ("\n\nThe user is INTERMITTENT FASTING right now: " + str(el // 60) + "h " + str(el % 60) +
+                   "m into a " + str(_int(fast.get("hours"))) + "h fast. SUPPORT the fast — do NOT push them to eat "
+                   "during the fasting window; suggest water/black coffee/tea/electrolytes if hungry. When the window "
+                   "opens, coach a gentle protein-forward break (not a binge). If they ask what to eat, frame it for "
+                   "when their eating window opens.")
     lt = str(d.get("local_time") or "").strip()[:24]
     if lt:
         system += ("\n\nThe user's current local time is " + lt + ". Make every food or meal suggestion "
@@ -3024,6 +3039,29 @@ def recent_foods():
         if len(out) >= 15:
             break
     return jsonify({"recents": out})
+
+
+@app.get("/api/export.csv")
+def export_csv():
+    """Download the user's full food diary as CSV — data portability (a credibility + retention checkbox the
+       editors literally score). Device-scoped; includes every logged meal with its macros + source."""
+    import csv
+    import io
+    con = get_db()
+    try:
+        rows = con.execute(
+            """SELECT date, time, name, calories, protein_g, carbs_g, fat_g, source, accuracy_tier
+               FROM meals WHERE uid = ? ORDER BY date, time, id""", (_uid(),)).fetchall()
+    finally:
+        con.close()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Date", "Time", "Food", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)", "Source", "Accuracy"])
+    for r in rows:
+        w.writerow([r["date"], r["time"], r["name"], _int(r["calories"]), _int(r["protein_g"]),
+                    _int(r["carbs_g"]), _int(r["fat_g"]), r["source"] or "", r["accuracy_tier"] or ""])
+    return Response(buf.getvalue(), mimetype="text/csv",
+                   headers={"Content-Disposition": "attachment; filename=snapcal-diary.csv"})
 
 
 @app.delete("/api/meals/<int:meal_id>")
