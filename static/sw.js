@@ -1,6 +1,6 @@
 /* SnapCal service worker — network-first (always fresh), cache fallback for offline shell.
    NEVER caches /api/ (live data stays live). Minimal + safe for a deployed app. */
-const CACHE = 'snapcal-v1';
+const CACHE = 'snapcal-v2';
 const SHELL = ['/', '/manifest.webmanifest', '/static/icons/icon-192.png'];
 
 self.addEventListener('install', function (e) {
@@ -13,6 +13,34 @@ self.addEventListener('activate', function (e) {
       return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
     }).then(function () { return self.clients.claim(); })
   );
+});
+
+// Proactive Coach Cal check-ins (web push). Payload = {title, body, url}.
+self.addEventListener('push', function (e) {
+  var data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (err) { data = { body: (e.data && e.data.text()) || '' }; }
+  var title = data.title || 'Coach Cal';
+  var body = data.body || "Time for a quick check-in.";
+  e.waitUntil(self.registration.showNotification(title, {
+    body: body,
+    icon: '/static/icons/icon-192.png',
+    badge: '/static/icons/icon-192.png',
+    tag: 'coachcal-checkin',          // a newer check-in replaces an unread one
+    renotify: true,
+    data: { url: data.url || '/' }
+  }));
+});
+
+// Tapping a check-in focuses an open SnapCal tab, or opens one.
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var target = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (wins) {
+    for (var i = 0; i < wins.length; i++) {
+      if ('focus' in wins[i]) { wins[i].navigate && wins[i].navigate(target); return wins[i].focus(); }
+    }
+    if (clients.openWindow) return clients.openWindow(target);
+  }));
 });
 
 self.addEventListener('fetch', function (e) {

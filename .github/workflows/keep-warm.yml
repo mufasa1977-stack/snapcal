@@ -5,7 +5,8 @@ name: keep-warm
 # Coach Cal answers instantly. Manual run: Actions tab → keep-warm → Run workflow.
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/10 * * * *"   # keep-warm (every 10 min)
+    - cron: "5 * * * *"      # push fan-out (hourly at :05) — server picks who's due in their LOCAL morning/midday/evening
   workflow_dispatch:
 
 jobs:
@@ -16,3 +17,15 @@ jobs:
         run: |
           curl -fsS --max-time 90 "https://snapcal-api-lgla.onrender.com/api/profile" \
             -H "X-Device-Id: keepwarm" -o /dev/null && echo "pinged OK" || echo "ping failed — will retry next run"
+
+      # Proactive Coach Cal check-ins. The server caps 1 push per slot/day per user and only fires when a
+      # subscriber's LOCAL time is in a window, so running hourly is safe (and covers every timezone).
+      # PUSH_RUN_SECRET is a GitHub repo secret; the matching value lives in Render env.
+      - name: Fire due daily check-ins
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '5 * * * *' }}
+        env:
+          PUSH_RUN_SECRET: ${{ secrets.PUSH_RUN_SECRET }}
+        run: |
+          if [ -z "$PUSH_RUN_SECRET" ]; then echo "PUSH_RUN_SECRET not set — skipping push run"; exit 0; fi
+          curl -fsS --max-time 90 -X POST "https://snapcal-api-lgla.onrender.com/api/push/run" \
+            -H "X-Push-Secret: $PUSH_RUN_SECRET" && echo " push run OK" || echo "push run failed — retries next hour"

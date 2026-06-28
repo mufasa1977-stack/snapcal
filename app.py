@@ -14,7 +14,7 @@ import sqlite3
 import time
 import urllib.parse
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, request, redirect, Response
@@ -78,6 +78,17 @@ GEMINI_KEY_PATH = Path("C:/Users/somme/youtube_videos/gemini_key.txt")
 GEMINI_MODEL = "gemini-2.5-flash"  # gemini-2.0-flash was retired by the API (404)
 CHAT_MODEL = "gemini-2.5-flash"  # Coach Cal: flash (not -lite) — the squad proved -lite was non-deterministic (wrong city ~1/8, invented dishes, bounced questions). Worth ~1-2s for correctness.
 PORT = int(os.environ.get("PORT", "5177"))  # Render/Fly inject $PORT in production
+
+# --- Web Push (VAPID) — proactive Coach Cal check-ins reach the user when the app is CLOSED. PREMIUM feature.
+# Public key is safe to embed (the browser needs it as applicationServerKey); the PRIVATE key must live ONLY in
+# Render env (VAPID_PRIVATE). Generated 2026-06-28 (cryptography P-256). Tariq adds VAPID_PRIVATE to Render env.
+VAPID_PUBLIC = os.environ.get(
+    "VAPID_PUBLIC",
+    "BPq-VDdsVfMK5zHMGDBt_wytz5wfB2YuIJWvyZ6FuZSs9pIHDH6JzobBguaNvoHsD9XoeRviiFVSeWOQ4UEVUXo").strip()
+VAPID_PRIVATE = os.environ.get("VAPID_PRIVATE", "").strip()  # 32-byte scalar, base64url — env-only, never embed
+VAPID_SUB = os.environ.get("VAPID_SUB", "mailto:tariq@xionprotech.com").strip()
+# Shared secret guarding /api/push/run so only our scheduler (GitHub Action) can fan out notifications.
+PUSH_RUN_SECRET = os.environ.get("PUSH_RUN_SECRET", "").strip()
 
 # Origins the Capacitor native app calls the API from: iOS = capacitor://localhost,
 # Android = https://localhost. Plus local web dev + any extra via CORS_ORIGINS env.
@@ -382,6 +393,24 @@ def init_db():
             """CREATE TABLE IF NOT EXISTS water(
                    date TEXT PRIMARY KEY,
                    glasses INTEGER NOT NULL DEFAULT 0
+               )"""
+        )
+        # Web-push subscriptions (one per device). Carries enough profile snapshot to write a personal
+        # check-in on a schedule, plus the device tz offset so we fire morning/midday/evening in LOCAL time,
+        # and last_slot/last_date so each user gets at most ONE push per slot per day.
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS push_subs(
+                   uid TEXT PRIMARY KEY,
+                   sub_json TEXT NOT NULL,
+                   tz_offset_min INTEGER DEFAULT 0,
+                   name TEXT,
+                   goal TEXT,
+                   daily_calories INTEGER DEFAULT 2000,
+                   protein_target_g INTEGER DEFAULT 0,
+                   enabled INTEGER DEFAULT 1,
+                   last_slot TEXT,
+                   last_date TEXT,
+                   created TEXT
                )"""
         )
         # Migration: store the full rich breakdown per meal so History can show it.
@@ -1953,6 +1982,192 @@ def briefing():
         return jsonify({"block": block, "text": txt})
     except Exception:  # noqa: BLE001
         return jsonify({"block": block, "text": fb, "degraded": True})
+
+
+# ---------------------------------------------------------------- PUSH (proactive mentor check-ins) [PREMIUM]
+# Coach Cal reaches out when the app is CLOSED — the "guides you every day" piece. Cost discipline: scheduled
+# fan-out uses the RULE-BASED briefing text (_brief_fallback), so a daily blast to every user costs ~$0 in LLM
+# spend (no Gemini call per push). Premium-gated client-side; server caps 1 push per slot/day per device.
+
+# Local-hour windows -> (slot id, briefing block). One push per slot/day. Quiet overnight (no late push).
+_PUSH_WINDOWS = [
+    (7, 10, "morning", "morning"),   # 7:00–9:59 local
+    (12, 14, "midday", "midday"),    # 12:00–13:59 local
+    (18, 21, "evening", "evening"),  # 18:00–20:59 local
+]
+_PUSH_TITLES = {"morning": "Good morning 👋", "midday": "Midday check-in", "evening": "Evening check-in"}
+
+
+def _push_slot_for(local_minutes):
+    """Which check-in slot (if any) the user's current LOCAL time falls in. Returns (slot, block) or (None, None)."""
+    if local_minutes is None:
+        return (None, None)
+    h = local_minutes // 60
+    for lo, hi, slot, block in _PUSH_WINDOWS:
+        if lo <= h < hi:
+            return (slot, block)
+    return (None, None)
+
+
+def _push_local_now(tz_offset_min):
+    """The subscriber's current local datetime, from the tz offset their browser reported (JS getTimezoneOffset:
+       minutes LOCAL is behind UTC — EST=300 — so local = utcnow - offset)."""
+    try:
+        return datetime.utcnow() - timedelta(minutes=int(tz_offset_min or 0))
+    except Exception:  # noqa: BLE001
+        return datetime.utcnow()
+
+
+def _push_text_for(row, block):
+    """Personal check-in line from the subscriber's stored targets + TODAY's logged meals (their local date).
+       Rule-based (no LLM) so the scheduled fan-out is free + reliable."""
+    local = _push_local_now(row["tz_offset_min"])
+    local_date = local.date().isoformat()
+    daily = _int(row["daily_calories"], 2000)
+    pt = _int(row["protein_target_g"], 0)
+    eaten = pe = 0
+    con = get_db()
+    try:
+        r = con.execute(
+            "SELECT COALESCE(SUM(calories),0) c, COALESCE(SUM(protein_g),0) p FROM meals WHERE date = ? AND uid = ?",
+            (local_date, row["uid"]),
+        ).fetchone()
+        if r:
+            eaten, pe = _int(r["c"], 0), _int(r["p"], 0)
+    finally:
+        con.close()
+    goal = str(row["goal"] or "maintain").strip().lower()
+    gd = GOAL_LABELS.get(goal, GOAL_LABELS.get("maintain", "your goal"))
+    name = re.sub(r"[^A-Za-z .'-]", "", str(row["name"] or "")).strip()[:24]
+    return _brief_fallback(block, name, daily, max(0, daily - eaten), pe, pt, gd)
+
+
+def _push_send(sub, payload):
+    """Deliver one web-push. Returns 'ok' | 'dead' (404/410 → caller deletes the sub) | 'fail'."""
+    if not VAPID_PRIVATE:
+        return "fail"  # not configured (no private key in env) — subscribe still works; sending is a no-op
+    try:
+        from pywebpush import webpush, WebPushException
+    except Exception:  # noqa: BLE001
+        return "fail"
+    try:
+        webpush(
+            subscription_info=sub,
+            data=json.dumps(payload),
+            vapid_private_key=VAPID_PRIVATE,
+            vapid_claims={"sub": VAPID_SUB},
+            timeout=10,
+        )
+        return "ok"
+    except WebPushException as e:  # noqa: BLE001
+        code = getattr(getattr(e, "response", None), "status_code", None)
+        return "dead" if code in (404, 410) else "fail"
+    except Exception:  # noqa: BLE001
+        return "fail"
+
+
+@app.get("/api/push/key")
+def push_key():
+    """Public VAPID key the browser needs as applicationServerKey. `configured` tells the client whether the
+       server can actually send (private key present) so it won't promise check-ins that never arrive."""
+    return jsonify({"key": VAPID_PUBLIC, "configured": bool(VAPID_PRIVATE)})
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe():
+    """Save (or replace) this device's PushSubscription + a profile snapshot for personalised scheduled check-ins."""
+    d = request.get_json(silent=True) or {}
+    sub = d.get("subscription")
+    if not isinstance(sub, dict) or not sub.get("endpoint"):
+        return jsonify({"error": "subscription_required"}), 400
+    goal = str(d.get("goal") or "maintain").strip().lower()
+    if goal not in GOAL_LABELS:
+        goal = "maintain"
+    name = re.sub(r"[^A-Za-z .'-]", "", str(d.get("name") or "")).strip()[:24]
+    con = get_db()
+    try:
+        con.execute(
+            """INSERT INTO push_subs(uid, sub_json, tz_offset_min, name, goal, daily_calories,
+                                     protein_target_g, enabled, last_slot, last_date, created)
+               VALUES(?,?,?,?,?,?,?,1,NULL,NULL,?)
+               ON CONFLICT(uid) DO UPDATE SET
+                   sub_json=excluded.sub_json, tz_offset_min=excluded.tz_offset_min, name=excluded.name,
+                   goal=excluded.goal, daily_calories=excluded.daily_calories,
+                   protein_target_g=excluded.protein_target_g, enabled=1""",
+            (_uid(), json.dumps(sub), _int(d.get("tz_offset_min"), 0), name, goal,
+             _int(d.get("daily_calories"), 2000), _int(d.get("protein_target_g"), 0),
+             datetime.utcnow().isoformat()),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe():
+    """Turn off scheduled check-ins for this device (toggle off / permission revoked)."""
+    con = get_db()
+    try:
+        con.execute("DELETE FROM push_subs WHERE uid = ?", (_uid(),))
+        con.commit()
+    finally:
+        con.close()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/push/run")
+def push_run():
+    """SCHEDULER endpoint (called by the keep-warm GitHub Action). For every enabled subscriber whose LOCAL time
+       is in a check-in window and who hasn't been pushed for that slot today, send one personalised check-in.
+       Guarded by PUSH_RUN_SECRET so only our scheduler can trigger a fan-out."""
+    if not PUSH_RUN_SECRET:
+        return jsonify({"error": "push_run_not_configured"}), 503
+    secret = (request.headers.get("X-Push-Secret") or request.args.get("secret") or "").strip()
+    if secret != PUSH_RUN_SECRET:
+        return jsonify({"error": "forbidden"}), 403
+    sent = skipped = dead = failed = 0
+    con = get_db()
+    try:
+        rows = con.execute("SELECT * FROM push_subs WHERE enabled = 1").fetchall()
+    finally:
+        con.close()
+    for row in rows:
+        local = _push_local_now(row["tz_offset_min"])
+        slot, block = _push_slot_for(local.hour * 60 + local.minute)
+        if not slot:
+            skipped += 1
+            continue
+        local_date = local.date().isoformat()
+        if row["last_slot"] == slot and row["last_date"] == local_date:
+            skipped += 1  # already checked in this slot today
+            continue
+        try:
+            sub = json.loads(row["sub_json"])
+        except Exception:  # noqa: BLE001
+            continue
+        body = _push_text_for(row, block)
+        result = _push_send(sub, {"title": _PUSH_TITLES.get(slot, "Coach Cal"), "body": body, "url": "/"})
+        if result == "ok":
+            sent += 1
+            con = get_db()
+            try:
+                con.execute("UPDATE push_subs SET last_slot = ?, last_date = ? WHERE uid = ?",
+                            (slot, local_date, row["uid"]))
+                con.commit()
+            finally:
+                con.close()
+        elif result == "dead":
+            dead += 1
+            con = get_db()
+            try:
+                con.execute("DELETE FROM push_subs WHERE uid = ?", (row["uid"],))
+                con.commit()
+            finally:
+                con.close()
+        else:
+            failed += 1
+    return jsonify({"sent": sent, "skipped": skipped, "dead": dead, "failed": failed, "total": len(rows)})
 
 
 # ---- Coach Cal's VOICE: Gemini TTS, cached by text so common/repeated lines cost nothing after the 1st play ----

@@ -1180,6 +1180,17 @@
       </div>
     </div>
 
+    <div class="card" id="pushCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div>
+          <div class="goal-title" style="margin:0">🔔 Daily check-ins</div>
+          <div class="goal-hint" id="pushStatus" style="margin:5px 0 0">Coach Cal nudges you morning, midday &amp; evening — even when the app is closed.</div>
+        </div>
+        <button class="btn btn-dark" id="pushToggle" type="button" style="margin-top:0;width:auto;padding:12px 18px">Turn on</button>
+      </div>
+      <div class="goal-desc" id="pushHint" style="margin:10px 2px 0;font-size:11.5px;display:none"></div>
+    </div>
+
     <div class="card">
       <div class="goal-title">🔒 Privacy &amp; your data</div>
       <div class="goal-desc" style="margin:4px 2px 12px">SnapCal is general wellness guidance, not medical advice — check with your doctor before changing your diet or exercise. Your data stays yours, and you can erase it anytime.</div>
@@ -3499,7 +3510,7 @@ async function syncPremium(){
   } else {
     premiumActive = (localStorage.getItem("snapcal_premium") === "1");
   }
-  updateScanHint(); updatePremiumUI();
+  updateScanHint(); updatePremiumUI(); updatePushUI();
 }
 async function purchasePremium(){
   if (window.Billing && window.Billing.isNative) {
@@ -3588,8 +3599,109 @@ $("#premToggle").addEventListener("click", async function(){
   }
   if (isPremium()) { localStorage.removeItem("snapcal_premium"); premiumActive = false; toast("Premium off"); }
   else { localStorage.setItem("snapcal_premium", "1"); premiumActive = true; toast("★ Premium on"); }
-  updatePremiumUI(); updateScanHint();
+  updatePremiumUI(); updateScanHint(); updatePushUI();
 });
+
+/* ---------------- PROACTIVE CHECK-INS (web push) — Premium ---------------- */
+function _urlB64ToUint8(b64){
+  var pad = "=".repeat((4 - b64.length % 4) % 4);
+  var s = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+  var raw = atob(s), out = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+function _pushSupported(){
+  return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+}
+function _isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+function _isStandalone(){
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+async function _pushSubObj(){
+  if (!_pushSupported()) return null;
+  try { var reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); }
+  catch (e) { return null; }
+}
+async function updatePushUI(){
+  var card = $("#pushCard"), st = $("#pushStatus"), btn = $("#pushToggle"), hint = $("#pushHint");
+  if (!card || !st || !btn) return;
+  // iOS web push only works for an INSTALLED PWA (iOS 16.4+). Tell iPhone users to Add to Home Screen first.
+  if (_isIOS() && !_isStandalone()){
+    btn.style.display = "none";
+    st.textContent = "Add SnapCal to your Home Screen to turn on daily check-ins.";
+    if (hint){ hint.style.display = "block"; hint.textContent = "On iPhone: tap Share → “Add to Home Screen,” then open SnapCal from the icon and come back here."; }
+    return;
+  }
+  if (!_pushSupported()){
+    btn.style.display = "none";
+    st.textContent = "Daily check-ins aren’t supported in this browser.";
+    if (hint) hint.style.display = "none";
+    return;
+  }
+  btn.style.display = "";
+  if (hint) hint.style.display = "none";
+  if (!isPremium()){
+    st.textContent = "Premium — Coach Cal checks in morning, midday & evening.";
+    btn.textContent = "Go Premium";
+    return;
+  }
+  var sub = await _pushSubObj();
+  var on = !!sub && Notification.permission === "granted";
+  st.textContent = on ? "On · morning, midday & evening nudges from Coach Cal."
+                      : "Coach Cal nudges you morning, midday & evening — even when the app is closed.";
+  btn.textContent = on ? "Turn off" : "Turn on";
+}
+async function enablePush(){
+  if (!isPremium()){ openPaywall(); return; }
+  if (!_pushSupported()){ toast("Not supported here"); return; }
+  var perm = Notification.permission;
+  if (perm !== "granted") perm = await Notification.requestPermission();
+  if (perm !== "granted"){ toast("Notifications blocked — enable them in settings"); updatePushUI(); return; }
+  try {
+    var keyInfo = await api("/api/push/key");
+    if (!keyInfo || !keyInfo.key){ toast("Check-ins aren’t available yet"); return; }
+    var reg = await navigator.serviceWorker.ready;
+    var sub = await reg.pushManager.getSubscription();
+    if (!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _urlB64ToUint8(keyInfo.key)
+      });
+    }
+    await api("/api/push/subscribe", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscription: sub.toJSON ? sub.toJSON() : sub,
+        tz_offset_min: new Date().getTimezoneOffset(),
+        name: (profile && profile.name) || localStorage.getItem("snapcal_name") || "",
+        goal: goal,
+        daily_calories: int(profile.daily_calories),
+        protein_target_g: int(profile.protein_g)
+      })
+    });
+    toast(keyInfo.configured ? "🔔 Daily check-ins on" : "Saved — check-ins start once the server is set up");
+  } catch (e){ toast("Couldn’t turn on check-ins"); }
+  updatePushUI();
+}
+async function disablePush(){
+  try {
+    var sub = await _pushSubObj();
+    if (sub) await sub.unsubscribe();
+  } catch (e) {}
+  try { await api("/api/push/unsubscribe", { method: "POST" }); } catch (e) {}
+  toast("Check-ins off");
+  updatePushUI();
+}
+(function(){
+  var btn = $("#pushToggle");
+  if (!btn) return;
+  btn.addEventListener("click", async function(){
+    if (!isPremium()){ openPaywall(); return; }
+    var sub = await _pushSubObj();
+    if (sub && Notification.permission === "granted") disablePush();
+    else enablePush();
+  });
+})();
 
 /* ---------------- COACH · meal ideas ---------------- */
 /* Coach Cal pre-fetch cache — warm the suggestions in the background so the tap is instant. */
@@ -5178,6 +5290,7 @@ function renderWeightChart(w){
   fillProfile();
   updateScanHint();
   updatePremiumUI();
+  updatePushUI();
   loadToday();
   setTimeout(prewarmSheets, 2500);   /* warm meal-plan + grocery in the background -> instant first tap */
 })();
