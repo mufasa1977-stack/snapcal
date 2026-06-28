@@ -835,6 +835,27 @@ def main():
               onb["visible"] and not onb["before"] and onb["after"] and onb["hidden"],
               "visible=%s flag:%s->%s hidden=%s" % (onb["visible"], onb["before"], onb["after"], onb["hidden"]))
 
+        # onboarding: the "Enable & get started" path must close the modal IMMEDIATELY and never block on
+        # permission prompts (the freeze Shannon hit 2026-06-28: handler used `await requestAllPerms(); done()`,
+        # and Notification.requestPermission()/getUserMedia() hang forever if the user doesn't answer).
+        # A SYNCHRONOUS read right after .click() catches any regression: the fixed handler runs done() before
+        # any await (hidden=true here); the old async-await-first handler would still read 'flex' at this point.
+        onb2 = page.evaluate("""() => {
+            try { localStorage.removeItem('snapcal_c_snapcal_onboarded'); } catch(e){}
+            var ex = document.getElementById('onboard'); if (ex) ex.remove();
+            showOnboarding();
+            var ov = document.getElementById('onboard');
+            var allow = ov && ov.querySelector('.locp-allow');
+            allow.click();
+            var hiddenSync = getComputedStyle(ov).display === 'none';   // must already be closed (no blocking await)
+            var flag = localStorage.getItem('snapcal_c_snapcal_onboarded');
+            var btnGone = !document.body.contains(allow) || allow.textContent !== '';  // never a dead "Setting up…" trap
+            return { hiddenSync: hiddenSync, flag: flag, btnGone: btnGone };
+        }""")
+        check("onboarding: 'Enable & get started' closes IMMEDIATELY + sets flag (never hangs on permission prompts)",
+              onb2["hiddenSync"] and onb2["flag"] == "1",
+              "hiddenSync=%s flag=%s" % (onb2["hiddenSync"], onb2["flag"]))
+
         # 10. no JS errors
         check("no JS console / page errors", len(errors) == 0,
               ("; ".join(errors[:3])) if errors else "")

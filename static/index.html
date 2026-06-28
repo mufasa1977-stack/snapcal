@@ -11,7 +11,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
-<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>
+<script>if('serviceWorker' in navigator){var _hadController=!!navigator.serviceWorker.controller;window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});var _swReloaded=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(_swReloaded)return;_swReloaded=true;if(_hadController)location.reload();});}</script>
 <title>SnapCal</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -1495,10 +1495,17 @@ async function api(path, opts){
   // Tell the server when Premium so it bypasses the free-tier daily caps (server enforces them as the hard cost cap).
   if (typeof premiumActive !== "undefined" && premiumActive) opts.headers["X-Premium"] = "1";
   var res;
+  // Bound every request so a sleeping/slow server can NEVER freeze the UI (Render free tier cold-starts).
+  var _ac = ("AbortController" in window) ? new AbortController() : null;
+  if (_ac && !opts.signal) opts.signal = _ac.signal;
+  var _to = _ac ? setTimeout(function(){ try { _ac.abort(); } catch(e){} }, 20000) : null;
   try {
     res = await fetch(API_BASE + path, opts);
   } catch (e) {
+    if (_ac && _ac.signal.aborted) throw new Error("Server is waking up — give it a few seconds and try again.");
     throw new Error("Network error — is the server up?");
+  } finally {
+    if (_to) clearTimeout(_to);
   }
   var data = null;
   try { data = await res.json(); } catch (e) { /* non-JSON body */ }
@@ -3454,11 +3461,16 @@ function showOnboarding(){
   }
   ov.style.display = "flex";
   function done(){ ov.style.display = "none"; lsSet("snapcal_onboarded", 1); }
-  ov.querySelector(".locp-allow").onclick = async function(){
+  ov.querySelector(".locp-allow").onclick = function(){
     var b = ov.querySelector(".locp-allow"); b.disabled = true; b.textContent = "Setting up…";
-    await requestAllPerms(); done();
-    if (typeof updatePushUI === "function") updatePushUI();
-    if (typeof updateHealthUI === "function") updateHealthUI();
+    // CRITICAL: close onboarding IMMEDIATELY. Never block the UI waiting on permission prompts —
+    // Notification.requestPermission() and getUserMedia() hang forever if the user doesn't answer,
+    // which froze the "Setting up…" button (Shannon, 2026-06-28). Fire the prompts in the BACKGROUND;
+    // the app is fully usable behind them and the OS prompts appear on their own.
+    done();
+    try { Promise.resolve(requestAllPerms()).catch(function(){}); } catch(e){}
+    if (typeof updatePushUI === "function") { try { updatePushUI(); } catch(e){} }
+    if (typeof updateHealthUI === "function") { try { updateHealthUI(); } catch(e){} }
     toast("You're all set 🎉");
   };
   ov.querySelector(".locp-skip").onclick = function(){ done(); };
