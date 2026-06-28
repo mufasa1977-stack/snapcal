@@ -1531,28 +1531,49 @@ function _mapOFF(code, j){
     source: "Open Food Facts", accuracy_tier: estimated ? "ESTIMATED" : "EXACT", estimated: estimated
   };
 }
+/* Look up ONE Open Food Facts code (browser-side; our server is network-blocked from OFF). Returns a mapped
+   product or null. */
+function _offProduct(code){
+  var fields = "product_name,brands,serving_size,nutriments,image_front_small_url";
+  return fetch("https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(code) + ".json?fields=" + fields, { headers: { "Accept": "application/json" } })
+    .then(function(r){ return r.json(); })
+    .then(function(j){ var d = _mapOFF(code, j); return d.found ? d : null; })
+    .catch(function(){ return null; });
+}
+/* US barcodes are UPC-A (12 digits) but OFF often stores them as EAN-13 with a leading 0 (and vice-versa) —
+   try those variants so a scan doesn't miss on a digit-count mismatch. */
+function _codeVariants(code){
+  var v = [code];
+  if (code.length === 12) v.push("0" + code);
+  if (code.length === 13 && code.charAt(0) === "0") v.push(code.slice(1));
+  if (code.length === 11) v.push("0" + code);
+  return v.filter(function(c, i){ return v.indexOf(c) === i; });
+}
 function lookupBarcode(code){
   code = String(code || "").replace(/\D/g, "");
   var res = $("#nutriResult");
   if (code.length < 8){ if (res) res.innerHTML = '<div class="nf-card"><div class="nf-empty">That doesn’t look like a full barcode — enter all the digits under the bars.</div></div>'; return; }
   if (res) res.innerHTML = '<div class="empty" style="box-shadow:none;padding:12px"><span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(128,128,128,.25);border-top-color:var(--brand);border-radius:50%;vertical-align:-2px;animation:spin .7s linear infinite"></span> Checking the verified barcode database&hellip;</div>';
-  /* Look up Open Food Facts DIRECTLY from the browser — our server's host is network-blocked from OFF, but the
-     user's phone reaches it fine (OFF sends Access-Control-Allow-Origin: *). Fall back to the server, then no-match. */
-  var fields = "product_name,brands,serving_size,nutriments,image_front_small_url";
-  fetch("https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(code) + ".json?fields=" + fields, { headers: { "Accept": "application/json" } })
-    .then(function(r){ return r.json(); })
-    .then(function(j){ var d = _mapOFF(code, j); if (d.found) renderBarcodeResult(d); else renderBarcodeResult({ found: false }); })
-    .catch(function(){
-      api("/api/barcode?code=" + encodeURIComponent(code)).then(renderBarcodeResult).catch(function(){
-        if (res) res.innerHTML = '<div class="nf-card"><div class="nf-empty">Couldn’t reach the barcode database right now — check your connection and try again.</div></div>';
-      });
-    });
+  var variants = _codeVariants(code);
+  (function tryNext(i){
+    if (i >= variants.length){
+      // last resort: our server (also OFF, may be blocked from Render) then honest no-match
+      api("/api/barcode?code=" + encodeURIComponent(code))
+        .then(function(d){ renderBarcodeResult(d && d.found ? d : { found: false }); })
+        .catch(function(){ renderBarcodeResult({ found: false }); });
+      return;
+    }
+    _offProduct(variants[i]).then(function(d){ if (d) renderBarcodeResult(d); else tryNext(i + 1); });
+  })(0);
 }
 function renderBarcodeResult(d){
   var res = $("#nutriResult"); if (!res) return;
   var _seeIt = function(){ try{ res.scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){} };
   if (!d || d.found === false || d.calories == null){
-    res.innerHTML = '<div class="nf-card"><div class="nf-empty">No verified match for that barcode yet. Try the food search above, or snap a photo to estimate it.</div></div>';
+    res.innerHTML = '<div class="nf-card"><div class="nf-empty">No match for that barcode in the free food database yet — it’s crowd-sourced, so some products (especially newer US items) aren’t in it. Try a slow, steady scan, or look it up by name.</div>' +
+      '<button id="bcToSearch" type="button" class="btn btn-dark" style="margin-top:11px">🔎 Search it by name instead</button></div>';
+    var go = bcEl("bcToSearch");
+    if (go) go.addEventListener("click", function(){ var ni = $("#nutriInput"); if (ni){ try{ ni.scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){} ni.focus(); } });
     _seeIt(); return;
   }
   res.innerHTML = '<div class="nf-card">' +
