@@ -755,6 +755,27 @@ def main():
               wk["burned1"] == 250 and wk["n1"] == 1 and wk["burned2"] == 0 and (wk["after"] - wk["before"]) == 300,
               "burned=%s->del %s, ring +%s" % (wk["burned1"], wk["burned2"], wk["after"] - wk["before"]))
 
+        # custom recipes (shipped 2026-06-28): POST/GET/DELETE /api/myrecipes round-trips a multi-ingredient
+        # recipe; the builder's _mrTotals sums ingredient macros.
+        mr = page.evaluate("""async () => {
+            var H = { 'Content-Type':'application/json', 'X-Device-Id':'gate_mr' };
+            var post = await (await fetch('/api/myrecipes', { method:'POST', headers:H, body: JSON.stringify({
+                name:'Test bowl', items:[{name:'oats',calories:150,protein_g:5},{name:'banana',calories:105,protein_g:1}],
+                calories:255, protein_g:6, carbs_g:0, fat_g:0 }) })).json();
+            var g1 = await (await fetch('/api/myrecipes', { headers:H })).json();
+            var r = (g1.recipes||[]).filter(function(x){ return x.id===post.id; })[0] || {};
+            await fetch('/api/myrecipes/' + post.id, { method:'DELETE', headers:H });
+            var g2 = await (await fetch('/api/myrecipes', { headers:H })).json();
+            var t = _mrTotals([{calories:150,protein_g:5},{calories:105,protein_g:1}]);
+            return { name:r.name, cal:r.calories, items:(r.items||[]).length,
+                     gone:(g2.recipes||[]).filter(function(x){ return x.id===post.id; }).length===0,
+                     sumCal:t.calories, sumPro:t.protein_g };
+        }""")
+        check("recipes: POST/GET/DELETE /api/myrecipes round-trips; builder sums ingredient macros",
+              mr["name"] == "Test bowl" and mr["cal"] == 255 and mr["items"] == 2 and mr["gone"]
+              and mr["sumCal"] == 255 and mr["sumPro"] == 6,
+              "name=%s cal=%s items=%s gone=%s sum=%s/%s" % (mr["name"], mr["cal"], mr["items"], mr["gone"], mr["sumCal"], mr["sumPro"]))
+
         # onboarding: first run shows #onboard; "Maybe later" sets the flag (lsSet namespaces snapcal_c_) + hides
         onb = page.evaluate("""() => {
             try { localStorage.removeItem('snapcal_c_snapcal_onboarded'); } catch(e){}

@@ -216,6 +216,19 @@
   .wo-li-n{flex:1;font-weight:600;font-size:14px}
   .wo-li-m{font-size:12.5px;color:var(--ink2)}
   .wo-del{flex:0 0 auto;border:none;background:transparent;color:var(--ink3);font-size:20px;line-height:1;cursor:pointer;padding:0 2px}
+  /* My recipes */
+  .mr-new{border:1.5px solid var(--brand);background:var(--soft);color:var(--brand);border-radius:999px;padding:6px 13px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer}
+  .mr-li{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+  .mr-log{flex:1;display:flex;align-items:center;gap:9px;border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left}
+  .mr-n{flex:1;font-weight:600;font-size:14px;color:var(--ink)}
+  .mr-m{font-size:12.5px;color:var(--ink2)}
+  .mr-del{flex:0 0 auto;border:none;background:transparent;color:var(--ink3);font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
+  .mr-ings{margin:10px 0 4px;display:flex;flex-direction:column;gap:5px}
+  .mr-ing{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--soft);border-radius:10px}
+  .mr-ing-n{flex:1;font-size:13.5px;font-weight:600}
+  .mr-ing-c{font-size:12.5px;color:var(--ink2)}
+  .mr-total{margin:10px 2px;font-size:13.5px;color:var(--ink2)}
+  .mr-ingform{margin-top:6px}
   /* Gentle (ED-safe) mode: hide the numeric calorie/macro readouts, show the balance banner */
   .gentle-only{display:none}
   body.gentle .gentle-only{display:block}
@@ -1074,12 +1087,23 @@
         <div style="flex:1"><label class="field-lbl" for="qaFat" style="margin-top:0">Fat (g)</label><input class="txt" id="qaFat" type="number" inputmode="numeric" min="0" placeholder="opt"></div>
       </div>
       <button class="btn btn-dark" id="qaAddBtn" type="button" style="margin-top:14px">Add to today&rsquo;s log</button>
+      <button class="btn" id="qaSaveRecipeBtn" type="button" style="margin-top:8px;background:var(--soft);color:var(--brand);border:1.5px solid var(--brand)">📒 Save as a recipe</button>
     </div>
 
     <div class="card" id="recentsCard" style="display:none;margin-top:12px">
       <div class="goal-title">🔁 Recent foods</div>
       <div class="goal-desc" style="margin:4px 2px 10px">Tap to log again in one tap — no re-typing.</div>
       <div id="recentsList"></div>
+    </div>
+
+    <div class="card" id="myRecipesCard" style="margin-top:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div class="goal-title" style="margin:0">📒 My recipes</div>
+        <button class="mr-new" id="mrNewBtn" type="button">＋ New</button>
+      </div>
+      <div class="goal-desc" style="margin:5px 2px 10px">Build a go-to meal once — log it in one tap, every time.</div>
+      <div id="mrList"></div>
+      <div id="mrBuilder" style="display:none"></div>
     </div>
 
     <div class="card" id="previewCard" style="margin-top:14px;position:relative">
@@ -1898,7 +1922,7 @@ function switchTab(name){
   window.scrollTo(0, 0);
   if (name === "today") loadToday();
   if (name === "eatout") loadEatOut();
-  if (name === "scan"){ updateScanHint(); loadRecents(); }
+  if (name === "scan"){ updateScanHint(); loadRecents(); loadMyRecipes(); }
   if (name === "today") renderFast();
   if (name === "history") loadHistory();
   if (name === "profile") loadProfile();
@@ -2019,6 +2043,116 @@ if ($("#recentsList")) $("#recentsList").addEventListener("click", async functio
     toast("✓ Logged " + r.name);
     switchTab("today");
   } catch (err){ toast(err.message || "Couldn't log it", true); row.disabled = false; row.classList.remove("recent-adding"); }
+});
+
+/* ---------------- My recipes: build a multi-ingredient meal once, log it in one tap ---------------- */
+var _myRecipes = [], _mrDraft = null;
+function _mrTotals(items){
+  return (items || []).reduce(function(t, i){
+    t.calories += int(i.calories); t.protein_g += int(i.protein_g); t.carbs_g += int(i.carbs_g); t.fat_g += int(i.fat_g); return t;
+  }, { calories:0, protein_g:0, carbs_g:0, fat_g:0 });
+}
+function loadMyRecipes(){
+  var list = $("#mrList"); if (!list) return;
+  return api("/api/myrecipes").then(function(d){
+    _myRecipes = (d && d.recipes) || [];
+    renderMyRecipes();
+  }).catch(function(){ if (list) list.innerHTML = ""; });
+}
+function renderMyRecipes(){
+  var list = $("#mrList"); if (!list) return;
+  if (!_myRecipes.length){ list.innerHTML = '<div class="goal-desc" style="margin:0 2px;color:var(--ink3)">No saved recipes yet — tap ＋ New to make one.</div>'; return; }
+  list.innerHTML = _myRecipes.map(function(r){
+    var macros = [r.protein_g?int(r.protein_g)+"p":"", r.carbs_g?int(r.carbs_g)+"c":"", r.fat_g?int(r.fat_g)+"f":""].filter(Boolean).join(" · ");
+    return '<div class="mr-li"><button class="mr-log" type="button" data-mrlog="'+int(r.id)+'">'+
+      '<span class="mr-n">'+esc(r.name)+'</span>'+
+      '<span class="mr-m">'+int(r.calories)+' cal'+(macros?' · '+esc(macros):'')+'</span>'+
+      '<span class="recent-plus">+</span></button>'+
+      '<button class="mr-del" type="button" data-mrdel="'+int(r.id)+'" aria-label="Delete recipe">&times;</button></div>';
+  }).join("");
+}
+function openRecipeBuilder(seed){
+  _mrDraft = seed || { name:"", items:[] };
+  $("#mrList").style.display = "none";
+  $("#mrBuilder").style.display = "block";
+  renderRecipeBuilder();
+}
+function closeRecipeBuilder(){ _mrDraft = null; var b=$("#mrBuilder"); if (b){ b.style.display="none"; b.innerHTML=""; } var l=$("#mrList"); if (l) l.style.display="block"; }
+function renderRecipeBuilder(){
+  var b = $("#mrBuilder"); if (!b || !_mrDraft) return;
+  var t = _mrTotals(_mrDraft.items);
+  var rows = _mrDraft.items.map(function(i, idx){
+    return '<div class="mr-ing"><span class="mr-ing-n">'+esc(i.name)+'</span><span class="mr-ing-c">'+int(i.calories)+' cal</span>'+
+      '<button class="mr-del" type="button" data-ingdel="'+idx+'" aria-label="Remove">&times;</button></div>';
+  }).join("");
+  b.innerHTML =
+    '<input class="txt" id="mrName" type="text" placeholder="Recipe name (e.g. My breakfast bowl)" autocomplete="off" value="'+esc(_mrDraft.name||"")+'">'+
+    (rows ? '<div class="mr-ings">'+rows+'</div>' : '')+
+    '<div class="mr-total">Total: <b>'+t.calories+' cal</b> · '+t.protein_g+'p · '+t.carbs_g+'c · '+t.fat_g+'f</div>'+
+    '<div class="mr-ingform">'+
+      '<input class="txt" id="ingName" type="text" placeholder="Ingredient" autocomplete="off">'+
+      '<div style="display:flex;gap:7px;margin-top:7px">'+
+        '<input class="txt" id="ingCal" type="number" inputmode="numeric" min="0" placeholder="cal">'+
+        '<input class="txt" id="ingPro" type="number" inputmode="numeric" min="0" placeholder="p">'+
+        '<input class="txt" id="ingCarb" type="number" inputmode="numeric" min="0" placeholder="c">'+
+        '<input class="txt" id="ingFat" type="number" inputmode="numeric" min="0" placeholder="f">'+
+      '</div>'+
+      '<button class="btn" id="ingAddBtn" type="button" style="margin-top:8px;background:var(--soft);color:var(--brand);border:1.5px solid var(--brand)">＋ Add ingredient</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px">'+
+      '<button class="btn" id="mrCancelBtn" type="button" style="flex:0 0 auto;background:transparent;border:1.5px solid var(--line);color:var(--ink2)">Cancel</button>'+
+      '<button class="btn btn-dark" id="mrSaveBtn" type="button" style="flex:1">Save recipe</button>'+
+    '</div>';
+}
+function addIngredient(){
+  var n = ($("#ingName").value||"").trim();
+  var cal = int($("#ingCal").value);
+  if (!n){ $("#ingName").focus(); return; }
+  if (cal <= 0){ $("#ingCal").focus(); return; }
+  _mrDraft.items.push({ name:n, calories:cal, protein_g:int($("#ingPro").value), carbs_g:int($("#ingCarb").value), fat_g:int($("#ingFat").value) });
+  renderRecipeBuilder();
+}
+async function saveRecipe(){
+  var name = ($("#mrName").value||"").trim();
+  if (!name){ $("#mrName").focus(); toast("Name your recipe", true); return; }
+  if (!_mrDraft.items.length){ toast("Add at least one ingredient", true); return; }
+  var t = _mrTotals(_mrDraft.items);
+  var btn = $("#mrSaveBtn"); if (btn) btn.disabled = true;
+  try {
+    await api("/api/myrecipes", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ name:name, items:_mrDraft.items, calories:t.calories, protein_g:t.protein_g, carbs_g:t.carbs_g, fat_g:t.fat_g }) });
+    toast("✓ Saved “"+name+"”");
+    closeRecipeBuilder();
+    await loadMyRecipes();
+  } catch(e){ toast(e.message || "Couldn't save it", true); if (btn) btn.disabled = false; }
+}
+async function logRecipe(id){
+  var r = _myRecipes.filter(function(x){ return int(x.id)===id; })[0]; if (!r) return;
+  try {
+    await api("/api/meals", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ date:todayStr(), time:nowTime(), name:r.name,
+        calories:int(r.calories), protein_g:int(r.protein_g), carbs_g:int(r.carbs_g), fat_g:int(r.fat_g),
+        items_json: JSON.stringify(r.items||[]), source:"My recipe", accuracy_tier:"estimate" }) });
+    toast("✓ Logged "+r.name); switchTab("today");
+  } catch(e){ toast(e.message || "Couldn't log it", true); }
+}
+async function deleteRecipe(id){ try { await api("/api/myrecipes/"+id, { method:"DELETE" }); await loadMyRecipes(); } catch(e){ toast("Couldn't delete it", true); } }
+document.addEventListener("click", function(e){
+  if (!e.target.closest) return;
+  if (e.target.closest("#mrNewBtn")){ openRecipeBuilder(null); switchTab("scan"); return; }
+  if (e.target.closest("#qaSaveRecipeBtn")){
+    var nm = ($("#qaName").value||"").trim(), cal = int($("#qaCal").value);
+    if (!nm || cal <= 0){ toast("Enter a name + calories first", true); return; }
+    openRecipeBuilder({ name:nm, items:[{ name:nm, calories:cal, protein_g:int($("#qaPro").value), carbs_g:int($("#qaCarb").value), fat_g:int($("#qaFat").value) }] });
+    var mc=$("#myRecipesCard"); if (mc) mc.scrollIntoView({ behavior:"smooth", block:"center" });
+    return;
+  }
+  if (e.target.closest("#ingAddBtn")){ addIngredient(); return; }
+  if (e.target.closest("#mrSaveBtn")){ saveRecipe(); return; }
+  if (e.target.closest("#mrCancelBtn")){ closeRecipeBuilder(); return; }
+  var lg = e.target.closest("[data-mrlog]"); if (lg){ logRecipe(int(lg.getAttribute("data-mrlog"))); return; }
+  var dl = e.target.closest("[data-mrdel]"); if (dl){ deleteRecipe(int(dl.getAttribute("data-mrdel"))); return; }
+  var idd = e.target.closest("[data-ingdel]"); if (idd && _mrDraft){ _mrDraft.items.splice(int(idd.getAttribute("data-ingdel")),1); renderRecipeBuilder(); return; }
 });
 
 /* ---------------- Intermittent-fasting timer (self-contained, localStorage-backed) ---------------- */

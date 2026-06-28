@@ -457,6 +457,21 @@ def init_db():
                    created TEXT
                )"""
         )
+        # User-created custom recipes (multi-ingredient meals the user composes once + logs in one tap).
+        # Distinct from the 203 curated recipes (read-only) and from recents (single-item re-log).
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS my_recipes(
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   uid TEXT,
+                   name TEXT,
+                   calories INTEGER,
+                   protein_g INTEGER,
+                   carbs_g INTEGER,
+                   fat_g INTEGER,
+                   items_json TEXT,
+                   created TEXT
+               )"""
+        )
         # Migration: store the full rich breakdown per meal so History can show it.
         cols = [r[1] for r in con.execute("PRAGMA table_info(meals)").fetchall()]
         if "detail_json" not in cols:
@@ -3054,6 +3069,63 @@ def recent_foods():
         if len(out) >= 15:
             break
     return jsonify({"recents": out})
+
+
+@app.post("/api/myrecipes")
+def add_myrecipe():
+    """Save a user-created recipe (a named, multi-ingredient meal with summed macros) so it can be logged
+       in one tap later. Server-side + uid-scoped so it survives a reinstall, like the food diary."""
+    d = request.get_json(silent=True) or {}
+    name = (str(d.get("name") or "")).strip()[:80]
+    if not name:
+        return jsonify({"error": "name_required"}), 400
+    items = d.get("items")
+    items = items if isinstance(items, list) else []
+    items_json = json.dumps(items)
+    con = get_db()
+    try:
+        cur = con.execute(
+            """INSERT INTO my_recipes(uid, name, calories, protein_g, carbs_g, fat_g, items_json, created)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (_uid(), name, _int(d.get("calories")), _int(d.get("protein_g")), _int(d.get("carbs_g")),
+             _int(d.get("fat_g")), items_json, datetime.utcnow().isoformat()),
+        )
+        con.commit()
+        return jsonify({"id": cur.lastrowid})
+    finally:
+        con.close()
+
+
+@app.get("/api/myrecipes")
+def list_myrecipes():
+    """This device's saved custom recipes (most-recent first)."""
+    con = get_db()
+    try:
+        rows = con.execute(
+            """SELECT id, name, calories, protein_g, carbs_g, fat_g, items_json
+               FROM my_recipes WHERE uid = ? ORDER BY id DESC LIMIT 100""", (_uid(),)).fetchall()
+    finally:
+        con.close()
+    out = []
+    for r in rows:
+        m = dict(r)
+        try:
+            m["items"] = json.loads(m.pop("items_json") or "[]")
+        except Exception:  # noqa: BLE001
+            m["items"] = []
+        out.append(m)
+    return jsonify({"recipes": out})
+
+
+@app.delete("/api/myrecipes/<int:rid>")
+def delete_myrecipe(rid):
+    con = get_db()
+    try:
+        con.execute("DELETE FROM my_recipes WHERE id = ? AND uid = ?", (rid, _uid()))
+        con.commit()
+    finally:
+        con.close()
+    return jsonify({"ok": True})
 
 
 @app.post("/api/exercise")
