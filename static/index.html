@@ -194,6 +194,15 @@
   .recent-meta{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
   .recent-plus{flex:none;width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;font-size:17px;display:flex;align-items:center;justify-content:center;line-height:1}
   .recent-adding{opacity:.5}
+  .fast-chips{display:flex;gap:8px}
+  .fast-chip{flex:1;border:1.5px solid var(--line);background:var(--soft);border-radius:11px;padding:11px 4px;font-family:inherit;font-size:14px;font-weight:750;color:var(--ink2);cursor:pointer}
+  .fast-chip.on{border-color:var(--brand);background:var(--brand);color:#fff}
+  .fast-time{font-size:38px;font-weight:800;color:var(--ink);text-align:center;font-variant-numeric:tabular-nums;letter-spacing:.5px;margin-top:6px}
+  .fast-sub{text-align:center;font-size:13px;color:var(--ink2);margin-top:2px}
+  .fast-bar{height:9px;border-radius:6px;background:var(--line);overflow:hidden;margin:13px 0 8px}
+  .fast-bar-fg{height:100%;width:0;background:var(--brand);border-radius:6px;transition:width 1s linear}
+  .fast-bar-fg.fast-done{background:var(--gold,#c9a23a)}
+  .fast-eat{text-align:center;font-size:12.5px;color:var(--ink2)}
   .gal-btn{
     width:100%;margin-top:10px;border:none;cursor:pointer;
     background:var(--card);color:var(--ink);border-radius:var(--r);
@@ -938,6 +947,11 @@
       <div class="goal-title">🏃 Move</div>
       <div class="goal-desc" style="margin:4px 2px 10px">Low-impact workouts + desk-break stretches, built for your level. No gym, joint-friendly.</div>
       <button class="btn btn-dark" id="moveOpenBtn" type="button" style="margin-top:0">Start moving</button>
+    </div>
+
+    <div class="card" id="fastCard">
+      <div class="goal-title">⏱️ Fasting</div>
+      <div id="fastBody"></div>
     </div>
 
     <div class="card">
@@ -1838,6 +1852,7 @@ function switchTab(name){
   if (name === "today") loadToday();
   if (name === "eatout") loadEatOut();
   if (name === "scan"){ updateScanHint(); loadRecents(); }
+  if (name === "today") renderFast();
   if (name === "history") loadHistory();
   if (name === "profile") loadProfile();
 }
@@ -1955,6 +1970,56 @@ if ($("#recentsList")) $("#recentsList").addEventListener("click", async functio
     toast("✓ Logged " + r.name);
     switchTab("today");
   } catch (err){ toast(err.message || "Couldn't log it", true); row.disabled = false; row.classList.remove("recent-adding"); }
+});
+
+/* ---------------- Intermittent-fasting timer (self-contained, localStorage-backed) ---------------- */
+var FAST_PROTOCOLS = [{ h:16, label:"16:8" }, { h:18, label:"18:6" }, { h:20, label:"20:4" }];
+function _fastState(){ try { return JSON.parse(localStorage.getItem("snapcal_fast") || "null"); } catch(e){ return null; } }
+function _fastProto(){ try { return int(localStorage.getItem("snapcal_fast_proto")) || 16; } catch(e){ return 16; } }
+function _setFastProto(h){ try { localStorage.setItem("snapcal_fast_proto", String(h)); } catch(e){} }
+function _fmtClock(sec){ var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; function p(n){return (n<10?"0":"")+n;} return p(h)+":"+p(m)+":"+p(s); }
+function _fmtDurShort(sec){ var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60); return (h?h+"h ":"")+m+"m"; }
+function _hm(d){ try { return d.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }); } catch(e){ return ""; } }
+function startFast(){ try { localStorage.setItem("snapcal_fast", JSON.stringify({ start:new Date().toISOString(), hours:_fastProto() })); } catch(e){} renderFast(); toast("Fast started — you've got this"); }
+function endFast(){ var st=_fastState(); var sec=st?Math.max(0,Math.floor((Date.now()-new Date(st.start).getTime())/1000)):0; try { localStorage.removeItem("snapcal_fast"); } catch(e){} renderFast(); if (sec) toast("Fast ended — "+_fmtDurShort(sec)); }
+var _fastTimer = null;
+function renderFast(){
+  var body = $("#fastBody"); if (!body) return;
+  if (_fastTimer){ clearInterval(_fastTimer); _fastTimer = null; }
+  var st = _fastState();
+  if (!st){
+    var proto = _fastProto();
+    var chips = FAST_PROTOCOLS.map(function(p){ return '<button type="button" class="fast-chip'+(p.h===proto?' on':'')+'" data-fh="'+p.h+'">'+p.label+'</button>'; }).join("");
+    body.innerHTML =
+      '<div class="goal-desc" style="margin:4px 2px 10px">Intermittent fasting — pick your window, start the clock, and track your eating window.</div>'+
+      '<div class="fast-chips">'+chips+'</div>'+
+      '<button class="btn btn-dark" id="fastStartBtn" type="button" style="margin-top:12px">Start fast</button>';
+    return;
+  }
+  var startMs = new Date(st.start).getTime(), targetMs = startMs + st.hours*3600*1000;
+  body.innerHTML =
+    '<div class="fast-time" id="fastTime">00:00:00</div>'+
+    '<div class="fast-sub" id="fastSub"></div>'+
+    '<div class="fast-bar"><div class="fast-bar-fg" id="fastBar"></div></div>'+
+    '<div class="fast-eat" id="fastEat"></div>'+
+    '<button class="btn" id="fastEndBtn" type="button" style="margin-top:12px;background:rgba(220,38,38,.10);color:var(--bad);border:1.5px solid rgba(220,38,38,.3)">End fast</button>';
+  function paint(){
+    var now = Date.now(), elapsed = Math.max(0, Math.floor((now-startMs)/1000)), done = now >= targetMs;
+    var pct = Math.min(100, (now-startMs)/(st.hours*3600*1000)*100);
+    var t=$("#fastTime"), sub=$("#fastSub"), bar=$("#fastBar"), eat=$("#fastEat");
+    if (!t){ if (_fastTimer){ clearInterval(_fastTimer); _fastTimer=null; } return; }
+    t.textContent = _fmtClock(elapsed);
+    sub.textContent = "of "+st.hours+"h"+(done?" — 🎉 goal reached!":"");
+    bar.style.width = pct+"%"; if (done) bar.classList.add("fast-done");
+    eat.textContent = done ? "Your eating window is open — break it gently with protein." : "Eating window opens at "+_hm(new Date(targetMs));
+  }
+  paint(); _fastTimer = setInterval(paint, 1000);
+}
+document.addEventListener("click", function(e){
+  if (!e.target.closest) return;
+  var fc = e.target.closest(".fast-chip"); if (fc){ _setFastProto(int(fc.getAttribute("data-fh"))); renderFast(); return; }
+  if (e.target.closest("#fastStartBtn")){ startFast(); return; }
+  if (e.target.closest("#fastEndBtn")){ endFast(); return; }
 });
 
 /* ---------------- Move module (low-impact workouts + desk breaks) ---------------- */
@@ -5563,6 +5628,7 @@ function renderWeightChart(w){
   updatePushUI();
   updateHealthUI();
   loadHealthToday();
+  renderFast();
   loadToday();
   /* First launch on this device → explain + request all permissions together (no surprise prompts later). */
   if (!lsGet("snapcal_onboarded")) setTimeout(showOnboarding, 600);
