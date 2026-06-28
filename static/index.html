@@ -652,6 +652,17 @@
   .scan-limit .prem{color:var(--brand)}
   .pw-price{font-size:15px;color:var(--ink2);margin-bottom:12px}
   .pw-price b{font-size:24px;color:var(--ink);font-weight:800}
+  .pw-plans{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+  .pw-plan{position:relative;width:100%;text-align:left;background:var(--card,#fff);border:2px solid var(--line);
+    border-radius:14px;padding:14px 16px;cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s}
+  .pw-plan[aria-pressed="true"]{border-color:var(--brand);background:var(--soft)}
+  .pw-plan-tag{position:absolute;top:-9px;left:14px;background:var(--brand);color:#fff;font-size:10px;font-weight:800;
+    letter-spacing:.04em;padding:2px 8px;border-radius:7px}
+  .pw-plan-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .pw-plan-name{font-size:16px;font-weight:750;color:var(--ink)}
+  .pw-plan-price{font-size:14px;color:var(--ink2)}
+  .pw-plan-price b{font-size:20px;color:var(--ink);font-weight:800}
+  .pw-plan-sub{font-size:12px;color:var(--ink2);margin-top:3px}
   .pw-list{list-style:none;margin:0 0 12px;padding:0}
   .pw-list li{font-size:14px;padding:8px 0 8px 26px;position:relative;border-bottom:1px solid var(--line)}
   .pw-list li:before{content:"\2713";position:absolute;left:2px;color:var(--brand);font-weight:800}
@@ -3371,8 +3382,10 @@ $("#sheetBody").addEventListener("click", async function(e){
     if (rr){ renderChainSheet(rr); $(".sheet-card").scrollTop = 0; }
     return;
   }
+  var planEl = e.target.closest(".pw-plan");
+  if (planEl) { selectPlan(planEl.getAttribute("data-plan")); return; }
   if (e.target.closest("#pwBuy")) {
-    var ok = await purchasePremium();
+    var ok = await purchasePremium(_pwPlan);
     if (ok) { closeSheet(); toast("★ Premium unlocked"); }
     return;
   }
@@ -3512,16 +3525,18 @@ async function syncPremium(){
   }
   updateScanHint(); updatePremiumUI(); updatePushUI();
 }
-async function purchasePremium(){
+async function purchasePremium(plan){
+  // Map the chosen plan to the RevenueCat package id ($rc_annual / $rc_monthly); default = annual.
+  var pkg = (plan === "monthly") ? "$rc_monthly" : "$rc_annual";
   if (window.Billing && window.Billing.isNative) {
     var ok = false;
-    try { ok = await window.Billing.buy(); }
+    try { ok = await window.Billing.buy(pkg); }
     catch (e) { toast(e.message || "Purchase failed", true); return false; }
-    if (ok) { premiumActive = true; updateScanHint(); updatePremiumUI(); }
+    if (ok) { premiumActive = true; updateScanHint(); updatePremiumUI(); updatePushUI(); }
     return ok;
   }
   localStorage.setItem("snapcal_premium", "1"); premiumActive = true;
-  updateScanHint(); updatePremiumUI(); return true;
+  updateScanHint(); updatePremiumUI(); updatePushUI(); return true;
 }
 async function restorePremium(){
   if (!(window.Billing && window.Billing.isNative)) return;
@@ -3561,12 +3576,32 @@ function updateScanHint(){
   var n = scansLeft();
   el.textContent = n + " free scan" + (n === 1 ? "" : "s") + " left today";
 }
+var _pwPlan = "annual";   // default to the annual plan (cash upfront, lower churn — the one we push)
+function selectPlan(plan){
+  _pwPlan = (plan === "monthly") ? "monthly" : "annual";
+  var plans = document.querySelectorAll(".pw-plan");
+  for (var i = 0; i < plans.length; i++){
+    plans[i].setAttribute("aria-pressed", plans[i].getAttribute("data-plan") === _pwPlan ? "true" : "false");
+  }
+  var btn = document.getElementById("pwBuy");
+  if (btn) btn.textContent = (_pwPlan === "annual") ? "Start Annual — $39.99/yr" : "Start Monthly — $7.99/mo";
+}
 function openPaywall(){
   var html =
     '<div class="sheet-h">SnapCal Premium</div>' +
     '<div class="sheet-sub">Unlock your full daily coach — Coach Cal that talks, guides your day, and never runs out. Priced honestly, cancel anytime.</div>' +
     '<div class="card">' +
-      '<div class="pw-price"><b>$7.99</b>/mo<span> · or </span><b>$39.99</b>/yr</div>' +
+      '<div class="pw-plans">' +
+        '<button type="button" class="pw-plan" data-plan="annual">' +
+          '<div class="pw-plan-tag">BEST VALUE · SAVE 58%</div>' +
+          '<div class="pw-plan-row"><span class="pw-plan-name">Annual</span><span class="pw-plan-price"><b>$39.99</b>/yr</span></div>' +
+          '<div class="pw-plan-sub">just $3.33/mo, billed yearly</div>' +
+        '</button>' +
+        '<button type="button" class="pw-plan" data-plan="monthly">' +
+          '<div class="pw-plan-row"><span class="pw-plan-name">Monthly</span><span class="pw-plan-price"><b>$7.99</b>/mo</span></div>' +
+          '<div class="pw-plan-sub">billed monthly, cancel anytime</div>' +
+        '</button>' +
+      '</div>' +
       '<ul class="pw-list">' +
         '<li><b>🔊 Coach Cal\'s voice — hear your coach talk</b></li>' +
         '<li><b>Daily mentor check-ins that guide your day</b></li>' +
@@ -3577,12 +3612,13 @@ function openPaywall(){
         '<li>Full history, weight &amp; streak tracking</li>' +
       '</ul>' +
       '<div class="pw-honest">No hidden fees. Cancel in one tap. Your logged data stays yours — free, even if you cancel.</div>' +
-      '<button class="btn btn-dark" id="pwBuy" type="button">Unlock Premium</button>' +
+      '<button class="btn btn-dark" id="pwBuy" type="button">Start Annual — $39.99/yr</button>' +
       '<button id="pwRestore" type="button" style="border:none;background:none;color:var(--ink2);font-family:inherit;font-size:13px;font-weight:650;width:100%;margin-top:8px;cursor:pointer">Restore purchases</button>' +
       '<button id="pwLater" type="button" style="border:none;background:none;color:var(--ink2);font-family:inherit;font-size:14px;font-weight:650;width:100%;margin-top:6px;cursor:pointer">Maybe later</button>' +
       ((window.Billing && window.Billing.isNative) ? '' : '<div class="pw-note">Preview build: payments aren\'t connected on the web — “Unlock” enables Premium locally for testing.</div>') +
     '</div>';
   $("#sheetBody").innerHTML = html; $(".sheet-card").scrollTop = 0; openSheet();
+  selectPlan(_pwPlan);   // highlight the default (annual) + set the button label
 }
 function updatePremiumUI(){
   var st = $("#premStatus"), btn = $("#premToggle");
