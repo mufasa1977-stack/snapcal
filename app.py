@@ -82,11 +82,11 @@ PORT = int(os.environ.get("PORT", "5177"))  # Render/Fly inject $PORT in product
 
 # --- Web Push (VAPID) — proactive Coach Cal check-ins reach the user when the app is CLOSED. PREMIUM feature.
 # Public key is safe to embed (the browser needs it as applicationServerKey); the PRIVATE key must live ONLY in
-# Render env (VAPID_PRIVATE). Keypair regenerated 2026-06-29 (cryptography P-256, py_vapid-verified); the matching
-# VAPID_PRIVATE + PUSH_RUN_SECRET are in the gitignored apps/snapcal/.secrets/push_keys.txt for Tariq to set in Render.
+# Render env (VAPID_PRIVATE). This PUBLIC key pairs with the VAPID_PRIVATE ALREADY set in Render (both 2026-06-28).
+# Do NOT regenerate without also updating VAPID_PRIVATE in Render in the same change, or the pair breaks and push fails.
 VAPID_PUBLIC = os.environ.get(
     "VAPID_PUBLIC",
-    "BFpDIhMA4qSb1A5pxP5MiXgIGnKr7dE8rcMT4tMoH5pi1I955qeq9LiChTyVqT1bwb5AkS52Iu9tOYT0RNuhrUk").strip()
+    "BPq-VDdsVfMK5zHMGDBt_wytz5wfB2YuIJWvyZ6FuZSs9pIHDH6JzobBguaNvoHsD9XoeRviiFVSeWOQ4UEVUXo").strip()
 VAPID_PRIVATE = os.environ.get("VAPID_PRIVATE", "").strip()  # 32-byte scalar, base64url — env-only, never embed
 VAPID_SUB = os.environ.get("VAPID_SUB", "mailto:tariq@xionprotech.com").strip()
 # Shared secret guarding /api/push/run so only our scheduler (GitHub Action) can fan out notifications.
