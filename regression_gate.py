@@ -494,6 +494,32 @@ def main():
         check("sheets: swipe-down grab handle present (a small X isn't enough on a phone)",
               grip["grip"], "grip=" + str(grip["grip"]))
 
+        # PROACTIVE DIRECTIONS: when Coach names places, tappable "Take me to ___" buttons appear automatically
+        # (user shouldn't have to type "take me there" or ask "where is that").
+        pdir = page.evaluate("""async () => {
+            var realApi = window.api;
+            window._chatNearby = [{ name:'Hi Pot', dist_m:1200 }, { name:'Sakura Asian Cuisine', dist_m:3200 }];
+            window._chatHasLoc = true;
+            window.api = function(u, opts){
+                if (u.indexOf('/api/chat') >= 0) return Promise.resolve({ reply: 'Grab a chicken and veggie rice bowl at Hi Pot (about $10). Sakura Asian Cuisine is another solid pick. Want me to take you there?' });
+                return realApi(u, opts);
+            };
+            openVoice();
+            sendChat('where can I grab something healthy near me?');
+            await new Promise(function(r){ var t=0; var iv=setInterval(function(){ t+=50; if (document.querySelectorAll('#voiceLog a.vmsg-coach').length >= 2 || t>4000){ clearInterval(iv); r(); } }, 50); });
+            var links = Array.prototype.map.call(document.querySelectorAll('#voiceLog a.vmsg-coach'), function(a){ return { text:a.textContent||'', href:a.getAttribute('href')||'' }; });
+            window.api = realApi; closeVoice();
+            return { count: links.length, links: links };
+        }""")
+        check("coach directions: naming a place auto-shows tappable 'Take me to' buttons (no 'where is that?')",
+              pdir["count"] >= 2
+              and any("Hi Pot" in l["text"] for l in pdir["links"])
+              and any("Sakura" in l["text"] for l in pdir["links"])
+              and all("google.com/maps" in l["href"] for l in pdir["links"]),
+              "buttons=" + str(pdir["count"]) + " hiPot=" + str(any("Hi Pot" in l["text"] for l in pdir["links"]))
+              + " sakura=" + str(any("Sakura" in l["text"] for l in pdir["links"]))
+              + " allMaps=" + str(all("google.com/maps" in l["href"] for l in pdir["links"])))
+
         # ACCESSIBILITY + ROUTE-CORRIDOR UI
         ts = page.evaluate("""() => {
             localStorage.setItem('snapcal_textsize','1.15'); applyTextSize();

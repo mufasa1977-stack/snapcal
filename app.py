@@ -1738,6 +1738,15 @@ CHAT_SYSTEM = (
     "'how about we look at some spots?'. Only ask a question if you genuinely cannot answer without it."
     "\n8) Protein anchor: for a recomp user whose protein is well below target, pick the HIGHEST-protein option (or suggest a "
     "protein add-on) and tie it to their remaining protein/calories (e.g. 'that bowl ~45g protein — puts you at 105 of 180')."
+    "\n9) DIRECTIONS — always OFFER, never make them ask: whenever you name a specific real place, END your reply by "
+    "offering to take them there, e.g. 'Want me to take you there?' or 'Want directions?'. NEVER tell them to say a magic "
+    "phrase like 'just say take me there', and never make them ask 'where is that' — you already know the spot, so offer it "
+    "yourself. If you named TWO places at different distances, end by asking which they'd like directions to and note the "
+    "closer one (e.g. 'Want me to take you to the closer one, 1.2 mi away?')."
+    "\n10) PRICE FOR BUDGET — when you suggest a specific dish or menu item, add an APPROXIMATE price in parentheses "
+    "(e.g. 'a grilled chicken bowl (about $9)'), clearly as a rough estimate, so someone eating healthy on a budget can plan. "
+    "If two options differ a lot in price, say which is the cheaper pick. Never state a price as exact or guaranteed — always "
+    "frame it as an estimate ('about', 'around', '~')."
 )
 
 RECOMP_CHAT_CLAUSE = (
@@ -1956,7 +1965,7 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
                     "current location). REAL places in " + str(area)[:50] + " ('@' = street address): " + "; ".join(items) + ". "
                     "Recommend SPECIFIC places FROM THIS LIST: lead with the place NAME + a specific healthy order to get "
                     "there (the address is optional — a brief neighborhood/cross-street is plenty). Favor sit-down/fresh spots, "
-                    "and tell the user they can just say \"take me there\" and you'll open directions. "
+                    "and END by OFFERING directions yourself — ask 'Want me to take you there?' (don't make them ask where it is). "
                     "These are in " + str(area)[:50] + ", so do NOT mention distance from their current location. Only name "
                     "places from this list; never invent one." + hours_note + closed_note)
         if items and route_to:
@@ -1969,8 +1978,8 @@ def _chat_nearby_clause(nearby, has_loc, route_to="", area="", local_time=""):
             return ("\n\nREAL places near the user RIGHT NOW (closest first; '@' = street address where known): " + "; ".join(items) + ". "
                     "Lead with the place NAME + a specific healthy order; you can briefly add the distance or cross-street, but the "
                     "user mainly wants the spot + what to eat (full street address optional). You DO know where these are, so NEVER "
-                    "say you don't have the location — ALWAYS tell the user they can just say \"take me there\" and you'll open "
-                    "directions in their maps app. This list MIXES "
+                    "say you don't have the location and NEVER make them ask 'where is that' — END by OFFERING directions yourself: "
+                    "ask 'Want me to take you there?' (and if you named two spots at different distances, ask which one). This list MIXES "
                     "fast food, cafes, and sit-down restaurants — do NOT default to fast food. When the user wants "
                     "something healthy, FAVOR the sit-down and fresh spots (places known for grilled proteins, salads, "
                     "seafood, veg-forward bowls) over fast food, and name a specific healthy order there (e.g. at a "

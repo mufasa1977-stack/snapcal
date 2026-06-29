@@ -3716,7 +3716,8 @@ function renderDirectionsLink(place){
   a.href = url; a.target = "_blank"; a.rel = "noopener";
   a.className = "vmsg vmsg-coach";
   a.style.cssText += ";display:block;text-decoration:none;background:var(--accent);color:#fff;font-weight:750;text-align:center";
-  a.textContent = "📍 Directions to " + (place.name || "there");
+  var dist = (place.dist_m != null && typeof fmtDist === "function") ? (" (" + fmtDist(place.dist_m) + ")") : "";
+  a.textContent = "📍 Take me to " + (place.name || "there") + dist;
   log.appendChild(a); log.scrollTop = log.scrollHeight;
 }
 function _navIntent(t){ return /\b(take me there|directions|navigate|how (do|can) i get there|open (the )?map|drive (me )?there|get me there|take me to it|bring me there)\b/i.test(t || ""); }
@@ -3789,8 +3790,18 @@ async function sendChat(text){
   if (d){
     if (!isPremium()) bumpChat();   // count a billed reply against the free daily allowance
     var reply = (d && d.reply) || "I’m here — what can I help you with?";
-    try { var rl = reply.toLowerCase(); (_chatNearby || []).forEach(function(p){ if (p && p.name && rl.indexOf(p.name.toLowerCase()) >= 0) _lastPlace = p; }); } catch(e){}   /* remember the place he named for "take me there" */
+    var _named = [], _seenNm = {};
+    try {
+      var rl = reply.toLowerCase();
+      (_chatNearby || []).forEach(function(p){
+        if (p && p.name && rl.indexOf(p.name.toLowerCase()) >= 0 && !_seenNm[p.name.toLowerCase()]){ _seenNm[p.name.toLowerCase()] = 1; _named.push(p); }
+      });
+    } catch(e){}
+    if (_named.length) _lastPlace = _named[0];   /* remember for a spoken "take me there" */
     voiceRender("coach", reply); _chatMsgs.push({ role: "assistant", content: reply }); speak(reply);
+    /* Proactively drop a tappable directions button for EACH place Coach named — the user should never have to
+       type "take me there" or ask "where is that". One tap → maps. Cap at 3 so two-spot answers stay clean. */
+    try { _named.slice(0, 3).forEach(function(p){ renderDirectionsLink(p); }); } catch(e){}
   } else {
     voiceRender("coach", "I’m having trouble connecting right now — give me a few seconds and ask me again.");
   }
