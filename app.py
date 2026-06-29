@@ -82,14 +82,18 @@ PORT = int(os.environ.get("PORT", "5177"))  # Render/Fly inject $PORT in product
 
 # --- Web Push (VAPID) — proactive Coach Cal check-ins reach the user when the app is CLOSED. PREMIUM feature.
 # Public key is safe to embed (the browser needs it as applicationServerKey); the PRIVATE key must live ONLY in
-# Render env (VAPID_PRIVATE). Generated 2026-06-28 (cryptography P-256). Tariq adds VAPID_PRIVATE to Render env.
+# Render env (VAPID_PRIVATE). Keypair regenerated 2026-06-29 (cryptography P-256, py_vapid-verified); the matching
+# VAPID_PRIVATE + PUSH_RUN_SECRET are in the gitignored apps/snapcal/.secrets/push_keys.txt for Tariq to set in Render.
 VAPID_PUBLIC = os.environ.get(
     "VAPID_PUBLIC",
-    "BPq-VDdsVfMK5zHMGDBt_wytz5wfB2YuIJWvyZ6FuZSs9pIHDH6JzobBguaNvoHsD9XoeRviiFVSeWOQ4UEVUXo").strip()
+    "BFpDIhMA4qSb1A5pxP5MiXgIGnKr7dE8rcMT4tMoH5pi1I955qeq9LiChTyVqT1bwb5AkS52Iu9tOYT0RNuhrUk").strip()
 VAPID_PRIVATE = os.environ.get("VAPID_PRIVATE", "").strip()  # 32-byte scalar, base64url — env-only, never embed
 VAPID_SUB = os.environ.get("VAPID_SUB", "mailto:tariq@xionprotech.com").strip()
 # Shared secret guarding /api/push/run so only our scheduler (GitHub Action) can fan out notifications.
 PUSH_RUN_SECRET = os.environ.get("PUSH_RUN_SECRET", "").strip()
+# Optional Google Places upgrade for eat-out/stores: when GOOGLE_PLACES_KEY is set, /api/nearby prefers Google
+# (real business-status → fewer stale/closed listings) and transparently FALLS BACK to free OSM when unset or on error.
+GOOGLE_PLACES_KEY = os.environ.get("GOOGLE_PLACES_KEY", "").strip()
 
 # Origins the Capacitor native app calls the API from: iOS = capacitor://localhost,
 # Android = https://localhost. Plus local web dev + any extra via CORS_ORIGINS env.
@@ -1265,10 +1269,66 @@ def _osm_addr(tags):
     return ", ".join(parts)
 
 
+GOOGLE_PLACES_URL = "https://places.googleapis.com/v1/places:searchNearby"
+_GOOGLE_FOOD_TYPES = ["restaurant", "cafe", "fast_food_restaurant", "meal_takeaway", "coffee_shop"]
+_GOOGLE_STORE_TYPES = ["supermarket", "grocery_store", "convenience_store", "wholesale_store"]
+
+
+def _google_nearby(lat, lng, radius, kind):
+    """Google Places API (v1 searchNearby) adapted to the Overpass shape {'elements':[...]} so the existing
+    /api/nearby parser works UNCHANGED. Returns None when GOOGLE_PLACES_KEY is unset OR on any failure, so the
+    caller transparently falls back to free OSM. Drops CLOSED_PERMANENTLY/TEMPORARILY — the real business-status
+    OSM cannot give. No new dependencies (urllib)."""
+    if not GOOGLE_PLACES_KEY:
+        return None
+    try:
+        import urllib.request
+        body = json.dumps({
+            "includedTypes": _GOOGLE_STORE_TYPES if kind == "store" else _GOOGLE_FOOD_TYPES,
+            "maxResultCount": 20,
+            "rankPreference": "DISTANCE",
+            "locationRestriction": {"circle": {
+                "center": {"latitude": lat, "longitude": lng},
+                "radius": float(min(int(radius), 50000))}},
+        }).encode("utf-8")
+        req = urllib.request.Request(GOOGLE_PLACES_URL, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("X-Goog-Api-Key", GOOGLE_PLACES_KEY)
+        req.add_header("X-Goog-FieldMask",
+                       "places.displayName,places.location,places.shortFormattedAddress,"
+                       "places.primaryType,places.businessStatus")
+        with urllib.request.urlopen(req, timeout=12) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001 — any failure → OSM fallback (never break the feature)
+        return None
+    elements = []
+    for p in (data.get("places") or []):
+        if p.get("businessStatus") and p["businessStatus"] != "OPERATIONAL":
+            continue
+        name = ((p.get("displayName") or {}).get("text") or "").strip()
+        loc = p.get("location") or {}
+        plat, plng = loc.get("latitude"), loc.get("longitude")
+        if not name or plat is None or plng is None:
+            continue
+        ptype = (p.get("primaryType") or "").lower()
+        tags = {"name": name, "addr:street": (p.get("shortFormattedAddress") or "").strip()}
+        if kind == "store":
+            tags["shop"] = "convenience" if "convenience" in ptype else "supermarket"
+        elif "fast_food" in ptype or "takeaway" in ptype:
+            tags["amenity"] = "fast_food"
+        elif "cafe" in ptype or "coffee" in ptype:
+            tags["amenity"] = "cafe"
+        else:
+            tags["amenity"] = "restaurant"
+        elements.append({"lat": plat, "lon": plng, "tags": tags})
+    return {"elements": elements}
+
+
 @app.get("/api/nearby")
 def nearby():
-    """Find food places around a lat/lng via OpenStreetMap (Overpass) and match them to
-    our curated guide. Free, no API key. Backs the Eat-Out 'Healthy food near me' button."""
+    """Find food places around a lat/lng. Prefers Google Places when GOOGLE_PLACES_KEY is set (real
+    business-status), else free OpenStreetMap (Overpass) — then matches them to our curated guide.
+    Backs the Eat-Out 'Healthy food near me' button."""
     try:
         lat = float(request.args.get("lat", ""))
         lng = float(request.args.get("lng", ""))
@@ -1296,7 +1356,9 @@ def nearby():
         )
     try:
         ckey = f"{kind}:{round(lat, 3)},{round(lng, 3)}:{radius}"   # cache hotspots + survive a transient outage
-        payload = _overpass(query, timeout=18, cache_key=ckey)
+        payload = _google_nearby(lat, lng, radius, kind)            # Google Places if GOOGLE_PLACES_KEY set...
+        if payload is None:
+            payload = _overpass(query, timeout=18, cache_key=ckey)  # ...else free OSM (default; same shape)
     except Exception as exc:  # noqa: BLE001 - best-effort; degrade gracefully on Overpass hiccups
         # keep `center` so the frontend can ALWAYS draw the map even when the food lookup hiccups
         return jsonify({"matched": [], "nearby": [], "stores": [], "center": {"lat": lat, "lng": lng},

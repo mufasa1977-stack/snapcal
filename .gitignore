@@ -25,3 +25,4 @@ ios/
 pexels_key.txt
 data/foodimg_cache.json
 usda_key.txt
+.secrets/
