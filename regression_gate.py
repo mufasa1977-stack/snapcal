@@ -520,6 +520,24 @@ def main():
               + " sakura=" + str(any("Sakura" in l["text"] for l in pdir["links"]))
               + " allMaps=" + str(all("google.com/maps" in l["href"] for l in pdir["links"])))
 
+        # BUDGET MODE: opt-in price toggle (default OFF so it never offends a non-budget customer); when ON the
+        # chat payload carries budget:true so the server adds estimated prices.
+        budgettgl = page.evaluate("""async () => {
+            var has = !!document.getElementById('budgetToggle');
+            var defOff = (localStorage.getItem('snapcal_budget') !== '1');
+            setBudget(true);
+            var realApi = window.api, sent = null;
+            window.api = function(u, opts){ if (u.indexOf('/api/chat') >= 0){ try { sent = JSON.parse(opts.body); } catch(e){} return Promise.resolve({ reply:'ok' }); } return realApi(u, opts); };
+            openVoice(); sendChat('what should I eat for lunch?');
+            await new Promise(function(r){ setTimeout(r, 700); });
+            var on = !!(sent && sent.budget === true);
+            window.api = realApi; closeVoice(); setBudget(false);
+            return { has: has, defOff: defOff, on: on };
+        }""")
+        check("budget mode: opt-in price toggle present, OFF by default, sends budget flag when on",
+              budgettgl["has"] and budgettgl["defOff"] and budgettgl["on"],
+              "toggle=" + str(budgettgl["has"]) + " defaultOff=" + str(budgettgl["defOff"]) + " sentFlag=" + str(budgettgl["on"]))
+
         # ACCESSIBILITY + ROUTE-CORRIDOR UI
         ts = page.evaluate("""() => {
             localStorage.setItem('snapcal_textsize','1.15'); applyTextSize();

@@ -2095,8 +2095,8 @@ def chat():
         if isinstance(_m, dict) and _m.get("role") == "user":
             last_user = str(_m.get("content") or "")
             break
-    if PRICE_INTENT_RE.search(last_user):
-        system += PRICE_CLAUSE   # estimated prices ONLY when the user asks about cost/budget — no token tax otherwise
+    if d.get("budget") or PRICE_INTENT_RE.search(last_user):
+        system += PRICE_CLAUSE   # prices when the user OPTED IN (Budget mode) OR explicitly asks — never unsolicited otherwise
     is_trip = bool(re.search(r"(?i)\b(vacation|trip|itinerary|out of town|for \d+\s*days?|\d+[\s-]day|plan (?:my|me|out)\s+(?:meals?|the day|my day|the week|my trip|a day)|weekend in|days in|while (?:i'?m|we'?re)\s+(?:in|there))\b", last_user))
     if is_trip:
         system += (

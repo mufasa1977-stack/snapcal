@@ -1353,6 +1353,17 @@
       <div class="goal-desc" style="margin:10px 2px 0;font-size:11.5px">For anyone who finds number-tracking stressful. Coach Cal stops mentioning calories &amp; deficits and focuses on balanced, consistent eating.</div>
     </div>
 
+    <div class="card" id="budgetCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div>
+          <div class="goal-title" style="margin:0">💰 Budget mode</div>
+          <div class="goal-hint" id="budgetStatus" style="margin:5px 0 0">Off — Coach Cal won’t bring up prices.</div>
+        </div>
+        <button class="btn btn-dark" id="budgetToggle" type="button" style="margin-top:0;width:auto;padding:12px 18px">Turn on</button>
+      </div>
+      <div class="goal-desc" style="margin:10px 2px 0;font-size:11.5px">Open the door to saving on your healthy journey. Turn this on and Coach Cal adds an estimated price to each pick and flags the cheaper option. Off by default — prices are rough estimates, not exact menu prices.</div>
+    </div>
+
     <div class="card">
       <div class="goal-title">🔒 Privacy &amp; your data</div>
       <div class="goal-desc" style="margin:4px 2px 12px">SnapCal is general wellness guidance, not medical advice — check with your doctor before changing your diet or exercise. Your data stays yours, and you can erase it anytime.</div>
@@ -3773,7 +3784,7 @@ async function sendChat(text){
     screen: _curTab,
     eaten_today: (todayData.meals || []).map(function(m){ return m.name; }).filter(Boolean).join(", "),
     nearby: (areaList || _chatNearby), has_location: (area ? true : _chatHasLoc), route_to: (area ? "" : _chatRouteTo), area: area,
-    gentle: _gentle,
+    gentle: _gentle, budget: _budget,
     fasting: (function(){ var s = _fastState(); return s ? { hours: s.hours, elapsed_min: Math.round((Date.now() - new Date(s.start).getTime()) / 60000) } : null; })(),
     local_time: (function(){ try { return new Date().toLocaleTimeString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch(e){ try { return new Date().toLocaleTimeString(); } catch(e2){ return ""; } } })()
   };
@@ -4649,6 +4660,19 @@ function applyGentle(){
 }
 function setGentle(on){ _gentle = !!on; try { localStorage.setItem("snapcal_gentle", on ? "1" : "0"); } catch(e){} applyGentle(); }
 if ($("#gentleToggle")) $("#gentleToggle").addEventListener("click", function(){ setGentle(!_gentle); toast(_gentle ? "🌿 Gentle mode on" : "Gentle mode off"); });
+
+/* Budget mode — OPT-IN price display. Off by default so it never offends a customer who doesn't care
+   about cost; on, Coach Cal adds an estimated price to each pick + flags the cheaper option. */
+var _budget = false;
+try { _budget = localStorage.getItem("snapcal_budget") === "1"; } catch(e){}
+function applyBudget(){
+  var st = $("#budgetStatus"), btn = $("#budgetToggle");
+  if (st) st.textContent = _budget ? "On — Coach Cal shows estimated prices & the cheaper pick." : "Off — Coach Cal won’t bring up prices.";
+  if (btn) btn.textContent = _budget ? "Turn off" : "Turn on";
+}
+function setBudget(on){ _budget = !!on; try { localStorage.setItem("snapcal_budget", on ? "1" : "0"); } catch(e){} applyBudget(); }
+if ($("#budgetToggle")) $("#budgetToggle").addEventListener("click", function(){ setBudget(!_budget); toast(_budget ? "💰 Budget mode on" : "Budget mode off"); });
+applyBudget();
 document.addEventListener("keydown", function(e){
   if (e.target && e.target.id === "askCoachInput" && e.key === "Enter"){ e.preventDefault(); askCoach(); }
 });
