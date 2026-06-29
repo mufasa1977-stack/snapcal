@@ -538,6 +538,28 @@ def main():
               budgettgl["has"] and budgettgl["defOff"] and budgettgl["on"],
               "toggle=" + str(budgettgl["has"]) + " defaultOff=" + str(budgettgl["defOff"]) + " sentFlag=" + str(budgettgl["on"]))
 
+        # SCAN RESULTS: each detected item has a Remove button to drop a wrong item (a friend's plate) before logging
+        rmitem = page.evaluate("""() => {
+            window.analyzeResult = { items:[
+              {name:'Dumpling', calories:80, protein_g:3, carbs_g:10, fat_g:3, fiber_g:0, sugar_g:1, sat_fat_g:1, sodium_mg:150},
+              {name:'Grilled Chicken', calories:300, protein_g:35, carbs_g:2, fat_g:12, fiber_g:0, sugar_g:0, sat_fat_g:3, sodium_mg:300}
+            ], mults:[1,1],
+            total:{calories:380,protein_g:38,carbs_g:12,fat_g:15,fiber_g:0,sugar_g:1,sat_fat_g:4,sodium_mg:450,band_pct:0},
+            health_score:72, quality_grade:'B', verdict:'', coach_tip:'', swaps:[], good_flags:[], bad_flags:[], satiety:'' };
+            renderScanCard();
+            var before = document.querySelectorAll('#resultItems .item-del').length;
+            var rowsBefore = document.querySelectorAll('#resultItems .item-row').length;
+            var delBtn = document.querySelector('#resultItems .item-del[data-del="0"]');
+            if (delBtn) delBtn.click();
+            var rowsAfter = document.querySelectorAll('#resultItems .item-row').length;
+            var remaining = (window.analyzeResult && window.analyzeResult.items.length) || 0;
+            var firstName = (document.querySelector('#resultItems .item-l .n') || {}).textContent || '';
+            return { before: before, rowsBefore: rowsBefore, rowsAfter: rowsAfter, remaining: remaining, firstName: firstName };
+        }""")
+        check("scan results: each item has a Remove button that drops a wrong item before logging",
+              rmitem["before"] == 2 and rmitem["rowsBefore"] == 2 and rmitem["rowsAfter"] == 1 and rmitem["remaining"] == 1 and ("Chicken" in rmitem["firstName"]),
+              "delBtns=" + str(rmitem["before"]) + " rowsAfter=" + str(rmitem["rowsAfter"]) + " remaining=" + str(rmitem["remaining"]) + " first=" + str(rmitem["firstName"]))
+
         # ACCESSIBILITY + ROUTE-CORRIDOR UI
         ts = page.evaluate("""() => {
             localStorage.setItem('snapcal_textsize','1.15'); applyTextSize();

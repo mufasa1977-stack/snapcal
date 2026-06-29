@@ -88,7 +88,7 @@
   }
   /* ---------- ring (hero calorie gauge) ---------- */
   .ring-wrap{display:flex;flex-direction:column;align-items:center;padding:10px 0 6px}
-  .ring-box{position:relative;width:206px;height:206px;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;transition:transform .15s ease}
+  .ring-box{position:relative;width:206px;height:206px;touch-action:pan-y;cursor:grab;user-select:none;-webkit-user-select:none;transition:transform .15s ease}
   .ring-box::before{content:"";position:absolute;inset:-6px;border-radius:50%;z-index:-1;background:radial-gradient(circle at 32% 24%,#ffffff 0%,#eef2ef 30%,#d9e2dc 62%,#bccac3 100%);box-shadow:inset 0 -16px 32px rgba(20,45,32,.24),inset 0 13px 26px rgba(255,255,255,.95),0 26px 44px rgba(20,45,32,.30)}
   body.dark .ring-box::before{background:radial-gradient(circle at 33% 27%,#3d453f 0%,#2f352f 38%,#242922 70%,#171b18 100%);box-shadow:inset 0 -12px 26px rgba(0,0,0,.5),inset 0 10px 22px rgba(255,255,255,.07),0 18px 32px rgba(0,0,0,.5)}
   @keyframes orbFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
@@ -259,7 +259,7 @@
   .gal-btn:active{background:var(--soft)}
   #previewCard{display:none}
   #previewCard img{
-    width:100%;max-height:320px;object-fit:cover;border-radius:12px;display:block;background:var(--track);
+    width:100%;max-height:38vh;object-fit:cover;border-radius:12px;display:block;background:var(--track);
   }
   .preview-fallback{
     display:none;text-align:center;color:var(--ink2);font-size:14px;
@@ -292,6 +292,8 @@
   .item-r{text-align:right;white-space:nowrap}
   .item-r .c{font-size:14.5px;font-weight:700;font-variant-numeric:tabular-nums}
   .item-r .m{font-size:12px;color:var(--ink2);margin-top:2px}
+  .item-del{margin-top:9px;border:none;background:none;color:var(--bad);font-size:12px;font-weight:700;cursor:pointer;padding:4px 0;font-family:inherit}
+  .item-del:active{opacity:.6}
   .total-row{
     display:flex;justify-content:space-between;align-items:center;
     padding:13px 0 4px;font-weight:800;font-size:15px;
@@ -2767,24 +2769,38 @@ function _bindStepper(btn, dir){
   function ang(e){ var c = ctr(); return Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180 / Math.PI; }
   function dist(e){ var c = ctr(); return Math.hypot(e.clientX - c.x, e.clientY - c.y); }
 
+  var pressTimer = null, startX = 0, startY = 0, lastCX = 0, lastCY = 0;
   box.addEventListener("pointerdown", function(e){
     if (e.target.closest(".cal-step")) return;   /* let the +/- buttons do their thing */
     if (dist(e) < 24) return;                     /* dead zone at the hub = no jitter */
-    /* deliberate: the green marker stays put at 12 o'clock; we do NOT jump it to your finger,
-       and nothing changes until you actually TURN the wheel past a threshold (below). */
-    dragging = true; accDeg = 0; armed = false; startGoal = int(profile.daily_calories); lastAng = ang(e);
-    if (box.setPointerCapture) { try { box.setPointerCapture(e.pointerId); } catch(_){} }
+    startX = lastCX = e.clientX; startY = lastCY = e.clientY;
+    startGoal = int(profile.daily_calories); accDeg = 0; armed = false; dragging = false;
+    /* ACCIDENT-PROOF: nothing happens on a tap, a brush, or a scroll. You must HOLD STILL ~350ms to
+       UNLOCK the dial (haptic + grow). That hold is what stops the wheel from changing your goal while
+       you're just scrolling the home screen. The +/- buttons remain the easy, always-on adjusters. */
+    if (pressTimer) clearTimeout(pressTimer);
+    pressTimer = setTimeout(function(){
+      pressTimer = null; dragging = true; armed = true;
+      lastAng = ang({ clientX: lastCX, clientY: lastCY });
+      box.classList.add("dialing");
+      if (box.setPointerCapture) { try { box.setPointerCapture(e.pointerId); } catch(_){} }
+      try { if (navigator.vibrate) navigator.vibrate(12); } catch(_){}
+    }, 350);
   });
   box.addEventListener("pointermove", function(e){
-    if (!dragging) return;
+    lastCX = e.clientX; lastCY = e.clientY;
+    if (!dragging){
+      /* moved before the hold completed → it's a scroll/brush, not a dial: cancel the arm, let the page scroll */
+      if (pressTimer && Math.hypot(e.clientX - startX, e.clientY - startY) > 12){ clearTimeout(pressTimer); pressTimer = null; }
+      return;
+    }
     var a = ang(e), d = a - lastAng;
     if (d > 180) d -= 360; else if (d < -180) d += 360;   /* unwrap across the top */
     accDeg += d; lastAng = a;
-    if (!armed){ if (Math.abs(accDeg) < 8) return; armed = true; box.classList.add("dialing"); }  /* a tap or tiny brush = no change */
     _adjustGoal(startGoal + accDeg * GOAL_SENS);
     e.preventDefault();
   });
-  function endDrag(){ if (!dragging) return; dragging = false; box.classList.remove("dialing"); if (armed) _commitGoal(); }
+  function endDrag(){ if (pressTimer){ clearTimeout(pressTimer); pressTimer = null; } if (!dragging) return; dragging = false; box.classList.remove("dialing"); if (armed) _commitGoal(); }
   box.addEventListener("pointerup", endDrag);
   box.addEventListener("pointercancel", endDrag);
 })();
@@ -2853,7 +2869,8 @@ function onPick(e){
   $("#previewFallback").style.display = "none";
   img.src = previewUrl;
   $("#previewCard").style.display = "block";
-  $("#previewCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  /* Bring the Analyze button itself into view (not just the card top) so it's tappable without scrolling. */
+  setTimeout(function(){ try { $("#analyzeBtn").scrollIntoView({ behavior: "smooth", block: "center" }); } catch(e){ $("#previewCard").scrollIntoView({ behavior: "smooth", block: "nearest" }); } }, 60);
 }
 
 $("#previewImg").addEventListener("error", function(){
@@ -3180,6 +3197,7 @@ function buildEditableItemsHTML(eff){
           '<span class="pmul">' + fmtMult(it.mult) + '</span>' +
           '<button class="pbtn" type="button" data-i="' + i + '" data-d="1" aria-label="more">+</button>' +
         '</div>' +
+        '<button class="item-del" type="button" data-del="' + i + '" aria-label="Remove ' + esc(it.name) + ' — not my food">✕ Remove</button>' +
       '</div>' +
       '<div class="item-r"><div class="c">' + fmtNum(it.calories) + ' Cal</div>' +
         '<div class="m">P ' + it.protein_g + 'g &middot; C ' + it.carbs_g + 'g &middot; F ' + it.fat_g + 'g</div>' +
@@ -3258,8 +3276,26 @@ function renderScanCard(){
 }
 
 $("#resultItems").addEventListener("click", function(e){
+  if (!analyzeResult) return;
+  /* Remove an item the camera got wrong (e.g. a friend's plate on the side) BEFORE logging. */
+  var del = e.target.closest(".item-del");
+  if (del){
+    var di = int(del.dataset.del);
+    analyzeResult.items.splice(di, 1);
+    if (analyzeResult.mults) analyzeResult.mults.splice(di, 1);
+    if (!analyzeResult.items.length){
+      analyzeResult = null;
+      $("#resultCard").style.display = "none";
+      toast("Removed — retake or close");
+      return;
+    }
+    renderScanCard();
+    var mn = $("#mealName"); if (mn) mn.value = analyzeResult.items.map(function(it){ return it.name; }).join(", ") || "Meal";
+    toast("Removed");
+    return;
+  }
   var b = e.target.closest(".pbtn");
-  if (!b || !analyzeResult) return;
+  if (!b) return;
   var i = int(b.dataset.i), d = int(b.dataset.d);
   if (!analyzeResult.mults) analyzeResult.mults = analyzeResult.items.map(function(){ return 1; });
   var nm = Math.min(5, Math.max(0.25, Math.round((analyzeResult.mults[i] + d * 0.25) * 100) / 100));
