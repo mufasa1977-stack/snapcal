@@ -463,6 +463,37 @@ def main():
         check("talk to coach cal: sends nearby places + location + route destination",
               vc["bodyHasLoc"], "payload carries nearby + has_location + route_to: " + str(vc["bodyHasLoc"]))
 
+        # GREEN "Talk to Coach Cal" on the home card must open the VOICE panel (talk), not the picks sheet
+        bchat = page.evaluate("""() => {
+            closeVoice(); closeSheet();
+            _renderBriefing('Time to fuel up for your goals today.', 'midday');
+            var btn = document.getElementById('briefChat');
+            var label = btn ? btn.textContent : '';
+            if (btn) btn.click();
+            var voiceOpen = !!document.querySelector('#voiceWrap.show');
+            var sheetOpen = !!document.querySelector('#sheet.show');
+            closeVoice();
+            return { hasBtn: !!btn, label: label, voiceOpen: voiceOpen, sheetOpen: sheetOpen };
+        }""")
+        check("talk to coach cal: GREEN home button opens the voice panel to TALK (not the picks sheet)",
+              bchat["hasBtn"] and ("Talk to Coach Cal" in bchat["label"]) and bchat["voiceOpen"] and (bchat["sheetOpen"] is False),
+              "label=" + str(bchat["label"]) + " voiceOpen=" + str(bchat["voiceOpen"]) + " sheetOpen=" + str(bchat["sheetOpen"]))
+
+        # FOOD PICK CARDS: every Coach Cal meal pick gets a "Take me there" -> Maps button (go get the food)
+        mealdir = page.evaluate("""() => {
+            renderCoachSheet({ meals:[{name:'Chicken & Rice Bowl', calories:600, protein_g:45, carbs_g:60, fat_g:15, desc:'Grilled chicken, jasmine rice', why:'High-protein muscle plate'}] }, 600, GOAL_INFO.build_muscle);
+            var a = document.querySelector('#sheetBody .coach-meal-dir');
+            return { hasBtn: !!a, label: a ? a.textContent : '', href: a ? (a.getAttribute('href')||'') : '', count: document.querySelectorAll('#sheetBody .coach-meal').length, dirs: document.querySelectorAll('#sheetBody .coach-meal-dir').length };
+        }""")
+        check("coach picks: EVERY food card has a 'Take me there' Maps button",
+              mealdir["hasBtn"] and ("Take me there" in mealdir["label"]) and ("google.com/maps/search" in mealdir["href"]) and ("Chicken" in mealdir["href"]) and (mealdir["dirs"] == mealdir["count"]),
+              "btn=" + str(mealdir["hasBtn"]) + " dirs=" + str(mealdir["dirs"]) + "/" + str(mealdir["count"]) + " href=" + str(mealdir["href"]))
+
+        # SWIPE-DOWN dismiss: sheet has the grab handle (X alone isn't enough on a phone)
+        grip = page.evaluate("() => ({ grip: !!document.querySelector('#sheet .sheet-grip') })")
+        check("sheets: swipe-down grab handle present (a small X isn't enough on a phone)",
+              grip["grip"], "grip=" + str(grip["grip"]))
+
         # ACCESSIBILITY + ROUTE-CORRIDOR UI
         ts = page.evaluate("""() => {
             localStorage.setItem('snapcal_textsize','1.15'); applyTextSize();
