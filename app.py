@@ -1743,11 +1743,16 @@ CHAT_SYSTEM = (
     "phrase like 'just say take me there', and never make them ask 'where is that' — you already know the spot, so offer it "
     "yourself. If you named TWO places at different distances, end by asking which they'd like directions to and note the "
     "closer one (e.g. 'Want me to take you to the closer one, 1.2 mi away?')."
-    "\n10) PRICE FOR BUDGET — when you suggest a specific dish or menu item, add an APPROXIMATE price in parentheses "
-    "(e.g. 'a grilled chicken bowl (about $9)'), clearly as a rough estimate, so someone eating healthy on a budget can plan. "
-    "If two options differ a lot in price, say which is the cheaper pick. Never state a price as exact or guaranteed — always "
-    "frame it as an estimate ('about', 'around', '~')."
 )
+
+# Injected ONLY when the user signals budget/price interest — keeps the default reply lean (no extra tokens,
+# no latency) for the 90% of turns that aren't about money, and surfaces estimated prices when they matter.
+PRICE_CLAUSE = (
+    "\n\nPRICE / BUDGET: this user cares about cost. For each dish you suggest, add an APPROXIMATE price in "
+    "parentheses (e.g. 'a grilled chicken bowl (about $9)'), clearly a rough ESTIMATE, and point out the cheaper "
+    "pick when options differ. Never state a price as exact or guaranteed — always frame it as 'about'/'around'/'~'."
+)
+PRICE_INTENT_RE = re.compile(r"(?i)\b(price|prices|cost|costs?|how much|cheap|cheaper|cheapest|budget|afford|affordable|expensive|dollars?|bucks?|under \$?\d+|\$\d+)\b|\$")
 
 RECOMP_CHAT_CLAUSE = (
     "\n\nThis user's goal is BODY RECOMPOSITION — losing fat while building muscle at the same time. Coach the "
@@ -2090,6 +2095,8 @@ def chat():
         if isinstance(_m, dict) and _m.get("role") == "user":
             last_user = str(_m.get("content") or "")
             break
+    if PRICE_INTENT_RE.search(last_user):
+        system += PRICE_CLAUSE   # estimated prices ONLY when the user asks about cost/budget — no token tax otherwise
     is_trip = bool(re.search(r"(?i)\b(vacation|trip|itinerary|out of town|for \d+\s*days?|\d+[\s-]day|plan (?:my|me|out)\s+(?:meals?|the day|my day|the week|my trip|a day)|weekend in|days in|while (?:i'?m|we'?re)\s+(?:in|there))\b", last_user))
     if is_trip:
         system += (
