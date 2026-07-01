@@ -18,13 +18,16 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%2316A34A'/><path d='M27 53l16 16 31-37' fill='none' stroke='white' stroke-width='11' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"/>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<!-- Motion One (spring physics for the "alive" Coach Cal entrance). Loaded as a UMD global (window.Motion).
+     Deferred + fail-soft: if it doesn't load, the coach still opens (CSS transitions take over). -->
+<script src="https://cdn.jsdelivr.net/npm/motion@12.42.2/dist/motion.js"></script>
 <style>
   :root{
     --bg:#EDE6D8;
     --card:#FFFFFF;
     --ink:#1A211C;
     --ink2:#49514A;
-    --ink3:#79806F;
+    --ink3:#585E4C;
     --line:#ECE4D4;
     --brand:#1E8C63;
     --accent:var(--brand);
@@ -37,18 +40,34 @@
     --bad:#DB5F3C;
     --r:22px;
     --shadow:0 16px 36px rgba(40,34,20,.13),0 3px 9px rgba(40,34,20,.06);
+    /* ---- DEPTH / ELEVATION SCALE (layered soft shadows + top inner-highlight so tiles LIFT off the bg) ---- */
+    --elev-1:0 1px 2px rgba(40,34,20,.06),0 2px 6px rgba(40,34,20,.07),inset 0 1px 0 rgba(255,255,255,.55);
+    --elev-2:0 2px 4px rgba(40,34,20,.06),0 6px 14px rgba(40,34,20,.10),0 12px 26px rgba(40,34,20,.07),inset 0 1px 0 rgba(255,255,255,.6);
+    --elev-3:0 3px 6px rgba(40,34,20,.07),0 10px 22px rgba(40,34,20,.11),0 22px 44px rgba(40,34,20,.10),inset 0 1px 0 rgba(255,255,255,.65);
+    --elev-4:0 6px 12px rgba(40,34,20,.09),0 18px 34px rgba(40,34,20,.14),0 34px 66px rgba(40,34,20,.14),inset 0 1px 0 rgba(255,255,255,.7);
+    /* glass surfaces (frosted translucent layers — content shows through = depth) */
+    --glass-bg:rgba(255,255,255,.62);
+    --glass-brd:rgba(255,255,255,.55);
+    --glass-blur:blur(20px) saturate(1.6);
   }
   body.dark{
     --bg:#181C1A;
     --card:#242926;
     --ink:#F2F4F2;
     --ink2:#A6AFAB;
-    --ink3:#6E7873;
+    --ink3:#9AA39C;
     --line:#323A36;
     --brand:#6E8870;
     --soft:#20251F;
     --track:#2C322E;
     --shadow:0 6px 20px rgba(0,0,0,.4);
+    --elev-1:0 1px 3px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.05);
+    --elev-2:0 3px 8px rgba(0,0,0,.45),0 8px 20px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.06);
+    --elev-3:0 4px 10px rgba(0,0,0,.5),0 14px 30px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07);
+    --elev-4:0 8px 18px rgba(0,0,0,.55),0 26px 52px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.08);
+    --glass-bg:rgba(30,34,31,.6);
+    --glass-brd:rgba(255,255,255,.09);
+    --glass-blur:blur(22px) saturate(1.4);
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   /* Accessibility: respect the OS "reduce motion" setting (vestibular safety + App Store review).
@@ -56,6 +75,8 @@
      still lands them on the final value — only the animated sweep is skipped. */
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+    /* keep DEPTH (shadows/glass/blobs) but drop the parallax drift; active tab still lifts, just instantly */
+    #depthBg .blob{transform:none!important}
   }
   html,body{height:100%}
   body{
@@ -65,10 +86,30 @@
     -webkit-font-smoothing:antialiased;
     overscroll-behavior-y:none;
   }
+  /* ---- DEPTH BACKGROUND: soft blurred gradient blobs floating BEHIND the content layer (never a dead flat fill) ---- */
+  #depthBg{position:fixed;inset:0;z-index:-2;overflow:hidden;pointer-events:none}
+  #depthBg .blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.55;will-change:transform;mix-blend-mode:normal}
+  #depthBg .b1{width:60vmax;height:60vmax;top:-22vmax;left:-18vmax;background:radial-gradient(circle at 50% 50%,rgba(30,140,99,.42),rgba(30,140,99,0) 70%)}
+  #depthBg .b2{width:52vmax;height:52vmax;top:26vh;right:-24vmax;background:radial-gradient(circle at 50% 50%,rgba(232,162,76,.34),rgba(232,162,76,0) 70%)}
+  #depthBg .b3{width:46vmax;height:46vmax;bottom:-18vmax;left:8vw;background:radial-gradient(circle at 50% 50%,rgba(91,141,239,.26),rgba(91,141,239,0) 70%)}
+  body.dark #depthBg .blob{opacity:.42}
+  /* Progressive enhancement: GPU-composited scroll-coupled parallax where the browser supports
+     scroll-timeline / animation-timeline (Chrome/Edge). The rAF JS listener is the fallback. */
+  @supports (animation-timeline: scroll()){
+    @media (prefers-reduced-motion: no-preference){
+      #depthBg .b1{animation:blobPar1 linear both;animation-timeline:scroll(root block)}
+      #depthBg .b2{animation:blobPar2 linear both;animation-timeline:scroll(root block)}
+      #depthBg .b3{animation:blobPar3 linear both;animation-timeline:scroll(root block)}
+    }
+  }
+  @keyframes blobPar1{to{transform:translateY(120px)}}
+  @keyframes blobPar2{to{transform:translateY(-80px)}}
+  @keyframes blobPar3{to{transform:translateY(50px)}}
   main{
     max-width:480px;
     margin:0 auto;
     padding:20px 16px calc(96px + env(safe-area-inset-bottom));
+    position:relative;z-index:1;
   }
   /* ---------- tabs ---------- */
   .tab{display:none}
@@ -82,10 +123,15 @@
   .card{
     background:var(--card);
     border-radius:var(--r);
-    box-shadow:var(--shadow);
+    box-shadow:var(--elev-2);
+    border:1px solid var(--glass-brd);
     padding:18px;
     margin-bottom:14px;
+    transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s ease;
   }
+  .card:active{transform:translateY(1px) scale(.995);box-shadow:var(--elev-1)}
+  /* raise the day's hero card a touch higher so it reads as the top layer */
+  #tab-today .card:first-of-type{box-shadow:var(--elev-3)}
   /* ---------- ring (hero calorie gauge) ---------- */
   .ring-wrap{display:flex;flex-direction:column;align-items:center;padding:10px 0 6px}
   .ring-box{position:relative;width:206px;height:206px;touch-action:pan-y;cursor:grab;user-select:none;-webkit-user-select:none;transition:transform .15s ease}
@@ -269,10 +315,12 @@
     width:100%;border:none;cursor:pointer;border-radius:12px;
     padding:15px;font-size:16px;font-weight:700;font-family:inherit;
     display:flex;align-items:center;justify-content:center;gap:10px;
+    transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s ease;
   }
-  .btn-dark{background:var(--accent);color:#fff;margin-top:14px}
+  .btn-dark{background:var(--accent);color:#fff;margin-top:14px;
+    box-shadow:0 6px 16px rgba(30,140,99,.34),inset 0 1px 0 rgba(255,255,255,.25)}
   .btn-dark:disabled{opacity:.7}
-  .btn:active:not(:disabled){transform:scale(.985)}
+  .btn:active:not(:disabled){transform:scale(.96)}
   .spinner{
     width:18px;height:18px;border-radius:50%;flex:none;
     border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;
@@ -312,10 +360,13 @@
   .txt:focus{border-color:var(--ink);background:var(--card)}
   /* ---------- history ---------- */
   .day-row{
-    background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);
+    background:var(--card);border-radius:var(--r);box-shadow:var(--elev-2);
+    border:1px solid var(--glass-brd);
     padding:14px 16px;margin-bottom:10px;
     display:flex;justify-content:space-between;align-items:center;gap:10px;
+    transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s ease;
   }
+  .day-row:active{transform:translateY(1px) scale(.99);box-shadow:var(--elev-1)}
   .day-l .d{font-size:15px;font-weight:650}
   .day-l .m{font-size:12.5px;color:var(--ink2);margin-top:3px}
   .day-r{text-align:right;white-space:nowrap}
@@ -327,25 +378,53 @@
   .p-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .p-cell .field-lbl{margin-top:0}
   /* ---------- tab bar ---------- */
+  /* FLOATING DIMENSIONAL GLASS TAB BAR — lifted off the screen with a shadow gap beneath */
   nav{
     position:fixed;left:0;right:0;bottom:0;z-index:50;
-    background:rgba(255,255,255,.92);
-    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
-    border-top:1px solid var(--line);
-    padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+    padding:0 14px calc(12px + env(safe-area-inset-bottom));
+    pointer-events:none;
   }
-  .nav-inner{max-width:480px;margin:0 auto;display:flex}
+  .nav-inner{
+    max-width:452px;margin:0 auto;display:flex;position:relative;
+    pointer-events:auto;
+    background:var(--glass-bg);
+    -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-brd);
+    border-radius:26px;
+    padding:8px 8px;
+    /* layered shadow + floor-gap glow so the bar visibly floats above the content */
+    box-shadow:0 2px 6px rgba(40,34,20,.10),0 14px 30px rgba(40,34,20,.20),0 26px 50px rgba(40,34,20,.16),inset 0 1px 0 rgba(255,255,255,.6);
+  }
+  body.dark .nav-inner{box-shadow:0 2px 6px rgba(0,0,0,.4),0 16px 34px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06)}
+  /* the springy accent pill that slides behind the active tab */
+  #navPill{
+    position:absolute;top:8px;left:0;width:0;height:calc(100% - 16px);
+    border-radius:20px;z-index:0;pointer-events:none;
+    background:linear-gradient(180deg,rgba(30,140,99,.20),rgba(30,140,99,.10));
+    box-shadow:0 6px 14px rgba(30,140,99,.22),inset 0 1px 0 rgba(255,255,255,.4);
+    opacity:0;transition:opacity .2s ease;
+  }
+  #navPill.on{opacity:1}
   .tabbtn{
     flex:1;border:none;background:none;cursor:pointer;font-family:inherit;
     display:flex;flex-direction:column;align-items:center;gap:3px;
-    padding:7px 0 5px;color:var(--ink3);border-radius:12px;
+    padding:8px 0 6px;color:var(--ink2);border-radius:18px;position:relative;z-index:1;
+    transform:translateY(0) scale(.92);opacity:.94;
+    transition:transform .28s cubic-bezier(.34,1.56,.64,1),opacity .2s ease,color .2s ease;
   }
-  .tabbtn svg{width:24px;height:24px}
-  .tabbtn span{font-size:11px;font-weight:600}
-  .tabbtn.active{color:var(--ink)}
+  .tabbtn svg{width:24px;height:24px;transition:filter .2s ease}
+  .tabbtn span{font-size:11px;font-weight:600;transition:font-weight .2s ease}
+  .tabbtn:active{transform:translateY(0) scale(.85)}
+  /* ACTIVE tab lifts + glows; inactive tabs recede (handled by base scale/opacity above) */
+  .tabbtn.active{
+    color:var(--brand);opacity:1;
+    transform:translateY(-5px) scale(1.06);
+  }
+  .tabbtn.active svg{filter:drop-shadow(0 4px 8px rgba(30,140,99,.4));stroke-width:2.1}
+  .tabbtn.active span{font-weight:800}
   /* ---------- goal selector ---------- */
-  .goal-card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);
-    padding:14px 14px 16px;margin-bottom:16px}
+  .goal-card{background:var(--card);border-radius:var(--r);box-shadow:var(--elev-2);
+    border:1px solid var(--glass-brd);padding:14px 14px 16px;margin-bottom:16px}
   .goal-title{font-size:14px;font-weight:750;margin:0 2px 11px;display:flex;align-items:center;gap:7px}
   .goal-seg{display:flex;gap:8px}
   .goal-seg button{flex:1;border:1.5px solid var(--line);background:var(--soft);font-family:inherit;
@@ -358,13 +437,16 @@
   .go-scan{margin-top:14px;border:none;background:var(--accent);color:#fff;font-family:inherit;
     font-size:14px;font-weight:700;padding:12px 20px;border-radius:12px;cursor:pointer}
   .go-scan:active{transform:scale(.97)}
-  /* ---------- raised scan button in nav ---------- */
-  .tabbtn.scan-tab{color:var(--ink)}
-  .tabbtn.scan-tab .scan-ic{width:50px;height:50px;border-radius:50%;background:var(--accent);
-    color:#fff;display:flex;align-items:center;justify-content:center;margin-top:-22px;margin-bottom:1px;
-    box-shadow:0 6px 16px rgba(0,0,0,.24);transition:transform .15s}
-  .tabbtn.scan-tab:active .scan-ic{transform:scale(.92)}
-  .tabbtn.scan-tab .scan-ic svg{width:25px;height:25px}
+  /* ---------- raised dimensional scan button in nav (always full, never recedes) ---------- */
+  .tabbtn.scan-tab{color:var(--ink);opacity:1;transform:none!important}
+  .tabbtn.scan-tab .scan-ic{width:54px;height:54px;border-radius:50%;
+    background:radial-gradient(circle at 38% 30%,#3fbf8c 0%,var(--accent) 46%,#155e43 100%);
+    color:#fff;display:flex;align-items:center;justify-content:center;margin-top:-26px;margin-bottom:1px;
+    box-shadow:0 10px 22px rgba(30,140,99,.5),0 4px 8px rgba(0,0,0,.22),inset 0 2px 3px rgba(255,255,255,.5),inset 0 -6px 12px rgba(6,60,42,.5);
+    transition:transform .2s cubic-bezier(.34,1.56,.64,1)}
+  .tabbtn.scan-tab:active .scan-ic{transform:scale(.9)}
+  .tabbtn.scan-tab .scan-ic svg{width:26px;height:26px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
+  .tabbtn.scan-tab.active .scan-ic{transform:scale(1.06)}
   /* ---------- rich result ---------- */
   .verdict{display:flex;gap:12px;align-items:flex-start;background:var(--soft);border:1px solid var(--line);
     border-radius:12px;padding:12px 14px;margin-top:16px}
@@ -528,6 +610,60 @@
   .voice-input{flex:1;min-width:0;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:22px;padding:12px 16px;font-size:15px;font-family:inherit}
   .voice-input:focus{outline:none;border-color:var(--brand)}
   .voice-send{flex:0 0 auto;border:none;background:var(--soft);color:var(--brand);font-weight:800;border-radius:22px;padding:12px 15px;cursor:pointer;font-family:inherit}
+  /* ===== ALIVE Coach Cal — glassmorphism backdrop so the food screen stays visible behind him ===== */
+  /* Register --amp as a real <number> so calc(4px + var(--amp) * 20px) resolves (and can even transition). */
+  @property --amp{ syntax:"<number>"; inherits:true; initial-value:0; }
+  .voice-wrap{background:rgba(20,26,22,.34);-webkit-backdrop-filter:blur(14px) saturate(1.15);backdrop-filter:blur(14px) saturate(1.15)}
+  .voice-card{background:linear-gradient(180deg,rgba(255,255,255,.86),var(--bg) 78px);
+    -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
+    box-shadow:0 -8px 40px rgba(30,140,99,.22),0 -2px 12px rgba(0,0,0,.28);
+    border-top:1px solid rgba(255,255,255,.4)}
+  body.dark .voice-card{background:linear-gradient(180deg,rgba(36,41,38,.92),var(--bg) 78px);border-top:1px solid rgba(255,255,255,.08)}
+  /* grab handle for swipe-down dismiss */
+  .voice-grab{width:40px;height:4px;border-radius:3px;background:var(--line);margin:8px auto 0;flex:0 0 auto;opacity:.8}
+  /* --- The character: a warm sage orb with a face + audio-reactive glow --- */
+  .cal-stage{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 0 4px;position:relative}
+  .cal-avatar{position:relative;width:104px;height:104px;transform-origin:50% 100%;will-change:transform}
+  .cal-orb{position:absolute;inset:0;border-radius:50%;
+    background:radial-gradient(circle at 34% 30%,#5eeaa4 0%,#1e8c63 46%,#0f6b4c 100%);
+    box-shadow:0 10px 26px rgba(15,107,76,.42),inset 0 -8px 18px rgba(6,60,42,.5),inset 0 6px 14px rgba(255,255,255,.35)}
+  /* the reactive halo — scale/opacity driven live from audio amplitude via JS var --amp */
+  .cal-halo{position:absolute;inset:-14px;border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle,rgba(94,234,164,.55) 0%,rgba(94,234,164,0) 68%);
+    transform:scale(calc(1 + var(--amp,0) * .9));opacity:calc(.35 + var(--amp,0) * .65);
+    transition:transform .06s linear,opacity .06s linear}
+  .cal-ring{position:absolute;inset:-6px;border-radius:50%;border:2px solid rgba(94,234,164,.5);
+    transform:scale(calc(1 + var(--amp,0) * .35));opacity:calc(.25 + var(--amp,0) * .55);
+    transition:transform .06s linear,opacity .06s linear}
+  /* face */
+  .cal-face{position:absolute;inset:0}
+  .cal-eye{position:absolute;top:38%;width:11px;height:13px;border-radius:50%;background:#0c3a2a;animation:calBlink 5.4s infinite}
+  .cal-eye.l{left:32%}.cal-eye.r{right:32%}
+  .cal-eye:after{content:"";position:absolute;top:2px;left:2.5px;width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.9)}
+  /* mouth OPENS with the voice — height scales from --amp so he reads as TALKING */
+  .cal-mouth{position:absolute;left:50%;top:60%;transform:translateX(-50%);
+    width:calc(20px + var(--amp,0) * 8px);height:calc(4px + var(--amp,0) * 20px);
+    background:#0c3a2a;border-radius:0 0 12px 12px / 0 0 14px 14px;
+    transition:height .05s linear,width .05s linear}
+  .cal-mouth:after{content:"";position:absolute;left:14%;right:14%;top:0;height:34%;background:#e8f8ef;border-radius:0 0 6px 6px;opacity:calc(var(--amp,0) * .9)}
+  .cal-cheek{position:absolute;top:52%;width:12px;height:7px;border-radius:50%;background:rgba(255,140,120,.4);filter:blur(1px)}
+  .cal-cheek.l{left:20%}.cal-cheek.r{right:20%}
+  .cal-name{margin-top:9px;font-size:13px;font-weight:800;letter-spacing:.01em;color:var(--brand);display:flex;align-items:center;gap:6px}
+  .cal-name .dot{width:7px;height:7px;border-radius:50%;background:var(--brand);opacity:.55}
+  .cal-avatar.speaking .cal-name .dot{animation:calTalkDot 1s infinite;opacity:1}
+  /* idle breathing/bob when NOT speaking */
+  .cal-avatar.idle{animation:calBreathe 3.8s ease-in-out infinite}
+  @keyframes calBreathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-5px) scale(1.015)}}
+  @keyframes calBlink{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.12)}}
+  @keyframes calTalkDot{0%,100%{transform:scale(1)}50%{transform:scale(1.7)}}
+  .cal-avatar:active{transform:scale(.94)}
+  @media (prefers-reduced-motion: reduce){
+    .voice-wrap{-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    .cal-avatar.idle{animation:none}
+    .cal-eye{animation:none}
+    .cal-halo,.cal-ring,.cal-mouth{transition:none}
+    .cal-avatar.speaking .cal-name .dot{animation:none}
+  }
   .nf-card{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:14px 15px}
   .nf-food{font-size:15px;font-weight:800;color:var(--ink);line-height:1.3}
   .nf-serv{font-size:12px;color:var(--ink2);margin:2px 0 8px}
@@ -670,7 +806,7 @@
   .mb-lbl{font-size:12px;font-weight:700;margin-top:6px}
   .mb-pct{font-size:11px;color:var(--ink2);font-weight:600;margin-top:1px}
   /* ---------- meal planner ---------- */
-  .mp-day{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);margin-bottom:10px;overflow:hidden}
+  .mp-day{background:var(--card);border-radius:var(--r);box-shadow:var(--elev-2);border:1px solid var(--glass-brd);margin-bottom:10px;overflow:hidden}
   .mp-day-h{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;border:none;background:none;font-family:inherit;text-align:left;padding:14px 16px;cursor:pointer;color:var(--ink)}
   .mp-day-t{font-size:15px;font-weight:750}
   .mp-day-s{font-size:12px;color:var(--ink2);font-weight:600;margin-top:2px}
@@ -694,12 +830,15 @@
   .cd-hack{font-size:12.5px;color:var(--ink);line-height:1.5;padding:7px 0 7px 22px;position:relative;border-bottom:1px solid var(--line)}
   .cd-hack:before{content:"\2713";position:absolute;left:2px;color:var(--brand);font-weight:800}
   /* ---------- detail sheet ---------- */
-  .sheet{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.4);
+  .sheet{position:fixed;inset:0;z-index:200;background:rgba(20,16,8,.42);
+    -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
     display:none;align-items:flex-end;justify-content:center}
   .sheet.show{display:flex;animation:fadeUp .2s ease both}
   .sheet-card{background:var(--bg);width:100%;max-width:480px;max-height:92vh;overflow-y:auto;
     border-radius:20px 20px 0 0;padding:18px 16px calc(28px + env(safe-area-inset-bottom));
-    -webkit-overflow-scrolling:touch}
+    -webkit-overflow-scrolling:touch;
+    box-shadow:0 -10px 40px rgba(20,16,8,.28),0 -2px 10px rgba(20,16,8,.18),inset 0 1px 0 rgba(255,255,255,.5);
+    border-top:1px solid var(--glass-brd)}
   .sheet-grip{width:40px;height:5px;border-radius:3px;background:var(--line);margin:-6px auto 10px;touch-action:none}
   .sheet-x{position:sticky;top:0;float:right;width:36px;height:36px;border:none;border-radius:50%;
     background:var(--line);color:var(--ink);font-size:22px;line-height:34px;cursor:pointer;z-index:2}
@@ -749,7 +888,7 @@
     border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:14px}
   .pw-note{font-size:11.5px;color:var(--ink3);line-height:1.4;margin-top:12px;text-align:center}
   /* ---------- dark-mode component tweaks ---------- */
-  body.dark nav{background:rgba(20,20,23,.92)}
+  body.dark nav{background:none}
   body.dark .chip.good{background:#0E2E1E;color:#5EEAA4}
   body.dark .chip.bad{background:#3A1414;color:#FCA5A5}
   body.dark .tip{background:#10243A;border-color:#1E3A5A;color:#BFD8F5}
@@ -879,6 +1018,13 @@
 </style>
 </head>
 <body>
+
+<!-- DEPTH BACKGROUND: soft parallax gradient blobs behind the content layer -->
+<div id="depthBg" aria-hidden="true">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+</div>
 
 <main>
 
@@ -1388,6 +1534,7 @@
 <!-- ================= TAB BAR ================= -->
 <nav>
   <div class="nav-inner">
+    <span id="navPill" aria-hidden="true"></span>
     <button class="tabbtn active" data-tab="today" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
@@ -1439,7 +1586,21 @@
   <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
 </button>
 <div id="voiceWrap" class="voice-wrap" aria-hidden="true">
-  <div class="voice-card">
+  <div id="voiceCard" class="voice-card">
+    <div id="voiceGrab" class="voice-grab" aria-hidden="true"></div>
+    <div class="cal-stage">
+      <div id="calAvatar" class="cal-avatar idle" role="img" aria-label="Coach Cal">
+        <div class="cal-halo"></div>
+        <div class="cal-ring"></div>
+        <div class="cal-orb"></div>
+        <div class="cal-face">
+          <span class="cal-eye l"></span><span class="cal-eye r"></span>
+          <span class="cal-cheek l"></span><span class="cal-cheek r"></span>
+          <span class="cal-mouth"></span>
+        </div>
+      </div>
+      <div class="cal-name"><span class="dot"></span> Coach Cal</div>
+    </div>
     <div class="voice-head">
       <div class="voice-title">🎙️ Talk to Coach Cal</div>
       <button id="voiceClose" class="voice-x" type="button" aria-label="Close">&times;</button>
@@ -1960,6 +2121,32 @@ if (bcEl("bcCamera")) bcEl("bcCamera").addEventListener("click", startBarcodeCam
 
 /* ---------------- tabs ---------------- */
 var _curTab = "today";
+/* Slide the springy accent pill behind the newly-active tab (skips the raised center Scan button). */
+function _positionNavPill(){
+  var pill = document.getElementById("navPill");
+  var btn = document.querySelector('.tabbtn.active');
+  if (!pill || !btn) return;
+  var inner = pill.parentElement;
+  if (!inner || btn.classList.contains("scan-tab")){ pill.classList.remove("on"); return; }
+  var ir = inner.getBoundingClientRect(), br = btn.getBoundingClientRect();
+  var left = br.left - ir.left, width = br.width;
+  pill.classList.add("on");
+  if (!_prefersReducedMotion && window.Motion && window.Motion.animate){
+    try { window.Motion.animate(pill, { left: left + "px", width: width + "px" },
+      { type: "spring", stiffness: 520, damping: 30, mass: .9 }); return; } catch(e){}
+  }
+  pill.style.left = left + "px"; pill.style.width = width + "px";
+}
+/* Depth transition for the incoming screen: scale 0.98->1 + fade + tiny slide (spring). */
+function _springScreenIn(name){
+  var el = document.getElementById("tab-" + name);
+  if (!el || _prefersReducedMotion || !(window.Motion && window.Motion.animate)) return;
+  try {
+    window.Motion.animate(el,
+      { opacity: [0, 1], transform: ["scale(.98) translateY(10px)", "scale(1) translateY(0)"] },
+      { type: "spring", stiffness: 300, damping: 26 });
+  } catch(e){}
+}
 function switchTab(name){
   _curTab = name;   /* so Coach Cal knows what screen the user is on ("explain what I'm looking at") */
   document.querySelectorAll(".tab").forEach(function(t){
@@ -1968,6 +2155,8 @@ function switchTab(name){
   document.querySelectorAll(".tabbtn").forEach(function(b){
     b.classList.toggle("active", b.dataset.tab === name);
   });
+  _positionNavPill();
+  _springScreenIn(name);
   window.scrollTo(0, 0);
   if (name === "today") loadToday();
   if (name === "eatout") loadEatOut();
@@ -1979,6 +2168,30 @@ function switchTab(name){
 document.querySelectorAll(".tabbtn").forEach(function(b){
   b.addEventListener("click", function(){ switchTab(b.dataset.tab); });
 });
+/* Subtle parallax on the depth-background blobs — each drifts at a different rate on scroll (rAF-throttled). */
+(function(){
+  var b1=document.querySelector("#depthBg .b1"),
+      b2=document.querySelector("#depthBg .b2"),
+      b3=document.querySelector("#depthBg .b3");
+  if (_prefersReducedMotion || !(b1||b2||b3)) { _positionNavPill(); return; }
+  /* If the browser drives parallax natively via CSS scroll-timeline, let CSS own it (don't fight with inline transforms). */
+  var cssScroll=false; try { cssScroll = CSS && CSS.supports && CSS.supports("animation-timeline: scroll()"); } catch(e){}
+  if (cssScroll) { _positionNavPill(); return; }
+  var ticking=false;
+  function apply(){
+    var y=window.scrollY||window.pageYOffset||0;
+    if (b1) b1.style.transform="translateY("+(y*.12).toFixed(1)+"px)";
+    if (b2) b2.style.transform="translateY("+(y*-.08).toFixed(1)+"px)";
+    if (b3) b3.style.transform="translateY("+(y*.05).toFixed(1)+"px)";
+    ticking=false;
+  }
+  window.addEventListener("scroll",function(){ if(!ticking){ ticking=true; requestAnimationFrame(apply); } }, {passive:true});
+  apply();
+})();
+/* place the nav pill once the layout settles, and keep it correct on resize/orientation */
+window.addEventListener("load", _positionNavPill);
+window.addEventListener("resize", _positionNavPill);
+setTimeout(_positionNavPill, 120);
 
 /* ---------------- TODAY ---------------- */
 var RING_C = 2 * Math.PI * 80; /* matches stroke-dasharray 502.655 */
@@ -3599,9 +3812,100 @@ function voiceRender(role, text){
   }
   log.appendChild(d); log.scrollTop = log.scrollHeight;
 }
+/* ===================== ALIVE Coach Cal — spring entrance + audio-reactive "talking" face =====================
+   The coach RISES from the bottom with a spring (Motion One) over the blurred food screen, BREATHES when idle,
+   and his mouth/halo pulse to the ACTUAL voice amplitude (WebAudio AnalyserNode on the TTS <audio>). All of it
+   fails soft (no Motion lib / no WebAudio / reduced-motion) so the coach always opens and always talks. */
+var _prefersReducedMotion = (function(){ try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch(e){ return false; } })();
+var _calAudioCtx = null, _calAnalyser = null, _calSrcNode = null, _calAmpRAF = 0, _calWiredEl = null, _calData = null;
+
+/* Lazily build the WebAudio graph and route an <audio> element through an AnalyserNode so we can read live
+   amplitude. Same-origin (/api/tts) → no CORS taint, so createMediaElementSource works. */
+function _calWireAudio(el){
+  if (_prefersReducedMotion || !el || el === _calWiredEl) return;
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    if (!_calAudioCtx) _calAudioCtx = new AC();
+    if (_calAudioCtx.state === "suspended") { try { _calAudioCtx.resume(); } catch(e){} }
+    /* An element can only be sourced once; re-wiring a reused element would throw, so guard on identity. */
+    if (_calSrcNode) { try { _calSrcNode.disconnect(); } catch(e){} }
+    _calSrcNode = _calAudioCtx.createMediaElementSource(el);
+    if (!_calAnalyser){ _calAnalyser = _calAudioCtx.createAnalyser(); _calAnalyser.fftSize = 256; _calAnalyser.smoothingTimeConstant = 0.72; _calData = new Uint8Array(_calAnalyser.frequencyBinCount); }
+    _calSrcNode.connect(_calAnalyser); _calAnalyser.connect(_calAudioCtx.destination);
+    _calWiredEl = el;
+  } catch(e){ _calAnalyser = null; }   /* fall back to the CSS-only "speaking" pulse below */
+}
+function _calSetAmp(v){
+  v = v || 0;
+  var a = $("#calAvatar"); if (!a) return;
+  a.style.setProperty("--amp", v.toFixed(3));
+  /* Belt-and-suspenders: also write concrete styles so the mouth/halo move even where @property/calc-var
+     multiplication isn't honored (older WebViews). Cheap — a handful of props on 3 tiny nodes per frame. */
+  var m = a.querySelector(".cal-mouth");
+  if (m){ m.style.height = (4 + v * 20).toFixed(1) + "px"; m.style.width = (20 + v * 8).toFixed(1) + "px"; }
+  var h = a.querySelector(".cal-halo");
+  if (h){ h.style.transform = "scale(" + (1 + v * 0.9).toFixed(3) + ")"; h.style.opacity = (0.35 + v * 0.65).toFixed(3); }
+  var r = a.querySelector(".cal-ring");
+  if (r){ r.style.transform = "scale(" + (1 + v * 0.35).toFixed(3) + ")"; r.style.opacity = (0.25 + v * 0.55).toFixed(3); }
+}
+function _calAmpLoop(){
+  _calAmpRAF = 0;
+  if (!_calSpeaking) return;
+  var amp = 0;
+  if (_calAnalyser && _calData){
+    _calAnalyser.getByteFrequencyData(_calData);
+    var sum = 0, n = _calData.length;
+    for (var i = 0; i < n; i++){ sum += _calData[i]; }
+    amp = Math.min(1, (sum / n) / 90);            /* normalize avg spectrum energy → 0..1 */
+  } else {
+    amp = 0.28 + 0.22 * Math.abs(Math.sin(Date.now() / 130));   /* no analyser → gentle synthetic mouth movement */
+  }
+  _calSetAmp(amp);
+  _calAmpRAF = requestAnimationFrame(_calAmpLoop);
+}
+var _calSpeaking = false;
+function calSpeakStart(){
+  _calSpeaking = true;
+  var a = $("#calAvatar"); if (a){ a.classList.remove("idle"); a.classList.add("speaking"); }
+  if (!_calAmpRAF) _calAmpRAF = requestAnimationFrame(_calAmpLoop);
+}
+function calSpeakStop(){
+  _calSpeaking = false;
+  if (_calAmpRAF){ cancelAnimationFrame(_calAmpRAF); _calAmpRAF = 0; }
+  _calSetAmp(0);
+  var a = $("#calAvatar"); if (a){ a.classList.remove("speaking"); a.classList.add("idle"); }
+}
+
+/* Spring rise (Motion One if present, else CSS transition fallback). */
+function _calSpringIn(){
+  var card = $("#voiceCard"); if (!card) return;
+  if (_prefersReducedMotion || !(window.Motion && window.Motion.animate)){
+    card.style.transform = "translateY(0)"; card.style.opacity = "1"; return;
+  }
+  try {
+    card.style.transform = "translateY(100%)"; card.style.opacity = "1";
+    window.Motion.animate(card, { transform: ["translateY(100%)", "translateY(-2%)", "translateY(0%)"] },
+      { type: "spring", stiffness: 340, damping: 26, mass: 0.9 });
+    var av = $("#calAvatar");
+    if (av) window.Motion.animate(av, { transform: ["scale(.6)", "scale(1.08)", "scale(1)"], opacity: [0, 1] },
+      { type: "spring", stiffness: 420, damping: 18, delay: 0.06 });
+  } catch(e){ card.style.transform = "translateY(0)"; }
+}
+function _calSpringOut(done){
+  var card = $("#voiceCard");
+  if (_prefersReducedMotion || !card || !(window.Motion && window.Motion.animate)){ done(); return; }
+  try {
+    var a = window.Motion.animate(card, { transform: "translateY(100%)", opacity: 0.4 },
+      { type: "spring", stiffness: 380, damping: 34 });
+    (a && a.finished ? a.finished : Promise.resolve()).then(done, done);
+  } catch(e){ done(); }
+}
+
 function openVoice(){
   var w = $("#voiceWrap"); if (!w) return;
   w.classList.add("show"); w.setAttribute("aria-hidden", "false");
+  calSpeakStop();                 /* start in the breathing idle state */
+  _calSpringIn();                 /* spring rise over the blurred food screen */
   loadChatNearby();   /* ask for location + pull nearby spots so Coach Cal can find food on your way */
   try { new Audio("/api/tts?voice=Charon&text=ok").load(); } catch(e){}   /* pre-warm the TTS path so his first spoken line has no cold-start stall */
   try { fetch(API_BASE + "/api/profile", { headers: { "X-Device-Id": DEVICE_ID } }); } catch(e){}   /* wake the (free-tier, sleeps-when-idle) server NOW so his first question doesn't hit a cold boot */
@@ -3614,7 +3918,12 @@ function openVoice(){
 function closeVoice(){
   stopListening();
   stopSpeak();
-  var w = $("#voiceWrap"); if (w){ w.classList.remove("show"); w.setAttribute("aria-hidden", "true"); }
+  calSpeakStop();
+  var w = $("#voiceWrap"); if (!w) return;
+  _calSpringOut(function(){
+    w.classList.remove("show"); w.setAttribute("aria-hidden", "true");
+    var card = $("#voiceCard"); if (card){ card.style.transform = ""; card.style.opacity = ""; }
+  });
 }
 /* Coach Cal's real voice (Gemini TTS via /api/tts, cached server-side). Falls back to the
    device's built-in voice if the network/endpoint hiccups, so he always talks. */
@@ -3640,6 +3949,7 @@ function stopSpeak(){
   _ttsOn = false; _ttsQueue = []; _ttsNext = null;
   try { if (_calAudio){ _calAudio.pause(); _calAudio = null; } } catch(e){}
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e){}
+  try { calSpeakStop(); } catch(e){}   /* mouth closes, back to breathing idle */
 }
 function speak(text, userInitiated){
   text = (text || "").trim(); if (!text) return;
@@ -3714,8 +4024,13 @@ function _playChunk(fullText){
     if (!_ttsStarted){ _ttsOn = false; _speakFallback(fullText); }
     else { _playChunk(fullText); }
   }
-  a.onplay = function(){ _ttsStarted = true; };
-  a.onended = function(){ _ttsStarted = true; _playChunk(fullText); };
+  try { _calWireAudio(a); } catch(e){}   /* route THIS chunk through the AnalyserNode for the live mouth/halo */
+  a.onplay = function(){ _ttsStarted = true; try { calSpeakStart(); } catch(e){} };   /* Cal starts "talking" */
+  a.onended = function(){
+    _ttsStarted = true;
+    if (!_ttsOn || !_ttsQueue.length){ try { calSpeakStop(); } catch(e){} }   /* reply done → mouth closes, breathe */
+    _playChunk(fullText);
+  };
   a.onerror = fail;
   var p = a.play();
   if (p && p.catch) p.catch(fail);
@@ -3728,6 +4043,8 @@ function _speakFallback(text){
     if (!_ttsVoice) _ttsVoice = pickTtsVoice();
     if (_ttsVoice) u.voice = _ttsVoice;
     u.rate = 0.97; u.pitch = 1.02; u.lang = (_ttsVoice && _ttsVoice.lang) || "en-US";
+    u.onstart = function(){ try { calSpeakStart(); } catch(e){} };
+    u.onend = function(){ try { calSpeakStop(); } catch(e){} };
     window.speechSynthesis.speak(u);
   } catch(e){}
 }
@@ -3870,6 +4187,39 @@ if ($("#voiceClose")) $("#voiceClose").addEventListener("click", closeVoice);
 if ($("#voiceMic")) $("#voiceMic").addEventListener("click", startListening);
 if ($("#voiceSend")) $("#voiceSend").addEventListener("click", function(){ sendChat($("#voiceInput").value); });
 if ($("#voiceInput")) $("#voiceInput").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); sendChat(this.value); } });
+/* Tap the dimmed/blurred food screen behind Coach Cal to dismiss him (spring exit). */
+if ($("#voiceWrap")) $("#voiceWrap").addEventListener("click", function(e){ if (e.target === this) closeVoice(); });
+/* Tap Coach Cal himself: a quick springy squash — and if he's mid-sentence, tap to hush him. */
+if ($("#calAvatar")) $("#calAvatar").addEventListener("click", function(){
+  var av = this;
+  if (_calSpeaking){ try { stopSpeak(); } catch(e){} }
+  if (!_prefersReducedMotion && window.Motion && window.Motion.animate){
+    try { window.Motion.animate(av, { transform: ["scale(1)", "scale(.9)", "scale(1.06)", "scale(1)"] }, { duration: 0.42, easing: "ease-out" }); } catch(e){}
+  }
+});
+/* Swipe DOWN on the coach card (grab handle / avatar area) to dismiss — natural mobile gesture. */
+(function(){
+  var card = $("#voiceCard"); if (!card) return;
+  var y0 = null, dragging = false;
+  function pt(e){ return (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY; }
+  card.addEventListener("touchstart", function(e){
+    /* only start a drag from the top zone (handle / avatar), never from the scrolling log or the input */
+    var top = card.getBoundingClientRect().top; y0 = pt(e); dragging = (pt(e) - top) < 190;
+  }, { passive: true });
+  card.addEventListener("touchmove", function(e){
+    if (!dragging || y0 == null) return;
+    var dy = pt(e) - y0; if (dy <= 0) return;
+    if (!_prefersReducedMotion) card.style.transform = "translateY(" + dy + "px)";
+  }, { passive: true });
+  card.addEventListener("touchend", function(e){
+    if (!dragging){ y0 = null; return; }
+    var dy = pt(e) - y0; y0 = null; dragging = false;
+    if (dy > 90){ closeVoice(); }
+    else if (!_prefersReducedMotion && window.Motion && window.Motion.animate){
+      try { window.Motion.animate(card, { transform: "translateY(0px)" }, { type: "spring", stiffness: 500, damping: 30 }); } catch(e){ card.style.transform = "translateY(0)"; }
+    } else { card.style.transform = "translateY(0)"; }
+  });
+})();
 $("#sheetClose").addEventListener("click", closeSheet);
 $("#sheet").addEventListener("click", function(e){ if (e.target === this) closeSheet(); });
 
