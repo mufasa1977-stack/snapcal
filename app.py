@@ -518,6 +518,10 @@ def _uid():
 # --- Free-tier cost cap (server-side enforcement). Mirrors the client's FREE_SCANS/FREE_CHATS. -------------
 FREE_SCANS_DAY = 3   # photo meal-scans/day on free (Gemini vision — billed)
 FREE_CHATS_DAY = 5   # Coach Cal chats/day on free (Gemini chat — billed)
+# CLOSED TESTING: billing is NOT live during Play/Apple closed testing — testers must never hit a paywall
+# mid-log. When ON, the daily cost caps are lifted for everyone (mirrors the client's CLOSED_TESTING flag).
+# Flip OFF at launch: set env SNAPCAL_CLOSED_TESTING=0 (Gemini scan/chat cost caps re-engage immediately).
+CLOSED_TESTING = (os.environ.get("SNAPCAL_CLOSED_TESTING", "1").strip() != "0")
 
 
 def _req_is_premium():
@@ -530,7 +534,7 @@ def _req_is_premium():
 def _cap_over(kind, limit):
     """If this free device has hit today's limit for `kind`, return the limit payload (caller returns it as 200
        so the client shows the upgrade prompt). Premium → never capped. Does NOT bump — call _cap_bump on allow."""
-    if _req_is_premium():
+    if CLOSED_TESTING or _req_is_premium():   # no cost caps during closed testing — testers never hit a paywall
         return None
     today = date.today().isoformat()
     con = get_db()

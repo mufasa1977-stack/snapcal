@@ -4229,11 +4229,16 @@ if ($("#exportPdfBtn")) $("#exportPdfBtn").addEventListener("click", async funct
 
 /* ---------------- premium / paywall ---------------- */
 var FREE_SCANS = 3;
+// CLOSED TESTING: billing is NOT live yet — we're in Play/Apple closed testing, so no tester should ever
+// hit a paywall while logging. This opens every premium gate (scan/chat/voice/push) for all testers.
+// FLIP TO false at launch to re-enable the free-tier caps + paywall. Server has a matching flag
+// (SNAPCAL_CLOSED_TESTING) so the cost caps are lifted end-to-end. See health-app-store-compliance-canon.
+var CLOSED_TESTING = true;
 // Cached premium flag. Web build = localStorage preview. Native build = synced from
 // RevenueCat (window.Billing, provided by billing.js) on load and after purchase/restore.
 var premiumActive = (localStorage.getItem("snapcal_premium") === "1");
 if (/[?&](premium|vip)=1/.test(location.search)) { try { localStorage.setItem("snapcal_premium", "1"); } catch(e){} premiumActive = true; }   /* preview link unlock — web only; native store build uses real billing */
-function isPremium(){ return premiumActive; }
+function isPremium(){ return CLOSED_TESTING || premiumActive; }
 async function syncPremium(){
   if (window.Billing && window.Billing.isNative) {
     try { premiumActive = await window.Billing.isPremium(); } catch (e) {}
