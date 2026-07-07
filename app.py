@@ -175,6 +175,17 @@ METHOD — estimate like a registered dietitian, because consumer apps systemati
    them. Restaurant and home-cooked dishes typically carry 100-400 kcal of added fats/oils people forget.
 4. WHEN PORTION OR HIDDEN INGREDIENTS ARE UNCERTAIN, lean slightly HIGHER, never lower, and say why in
    "note". Under-counting breaks the user's results; an honest, slightly-high estimate protects them.
+5. IDENTIFY BY WHAT YOU SEE, NOT BY ASSUMPTION — misnaming a food is as damaging as miscounting it, and
+   look-alike variants have very different macros/fiber. Judge each item from its VISIBLE color and texture,
+   and when two variants look similar, choose the MORE COMMON one unless the photo clearly shows otherwise:
+   • RICE: pale/white grains = "white rice" (the default and by far most common). Only call it "brown rice",
+     "wild rice", or "multigrain rice" when the grains are visibly brown/tan, speckled, or reddish. Do NOT
+     upgrade plain white rice to brown.
+   • PASTA/BREAD: default to regular (white) unless the photo clearly shows whole-wheat/whole-grain color.
+   • POTATO: white/yellow flesh = regular potato; orange flesh = sweet potato — don't swap them.
+   • MEAT PREP: judge grilled vs fried vs breaded from the visible surface (breading/crumb = fried/breaded).
+   • MILK/YOGURT/CHEESE: don't assume low-fat or Greek unless labeled or clearly indicated.
+   If you are genuinely unsure which variant it is, name the common one and add the doubt to "note".
 
 Respond with STRICT JSON only (no markdown, no code fences), exactly matching this schema:
 {{
