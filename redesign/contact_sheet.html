@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0b0b0d;font-family:'Plus Jakarta Sans',system-ui,sans-serif;padding:16px}
+  h3{color:#fff;font-weight:800;margin:2px 0 4px;font-size:16px}
+  .sub{color:#8a8378;font-size:12px;margin:0 0 14px}
+  .grid{display:flex;flex-wrap:wrap;gap:10px}
+  .cell{width:179px}
+  .frame{width:179px;height:276px;border-radius:14px;overflow:hidden;border:1px solid #222;position:relative}
+  .frame iframe{border:0;transform:scale(.459);transform-origin:top left;width:390px;height:600px}
+  .lab{color:#cfc7b8;font-size:11px;font-weight:700;margin-top:6px;text-align:center}
+  .num{color:#E0B24A}
+</style></head>
+<body>
+  <h3>"PROTEIN GOAL — UNLOCKED" · the motion, frame by frame</h3>
+  <p class="sub">Each frame is the same animation frozen at a moment in time (left→right = 0 → 2.3s). In the app it plays as one continuous ~1.8s burst with a haptic + sound.</p>
+  <div class="grid" id="g"></div>
+<script>
+  const frames=[
+    [150,'1 · impact flash'],[340,'2 · medal slams in'],[560,'3 · spark burst + rays'],
+    [780,'4 · "PROTEIN GOAL"'],[1020,'5 · "UNLOCKED"'],[1320,'6 · XP bar fills'],
+    [1700,'7 · +50 XP'],[2300,'8 · settled hero']
+  ];
+  const g=document.getElementById('g');
+  frames.forEach(([t,lab])=>{
+    const c=document.createElement('div');c.className='cell';
+    c.innerHTML=`<div class="frame"><iframe src="reward_anim.html?t=${t}" scrolling="no"></iframe></div>`+
+                `<div class="lab"><span class="num">${(t/1000).toFixed(2)}s</span> · ${lab.replace(/^\d+ · /,'')}</div>`;
+    g.appendChild(c);
+  });
+</script>
+</body></html>

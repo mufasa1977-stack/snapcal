@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SnapCal — celebration</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg1:#FFFEFB;--bg2:#F7F1E7;--ink:#27241F;--muted:#9D9486;--sage:#6FA079;--sage-deep:#558A63;--gold:#E0B24A}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--ink);
+    background:linear-gradient(180deg,var(--bg1),var(--bg2));height:100vh;overflow:hidden;
+    display:flex;align-items:center;justify-content:center}
+  #stage{position:relative;width:390px;height:600px;display:flex;align-items:center;justify-content:center}
+  canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+  .ringbox{position:relative;width:240px;height:240px;transform-origin:center;z-index:3}
+  .ringbox.pop{animation:pop .6s cubic-bezier(.22,1.6,.4,1)}
+  @keyframes pop{0%{transform:scale(1)}35%{transform:scale(1.12)}100%{transform:scale(1)}}
+  .glow{position:absolute;inset:-30px;border-radius:50%;opacity:0;
+    background:radial-gradient(circle,rgba(224,178,74,.45),rgba(224,178,74,0) 65%);z-index:2}
+  .glow.on{animation:glow .9s ease-out}
+  @keyframes glow{0%{opacity:0;transform:scale(.7)}30%{opacity:1}100%{opacity:0;transform:scale(1.25)}}
+  .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:4}
+  .center .big{font-weight:800;font-size:46px;letter-spacing:-.03em}
+  .center .cap{color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-top:6px}
+  .check{font-size:54px;opacity:0;transform:scale(.4);transition:none}
+  .check.show{animation:chk .5s cubic-bezier(.22,1.6,.4,1) forwards}
+  @keyframes chk{to{opacity:1;transform:scale(1)}}
+
+  .badge{position:absolute;top:60px;left:50%;transform:translate(-50%,-24px) scale(.8);opacity:0;z-index:6;
+    background:#fff;border:1px solid #F0E9DC;border-radius:20px;box-shadow:0 12px 30px rgba(60,52,30,.16);
+    padding:14px 20px;display:flex;align-items:center;gap:12px;white-space:nowrap}
+  .badge.show{animation:badge 2.6s ease forwards}
+  @keyframes badge{0%{opacity:0;transform:translate(-50%,-24px) scale(.8)}
+    12%{opacity:1;transform:translate(-50%,0) scale(1)}82%{opacity:1;transform:translate(-50%,0) scale(1)}
+    100%{opacity:0;transform:translate(-50%,-10px) scale(.96)}}
+  .badge .em{font-size:26px}
+  .badge .bt{font-weight:800;font-size:15px}
+  .badge .bs{color:var(--muted);font-size:12px;font-weight:600;margin-top:1px}
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="cf"></canvas>
+    <div class="badge" id="badge"><span class="em">💪</span><div><div class="bt">Protein goal hit!</div><div class="bs">96g — nice work, you crushed it.</div></div></div>
+    <div class="glow" id="glow"></div>
+    <div class="ringbox" id="ringbox">
+      <svg width="240" height="240" viewBox="0 0 240 240">
+        <circle cx="120" cy="120" r="104" fill="none" stroke="#E7F1E8" stroke-width="16"/>
+        <circle id="arc" cx="120" cy="120" r="104" fill="none" stroke="url(#g)" stroke-width="16" stroke-linecap="round"
+                stroke-dasharray="653" stroke-dashoffset="653" transform="rotate(-90 120 120)"/>
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7FB089"/><stop offset="1" stop-color="#E0B24A"/></linearGradient></defs>
+      </svg>
+      <div class="center">
+        <div class="big" id="numlab">0g</div>
+        <div class="cap" id="caplab">protein</div>
+        <div class="check" id="check">🎉</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const cv=document.getElementById('cf'),ctx=cv.getContext('2d');
+function size(){cv.width=cv.clientWidth*2;cv.height=cv.clientHeight*2;ctx.setTransform(2,0,0,2,0,0);}
+size();
+const COLORS=['#E0B24A','#7FB089','#558A63','#F0CE7A','#D9685E','#FFFFFF'];
+let parts=[];
+function burst(){
+  const cx=cv.clientWidth/2, cy=cv.clientHeight/2-10;
+  for(let i=0;i<120;i++){
+    const a=Math.random()*Math.PI*2, sp=4+Math.random()*9;
+    parts.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-6,
+      g:0.22+Math.random()*0.12,life:1,rot:Math.random()*6.28,vr:(Math.random()-.5)*.4,
+      w:6+Math.random()*6,h:9+Math.random()*8,c:COLORS[i%COLORS.length]});
+  }
+}
+function tick(){
+  ctx.clearRect(0,0,cv.clientWidth,cv.clientHeight);
+  parts.forEach(p=>{p.vy+=p.g;p.x+=p.vx;p.y+=p.vy;p.vx*=.99;p.rot+=p.vr;p.life-=.012;
+    ctx.save();ctx.globalAlpha=Math.max(0,p.life);ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+    ctx.fillStyle=p.c;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore();});
+  parts=parts.filter(p=>p.life>0&&p.y<cv.clientHeight+30);
+  requestAnimationFrame(tick);
+}
+tick();
+
+const arc=document.getElementById('arc'),C=653,goal=96;
+const numlab=document.getElementById('numlab'),ringbox=document.getElementById('ringbox'),
+      glow=document.getElementById('glow'),badge=document.getElementById('badge'),check=document.getElementById('check');
+
+function run(){
+  // reset
+  arc.style.transition='none';arc.style.strokeDashoffset=C;
+  ringbox.classList.remove('pop');glow.classList.remove('on');badge.classList.remove('show');check.classList.remove('show');
+  numlab.textContent='0g';check.style.opacity=0;
+  void arc.getBBox();
+  // animate fill
+  setTimeout(()=>{arc.style.transition='stroke-dashoffset 1.1s cubic-bezier(.4,0,.2,1)';arc.style.strokeDashoffset='0';},120);
+  // count up
+  let n=0;const ci=setInterval(()=>{n+=Math.ceil(goal/22);if(n>=goal){n=goal;clearInterval(ci);}numlab.textContent=n+'g';},48);
+  // celebrate at fill complete
+  setTimeout(()=>{
+    ringbox.classList.add('pop');glow.classList.add('on');check.classList.add('show');
+    numlab.textContent='';burst();setTimeout(burst,180);
+    badge.classList.add('show');
+  },1300);
+}
+run();
+setInterval(run,3800);   // auto-loop so it's easy to watch / record
+</script>
+</body>
+</html>

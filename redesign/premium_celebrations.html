@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SnapCal — premium celebration concepts</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg1:#FBF7F0;--bg2:#EFE7DA;--ink:#27241F;--muted:#9D9486;--sage:#6FA079;--gold:#E0B24A}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--ink);
+    background:linear-gradient(180deg,var(--bg1),var(--bg2));padding:22px 16px 40px;max-width:440px;margin:0 auto}
+  .lead{font-size:13px;color:var(--muted);font-weight:600;margin:0 2px 18px;line-height:1.45}
+  .concept{background:#fff;border:1px solid #F0E9DC;border-radius:26px;box-shadow:0 10px 30px rgba(60,52,30,.08);
+    padding:0;margin-bottom:20px;overflow:hidden}
+  .tag{display:flex;align-items:baseline;gap:8px;padding:16px 18px 0}
+  .tag .n{font-weight:800;font-size:15px}
+  .tag .t{font-size:11px;font-weight:700;color:var(--gold);letter-spacing:.04em;text-transform:uppercase}
+  .desc{font-size:12px;color:var(--muted);font-weight:600;padding:4px 18px 14px;line-height:1.4}
+  .stage{height:230px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+
+  /* A — 3D GOLD MEDAL */
+  .sA{background:radial-gradient(120% 120% at 50% 0%, #FFF8E8, #F4ECDC)}
+  .medal{width:140px;height:140px;border-radius:50%;position:relative;
+    background:
+      radial-gradient(circle at 35% 28%, #FFF1C2 0%, #F4C95B 26%, #D89B2E 55%, #B97E22 78%, #E8B84A 100%);
+    box-shadow:0 18px 30px rgba(150,110,20,.4), inset 0 3px 8px rgba(255,255,255,.7), inset 0 -8px 16px rgba(120,80,10,.5);
+    display:flex;align-items:center;justify-content:center}
+  .medal::before{content:"";position:absolute;inset:14px;border-radius:50%;
+    background:conic-gradient(from 220deg, #E9B84A, #FBE39A, #D89B2E, #FBE39A, #E9B84A);
+    box-shadow:inset 0 2px 6px rgba(120,80,10,.6)}
+  .medal::after{content:"";position:absolute;top:8px;left:18px;width:60px;height:36px;border-radius:50%;
+    background:linear-gradient(120deg, rgba(255,255,255,.85), rgba(255,255,255,0));filter:blur(2px);transform:rotate(-18deg)}
+  .medal .star{position:relative;z-index:2;font-size:54px;color:#7A5410;
+    text-shadow:0 2px 1px rgba(255,255,255,.6),0 -1px 2px rgba(120,80,10,.5)}
+  .ribbon{position:absolute;bottom:34px;width:40px;height:54px;background:linear-gradient(#6FA079,#4f7a59);z-index:-1}
+
+  /* B — GLASS + MESH GRADIENT */
+  .sB{background:#15131a}
+  .mesh{position:absolute;inset:-40px;filter:blur(30px);opacity:.9}
+  .mesh i{position:absolute;border-radius:50%}
+  .b1{width:200px;height:200px;background:#7FB089;top:-20px;left:-10px}
+  .b2{width:180px;height:180px;background:#E0B24A;bottom:-30px;right:-10px}
+  .b3{width:160px;height:160px;background:#5AA9C9;top:40px;right:60px}
+  .b4{width:140px;height:140px;background:#C98BdF;bottom:10px;left:60px}
+  .glass{position:relative;z-index:2;width:230px;padding:22px;border-radius:24px;
+    background:rgba(255,255,255,.14);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid rgba(255,255,255,.35);box-shadow:0 8px 30px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.5);
+    color:#fff;text-align:center}
+  .glass .gnum{font-weight:800;font-size:40px;letter-spacing:-.03em;text-shadow:0 2px 10px rgba(0,0,0,.2)}
+  .glass .glab{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;opacity:.9;margin-top:4px}
+  .glass .gchip{display:inline-block;margin-top:12px;padding:6px 14px;border-radius:99px;font-size:12px;font-weight:800;
+    background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.4)}
+
+  /* C — HOLOGRAPHIC FOIL BADGE */
+  .sC{background:radial-gradient(120% 120% at 50% 20%, #2a2740, #14121d)}
+  .holo{width:150px;height:150px;border-radius:30px;position:relative;display:flex;align-items:center;justify-content:center;
+    background:conic-gradient(from 0deg,#ff9ec7,#a0e9ff,#bdf5c9,#ffe6a0,#d9b3ff,#ff9ec7);
+    box-shadow:0 14px 36px rgba(120,80,220,.45), inset 0 2px 10px rgba(255,255,255,.6);
+    transform:rotate(-6deg)}
+  .holo::after{content:"";position:absolute;inset:0;border-radius:30px;
+    background:linear-gradient(125deg, rgba(255,255,255,.6) 0%, rgba(255,255,255,0) 32%, rgba(255,255,255,0) 60%, rgba(255,255,255,.4) 100%)}
+  .holo .crown{font-size:60px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25));z-index:2}
+  .holoLab{position:absolute;bottom:24px;color:#fff;font-weight:800;font-size:14px;letter-spacing:.04em;z-index:3;
+    text-shadow:0 2px 8px rgba(0,0,0,.4)}
+
+  /* D — PLASMA / LIQUID RING COMPLETE */
+  .sD{background:radial-gradient(120% 120% at 50% 30%, #0c2622, #06140f)}
+  .plasma{position:relative;width:170px;height:170px}
+  .plasma svg{filter:drop-shadow(0 0 14px rgba(127,224,170,.7))}
+  .plasma .pc{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:#eafff3;font-weight:800;font-size:34px}
+</style>
+</head>
+<body>
+  <p class="lead">Four "best-of-the-best" directions to replace the emoji 🎉. Each is a different premium lane — pick the vibe and I'll productionize it (Rive/Lottie/3D), not just fake it in CSS.</p>
+
+  <!-- A -->
+  <div class="concept">
+    <div class="tag"><span class="n">A · 3D Gold Medal</span><span class="t">Duolingo / Apple awards</span></div>
+    <div class="desc">A glossy, dimensional medal that spins in and shines. Tactile, premium, instantly "I earned that."</div>
+    <div class="stage sA"><div class="medal"><div class="ribbon"></div><span class="star">★</span></div></div>
+  </div>
+
+  <!-- B -->
+  <div class="concept">
+    <div class="tag"><span class="n">B · Glass + Mesh Gradient</span><span class="t">iOS 2026 / hi-tech</span></div>
+    <div class="desc">Frosted glass card floating over a living, blurred color-mesh. Feels expensive, modern, "Apple."</div>
+    <div class="stage sB">
+      <div class="mesh"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
+      <div class="glass"><div class="gnum">96g</div><div class="glab">Protein Goal</div><div class="gchip">Crushed it 💪</div></div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="concept">
+    <div class="tag"><span class="n">C · Holographic Foil</span><span class="t">gen-z / iridescent</span></div>
+    <div class="desc">A holo-foil badge that catches the light like a rare trading card. Reserve for big wins / streaks.</div>
+    <div class="stage sC"><div class="holo"><span class="crown">👑</span></div><div class="holoLab">PERFECT DAY</div></div>
+  </div>
+
+  <!-- D -->
+  <div class="concept">
+    <div class="tag"><span class="n">D · Plasma Ring Complete</span><span class="t">sci-fi / energy</span></div>
+    <div class="desc">The ring fills with glowing liquid-energy and pulses when you close it. Futuristic, satisfying.</div>
+    <div class="stage sD">
+      <div class="plasma">
+        <svg width="170" height="170" viewBox="0 0 170 170">
+          <circle cx="85" cy="85" r="72" fill="none" stroke="rgba(127,224,170,.15)" stroke-width="13"/>
+          <circle cx="85" cy="85" r="72" fill="none" stroke="url(#pg)" stroke-width="13" stroke-linecap="round" transform="rotate(-90 85 85)"/>
+          <defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7FE0AA"/><stop offset=".5" stop-color="#5AD0E0"/><stop offset="1" stop-color="#A0F0C0"/></linearGradient></defs>
+        </svg>
+        <div class="pc">✓</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

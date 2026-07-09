@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;box-sizing:border-box}
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+  #stage{position:relative;width:390px;height:600px;margin:0 auto;overflow:hidden;
+    background:radial-gradient(135% 100% at 50% 26%, #20342E 0%, #14211B 48%, #0A130F 100%)}
+  /* soft aurora wash up top */
+  .aura{position:absolute;left:50%;top:120px;width:520px;height:380px;transform:translate(-50%,-50%);
+    background:radial-gradient(circle, rgba(224,178,74,.14), rgba(127,176,137,.10) 38%, rgba(224,178,74,0) 66%);filter:blur(6px)}
+  .sky{position:absolute;inset:0}
+  .meta{position:absolute;left:0;right:0;top:330px;text-align:center;padding:0 34px}
+  .kick{font-size:11px;font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:#C7A24E}
+  .h1{font-family:Fraunces;font-weight:600;font-size:30px;line-height:1.12;color:#F4EEDF;margin-top:14px;letter-spacing:-.01em}
+  .stat{font-size:13px;font-weight:600;color:#9FA99A;margin-top:12px;letter-spacing:.02em}
+  /* Coach Cal moment */
+  .coach{position:absolute;left:34px;right:34px;bottom:42px;display:flex;align-items:center;gap:13px;
+    background:rgba(255,255,255,.05);border:1px solid rgba(224,178,74,.22);border-radius:20px;padding:14px 16px;
+    backdrop-filter:blur(6px)}
+  .av{width:42px;height:42px;border-radius:14px;flex:none;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(145deg,#7FB089,#4f7a59);color:#fff;font-size:18px;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+  .cq{flex:1}
+  .cq .q{font-family:Fraunces;font-style:italic;font-weight:500;font-size:15.5px;color:#F0E2BE;line-height:1.32}
+  .cq .who{font-size:11px;font-weight:700;color:#8FA992;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+  .wave{display:flex;align-items:center;gap:3px;flex:none}
+  .wave i{width:3px;border-radius:2px;background:#C7A24E;opacity:.85}
+</style></head>
+<body>
+<div id="stage">
+  <div class="aura"></div>
+  <svg class="sky" viewBox="0 0 390 600">
+    <defs>
+      <radialGradient id="star" cx="50%" cy="50%" r="50%">
+        <stop offset="0" stop-color="#FFFDF4"/><stop offset=".35" stop-color="#FBE7A6"/>
+        <stop offset="1" stop-color="rgba(233,197,106,0)"/>
+      </radialGradient>
+      <radialGradient id="starBig" cx="50%" cy="50%" r="50%">
+        <stop offset="0" stop-color="#FFFFFF"/><stop offset=".22" stop-color="#FFF1C2"/>
+        <stop offset=".55" stop-color="#E9C56A"/><stop offset="1" stop-color="rgba(224,178,74,0)"/>
+      </radialGradient>
+      <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#7FB089"/><stop offset="1" stop-color="#E0B24A"/>
+      </linearGradient>
+      <filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.2"/></filter>
+    </defs>
+    <!-- faint background stars -->
+    <g fill="#EAF0E6">
+      <circle cx="48" cy="92" r="1.1" opacity=".5"/><circle cx="330" cy="70" r="1.3" opacity=".55"/>
+      <circle cx="300" cy="250" r="1" opacity=".4"/><circle cx="70" cy="280" r="1.2" opacity=".45"/>
+      <circle cx="355" cy="190" r="1" opacity=".4"/><circle cx="120" cy="60" r="1" opacity=".4"/>
+      <circle cx="200" cy="40" r="1.2" opacity=".5"/><circle cx="36" cy="200" r="1" opacity=".35"/>
+    </g>
+    <!-- constellation connecting lines (the streak path) -->
+    <polyline points="64,236 112,178 150,210 196,150 236,180 280,128 214,96"
+      fill="none" stroke="url(#line)" stroke-width="1.6" opacity=".55" stroke-linecap="round"/>
+    <!-- the 6 earned stars -->
+    <g>
+      <circle cx="64"  cy="236" r="13" fill="url(#star)"/><circle cx="64"  cy="236" r="2.4" fill="#FFFDF4"/>
+      <circle cx="112" cy="178" r="13" fill="url(#star)"/><circle cx="112" cy="178" r="2.4" fill="#FFFDF4"/>
+      <circle cx="150" cy="210" r="12" fill="url(#star)"/><circle cx="150" cy="210" r="2.2" fill="#FFFDF4"/>
+      <circle cx="196" cy="150" r="13" fill="url(#star)"/><circle cx="196" cy="150" r="2.4" fill="#FFFDF4"/>
+      <circle cx="236" cy="180" r="12" fill="url(#star)"/><circle cx="236" cy="180" r="2.2" fill="#FFFDF4"/>
+      <circle cx="280" cy="128" r="13" fill="url(#star)"/><circle cx="280" cy="128" r="2.4" fill="#FFFDF4"/>
+    </g>
+    <!-- TODAY's star: just ignited, brighter + halo -->
+    <circle cx="214" cy="96" r="40" fill="url(#starBig)"/>
+    <circle cx="214" cy="96" r="22" fill="none" stroke="#FFF1C2" stroke-width="1.1" opacity=".55"/>
+    <circle cx="214" cy="96" r="4.6" fill="#FFFFFF"/>
+  </svg>
+
+  <div class="meta">
+    <div class="kick">Day 7 · Protein</div>
+    <div class="h1">Your strongest week yet</div>
+    <div class="stat">96g today &nbsp;·&nbsp; 7 days in a row &nbsp;·&nbsp; +1 star</div>
+  </div>
+
+  <div class="coach">
+    <div class="av">&#10022;</div>
+    <div class="cq">
+      <div class="q">"That's seven days straight, Tariq. This is the version of you we're building."</div>
+      <div class="who">Coach Cal</div>
+    </div>
+    <div class="wave"><i style="height:10px"></i><i style="height:18px"></i><i style="height:26px"></i><i style="height:14px"></i><i style="height:8px"></i></div>
+  </div>
+</div>
+</body></html>

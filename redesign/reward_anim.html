@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>reward anim</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%;background:#0a0f10;overflow:hidden;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+  #stage{position:relative;width:390px;height:600px;margin:0 auto;overflow:hidden;
+    background:radial-gradient(120% 90% at 50% 38%, #15302b 0%, #0c1a18 45%, #070d0c 100%)}
+  #rays{position:absolute;left:50%;top:248px;width:560px;height:560px;transform:translate(-50%,-50%);
+    background:conic-gradient(from 0deg, rgba(224,178,74,.0) 0deg, rgba(224,178,74,.28) 8deg, rgba(224,178,74,0) 16deg,
+      rgba(224,178,74,0) 24deg, rgba(224,178,74,.28) 32deg, rgba(224,178,74,0) 40deg);
+    -webkit-mask:radial-gradient(circle, #000 30%, transparent 62%);mask:radial-gradient(circle,#000 30%,transparent 62%);opacity:0}
+  #shock{position:absolute;left:50%;top:248px;width:40px;height:40px;border-radius:50%;
+    transform:translate(-50%,-50%) scale(0);border:3px solid rgba(255,224,150,.9);opacity:0}
+  .medal{position:absolute;left:50%;top:248px;transform:translate(-50%,-50%) scale(0);will-change:transform}
+  #flash{position:absolute;inset:0;background:radial-gradient(circle at 50% 41%, #fff7e0, rgba(255,247,224,0) 55%);opacity:0;mix-blend-mode:screen}
+  .head{position:absolute;left:0;right:0;text-align:center;color:#fff;font-weight:800;letter-spacing:-.01em}
+  #h1{top:70px;font-size:34px;color:#FFE6A6;text-shadow:0 2px 18px rgba(224,178,74,.5);opacity:0}
+  #h2{top:112px;font-size:21px;letter-spacing:.32em;color:#fff;opacity:0}
+  #xpwrap{position:absolute;left:60px;right:60px;top:500px;opacity:0}
+  #xptrack{height:12px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden;border:1px solid rgba(255,224,150,.35)}
+  #xpfill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#7FB089,#E0B24A)}
+  #xptxt{color:#FFE6A6;font-size:12px;font-weight:800;letter-spacing:.12em;text-align:center;margin-top:8px;text-transform:uppercase}
+  .pt{position:absolute;left:50%;top:248px;width:8px;height:14px;border-radius:2px;transform-origin:center;opacity:0}
+</style></head>
+<body>
+<div id="stage">
+  <div id="rays"></div>
+  <div id="shock"></div>
+  <svg class="medal" id="medal" width="172" height="172" viewBox="0 0 172 172">
+    <defs>
+      <radialGradient id="gold" cx="38%" cy="30%" r="75%">
+        <stop offset="0" stop-color="#FFF3C8"/><stop offset=".32" stop-color="#F2C85A"/>
+        <stop offset=".62" stop-color="#D89B2E"/><stop offset="1" stop-color="#9C6E1C"/>
+      </radialGradient>
+      <radialGradient id="inner" cx="50%" cy="38%" r="65%">
+        <stop offset="0" stop-color="#3a6b46"/><stop offset="1" stop-color="#21402a"/>
+      </radialGradient>
+      <linearGradient id="emb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE9A8"/><stop offset="1" stop-color="#C89328"/></linearGradient>
+    </defs>
+    <!-- studded outer rim -->
+    <g id="studs"></g>
+    <circle cx="86" cy="86" r="80" fill="url(#gold)" stroke="#7a5410" stroke-width="2"/>
+    <circle cx="86" cy="86" r="80" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="2" stroke-dasharray="3 5"/>
+    <circle cx="86" cy="86" r="62" fill="url(#inner)" stroke="#caa23e" stroke-width="5"/>
+    <circle cx="86" cy="86" r="62" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="1"/>
+    <!-- emblem: dumbbell -->
+    <g transform="translate(86,86)" fill="url(#emb)" stroke="#7a5410" stroke-width="1.2">
+      <rect x="-30" y="-6" width="60" height="12" rx="3"/>
+      <rect x="-40" y="-16" width="11" height="32" rx="3"/><rect x="-52" y="-11" width="9" height="22" rx="3"/>
+      <rect x="29" y="-16" width="11" height="32" rx="3"/><rect x="43" y="-11" width="9" height="22" rx="3"/>
+    </g>
+    <ellipse cx="64" cy="50" rx="26" ry="14" fill="rgba(255,255,255,.45)" transform="rotate(-18 64 50)"/>
+  </svg>
+  <div id="flash"></div>
+  <div class="head" id="h1">PROTEIN GOAL</div>
+  <div class="head" id="h2">UNLOCKED</div>
+  <div id="xpwrap"><div id="xptrack"><div id="xpfill"></div></div><div id="xptxt">+50 XP</div></div>
+</div>
+<script>
+  // studs around the rim
+  const studs=document.getElementById('studs');let s='';
+  for(let i=0;i<24;i++){const a=i/24*Math.PI*2,x=86+72*Math.cos(a),y=86+72*Math.sin(a);
+    s+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.1" fill="#FFE9A8" stroke="#7a5410" stroke-width=".6"/>`;}
+  studs.innerHTML=s;
+  // deterministic particles
+  const stage=document.getElementById('stage');const N=70,parts=[];
+  for(let i=0;i<N;i++){const d=document.createElement('div');d.className='pt';
+    const col=['#E0B24A','#FFE6A6','#7FB089','#fff','#D9685E'][i%5];d.style.background=col;
+    stage.appendChild(d);const a=Math.random()*Math.PI*2,sp=120+Math.random()*210;
+    parts.push({el:d,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-60,rot:Math.random()*360,vr:(Math.random()-.5)*600});}
+  const E=id=>document.getElementById(id);
+  function easeOutBack(t){const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2);}
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function seg(T,a,b){return clamp((T-a)/(b-a),0,1);}
+  function render(T){
+    // flash
+    E('flash').style.opacity = T<140? seg(T,0,120) : (1-seg(T,140,460));
+    // rays
+    const ro=seg(T,260,560); E('rays').style.opacity=ro*0.95;
+    E('rays').style.transform=`translate(-50%,-50%) rotate(${T*0.028}deg)`;
+    // shockwave
+    const sp=seg(T,240,720); E('shock').style.opacity=(1-sp)*0.9;
+    E('shock').style.transform=`translate(-50%,-50%) scale(${0.2+sp*7})`;
+    // medal slam + idle pulse + shine
+    let ms;
+    if(T<200) ms=0;
+    else { const p=seg(T,200,560); ms=2.0 - 1.0*easeOutBack(p); ms=Math.max(ms,1); if(p>=1){ms=1+0.03*Math.sin((T-560)/260);} }
+    const spin = T<560? (1-seg(T,200,560))*-40 : 2*Math.sin((T-560)/600);
+    E('medal').style.transform=`translate(-50%,-50%) scale(${ms.toFixed(3)}) rotate(${spin.toFixed(2)}deg)`;
+    E('medal').style.opacity = T<200?0:1;
+    // particles (emit at 470)
+    const t=(T-470)/1000;
+    for(const p of parts){ if(t<=0){p.el.style.opacity=0;continue;}
+      const x=p.vx*t, y=p.vy*t+260*t*t, op=clamp(1-t/1.0,0,1);
+      p.el.style.opacity=op; p.el.style.transform=`translate(${x.toFixed(1)}px,${y.toFixed(1)}px) rotate(${(p.rot+p.vr*t).toFixed(0)}deg)`;}
+    // headlines
+    const a1=seg(T,560,860); E('h1').style.opacity=a1; E('h1').style.transform=`scale(${(0.6+0.4*easeOutBack(a1)).toFixed(3)})`;
+    const a2=seg(T,760,1060); E('h2').style.opacity=a2; E('h2').style.letterSpacing=(0.5-0.18*a2)+'em';
+    // xp
+    const xa=seg(T,1060,1240); E('xpwrap').style.opacity=xa;
+    const xf=seg(T,1140,1860); E('xpfill').style.width=(xf*100)+'%';
+    E('xptxt').textContent='+'+Math.round(xf*50)+' XP';
+  }
+  window.__seek=function(ms){render(ms);};
+  // live loop OR static frame via ?t=<ms>
+  let start=null, DUR=2600;
+  function loop(ts){ if(start===null)start=ts; let T=(ts-start)%DUR; render(T); requestAnimationFrame(loop);}
+  const _tp=new URLSearchParams(location.search).get('t');
+  if(_tp!==null) render(parseFloat(_tp));
+  else if(location.search.includes('seek')) render(0);
+  else requestAnimationFrame(loop);
+</script>
+</body></html>
