@@ -2,6 +2,7 @@
   "name": "SnapCal — AI Calorie Coach",
   "short_name": "SnapCal",
   "description": "Scan your food, track calories and macros, and get real-world coaching from Coach Cal — including what to order when you eat out.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

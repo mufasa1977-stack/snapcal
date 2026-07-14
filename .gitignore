@@ -1,5 +1,6 @@
 # secrets & user data — NEVER commit
 gemini_key.txt
+native_build/
 .env
 *.db
 

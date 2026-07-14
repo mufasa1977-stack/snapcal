@@ -4,7 +4,9 @@
     "target": {
       "namespace": "android_app",
       "package_name": "com.xionprotech.snapcal",
-      "sha256_cert_fingerprints": ["REPLACE_AFTER_PLAY_APP_SIGNING"]
+      "sha256_cert_fingerprints": [
+        "98:93:AD:AD:C6:DB:1A:F0:CB:90:71:69:32:7B:D9:29:56:BB:8B:AA:DA:82:0D:9D:33:1B:8B:CA:B1:83:6D:6E"
+      ]
     }
   }
 ]
