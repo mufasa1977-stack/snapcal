@@ -1893,13 +1893,24 @@ function _mapOFF(code, j){
   var basisGrams = hasServ ? (servGrams || 100) : 100;
   var ceil = basisGrams * 9.2 + 5;                                  // physical max calories for this weight
   var atwater = (fat != null || carbs != null || protein != null) ? (4 * (protein || 0) + 4 * (carbs || 0) + 9 * (fat || 0)) : null;
-  var estimated = false;
+  var estimated = false, flags = [];
   if (cal == null || cal > ceil){                                  // missing or impossible -> use the macros
     if (atwater != null && atwater > 0 && atwater <= ceil){ cal = atwater; estimated = true; }
     else return { found: false, code: code };                      // can't produce a trustworthy number
+  } else if (atwater != null && atwater >= 20 && Math.abs(cal - atwater) / atwater > 0.15){
+    // stated energy contradicts the record's OWN macros -> the energy field is the corrupt one
+    // (2026-07-14 Funyuns catch: OFF said 68 kcal, its macros said 100, the bag says 100)
+    cal = atwater; estimated = true;
   }
+  if (estimated) flags.push("calories_recomputed");
   function r1(x){ return x == null ? null : Math.round(x * 10) / 10; }
   var sodium = val("sodium");
+  var sodiumMg = sodium != null ? Math.round(sodium * 1000) : null;
+  // sodium g/mg entry slips, both directions: <1 mg on real food (0.21 mg stored for a 210 mg label)
+  // or >10,000 mg a serving (mg typed into the grams field). Unknown beats a confident wrong number.
+  if (sodiumMg != null && ((sodiumMg < 1 && ((fat || 0) > 0 || cal >= 20)) || sodiumMg > 10000)){
+    sodiumMg = null; flags.push("sodium_implausible");
+  }
   // whole-package math: calories per gram x total package grams (so we can show "the whole box")
   var totalG = parseFloat(p.product_quantity); totalG = isNaN(totalG) ? null : totalG;
   var servG = servGrams || (parseFloat(p.serving_quantity) || null);
@@ -1914,10 +1925,11 @@ function _mapOFF(code, j){
     image: p.image_front_small_url || "",
     calories: Math.round(cal), protein_g: r1(protein), carbs_g: r1(carbs), fat_g: r1(fat),
     fiber_g: r1(val("fiber")), sugar_g: r1(val("sugars")), sat_fat_g: r1(val("saturated-fat")),
-    sodium_mg: sodium != null ? Math.round(sodium * 1000) : null,
+    sodium_mg: sodiumMg,
     pkg_servings: pkgServ, pkg_calories: pkgCal,
     allergens: (p.allergens_tags || []).map(function(t){ return String(t).replace(/^[a-z]{2}:/, ""); }),
-    source: "Open Food Facts", accuracy_tier: estimated ? "ESTIMATED" : "EXACT", estimated: estimated
+    source: "Open Food Facts (community label data)", accuracy_tier: flags.length ? "LABEL" : "EXACT",
+    estimated: estimated, flags: flags
   };
 }
 /* Rule-based coach take for a scanned product — works WITHOUT Gemini credits: goal-aware verdict + an
