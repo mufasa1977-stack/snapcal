@@ -2012,14 +2012,15 @@ function renderBarcodeResult(d){
     '<div class="nf-food">' + esc(d.name) + (d.brand ? ' <span style="color:var(--ink3);font-weight:600">&middot; ' + esc(d.brand) + '</span>' : '') + '</div>' +
     '<div class="nf-serv">Per ' + esc(d.serving) + ' &middot; ' + (d.estimated
       ? '<b style="color:#c77d20">≈ Estimated from the label</b>'
-      : '<b style="color:var(--brand)">✓ Verified label data</b>') + '</div>' +
+      : '<b style="color:var(--brand)">✓ Label data</b>') + '</div>' +
     warn +
     (d.estimated ? '<div style="font-size:11.5px;color:var(--ink3);margin:-2px 0 6px">The listed calories looked off, so we recalculated them from the protein/carbs/fat on the label.</div>' : '') +
+    ((d.flags || []).indexOf("sodium_implausible") >= 0 ? '<div style="font-size:11.5px;color:var(--ink3);margin:-2px 0 6px">The sodium in the community database looked like a units typo, so we left it off — check the package for the real number.</div>' : '') +
     nfRow("Calories", d.calories, "kcal") + nfRow("Protein", d.protein_g, "g") + nfRow("Carbs", d.carbs_g, "g") +
     netCarbRow(d.carbs_g, d.fiber_g) +
     nfRow("Fiber", d.fiber_g, "g") + nfRow("Sugar", d.sugar_g, "g") + nfRow("Fat", d.fat_g, "g") +
     nfRow("Saturated fat", d.sat_fat_g, "g") + nfRow("Sodium", d.sodium_mg, "mg") +
-    '<div class="nf-src">Source: ' + esc(d.source) + (d.estimated ? ' &middot; calories estimated from the label' : ' &middot; exact barcode label data') + '</div>' +
+    '<div class="nf-src">Source: ' + esc(d.source) + (d.estimated ? ' &middot; calories estimated from the label' : ' &middot; barcode label data') + '</div>' +
     _barcodeCoach(d) +
     '<button id="bcAdd" type="button" class="btn btn-dark" style="margin-top:12px">Add to today</button>' +
   '</div>';

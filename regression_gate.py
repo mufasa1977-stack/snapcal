@@ -800,6 +800,18 @@ def main():
               mic["count"] >= 15 and mic["grouped"] and mic["emptyHidden"],
               "count=%s grouped=%s emptyHidden=%s" % (mic["count"], mic["grouped"], mic["emptyHidden"]))
 
+        # barcode sanity layer (the 2026-07-14 Funyuns catch): crowd label data gets CHECKED, never
+        # blindly trusted. Deterministic fixtures = the three real breakages found that day, run
+        # through app.label_sanity offline (no Open Food Facts network dependency in the gate).
+        import app as _app
+        fun = _app.label_sanity(67.9, 1.0, 14.0, 4.5, 0)        # Funyuns: bad kcal + 1000x-low sodium
+        nut = _app.label_sanity(200.0, 2.0, 21.0, 11.0, 15)     # Nutella: clean record, must pass through
+        cok = _app.label_sanity(0.0, 0.0, 0.0, 0.0, 142000)     # Coke Zero: mg typed into the grams field
+        check("barcode: label_sanity fixes bad kcal (Atwater), drops typo sodium both ways, keeps clean data",
+              fun[0] == 100 and fun[1] is None and "calories_recomputed" in fun[2] and "sodium_implausible" in fun[2]
+              and nut == (200.0, 15, []) and cok[1] is None and "sodium_implausible" in cok[2],
+              "funyuns=%s nutella=%s coke=%s" % (fun, nut, cok))
+
         # export: GET /api/export.csv -> text/csv with a header row
         exp = page.evaluate("""async () => {
             try { var r = await fetch('/api/export.csv', { headers: { 'X-Device-Id': 'gate_export' } });

@@ -2955,18 +2955,41 @@ def nutrition():
 _BARCODE_CACHE = {}
 
 
+def label_sanity(cal, protein, carbs, fat, sodium_mg):
+    """Sanity-check crowd-sourced label numbers (the 2026-07-14 Funyuns catch). Returns
+    (cal, sodium_mg, flags). Community DBs hold unit typos and stale energy fields:
+    - Atwater cross-check: calories are derivable from macros (4P + 4C + 9F); when the stated
+      energy disagrees with its own macros by >15%, the energy field is the corrupt one — recompute.
+      (Funyuns: OFF said 68 kcal, its own macros said 100 — the bag says 100.)
+    - Sodium plausibility, both directions of the g/mg slip: <1 mg on a processed food is the
+      Funyuns typo (0.21 mg stored for a 210 mg label); >10,000 mg a serving is mg typed into the
+      grams field (Coke Zero: 142 g 'sodium'). Unknown beats a confident wrong number."""
+    flags = []
+    if None not in (protein, carbs, fat):
+        atwater = round(4 * protein + 4 * carbs + 9 * fat)
+        if atwater >= 20 and (cal is None or abs(cal - atwater) / atwater > 0.15):
+            cal = atwater
+            flags.append("calories_recomputed")
+    if sodium_mg is not None and (
+            (sodium_mg < 1 and ((fat or 0) > 0 or (cal or 0) >= 20)) or sodium_mg > 10000):
+        sodium_mg = None
+        flags.append("sodium_implausible")
+    return cal, sodium_mg, flags
+
+
 @app.get("/api/barcode")
 def barcode():
     """Look up a packaged food by its UPC/EAN barcode against Open Food Facts — a free, open,
-    VERIFIED label database (no API key, no billing, like our OSM/USDA calls). This is the
-    'trust the number' answer to AI-photo guesses: exact label data with a confidence you can
-    stand behind, not an estimate. Returns {found:false} cleanly when a code isn't in the DB."""
+    COMMUNITY label database (no API key, no billing, like our OSM/USDA calls). Community means
+    crowd-entered: records carry unit typos and stale energy fields, so every hit passes a sanity
+    layer (Atwater kcal cross-check, sodium plausibility) before we show it — checked numbers,
+    never blind trust. Returns {found:false} cleanly when a code isn't in the DB."""
     code = re.sub(r"\D", "", (request.args.get("code") or ""))
     if not (8 <= len(code) <= 14):
         return jsonify({"error": "bad_barcode"}), 400
     if code in _BARCODE_CACHE:
         return jsonify(_BARCODE_CACHE[code])
-    fields = "product_name,brands,serving_size,nutrition_data_per,nutriments,image_front_small_url"
+    fields = "product_name,brands,serving_size,nutrition_data_per,nutriments,image_front_small_url,allergens_tags"
     url = "https://world.openfoodfacts.org/api/v2/product/" + code + ".json?fields=" + fields
     # Open Food Facts REQUIRES a descriptive User-Agent (app + contact) and throttles weak/generic ones from
     # shared cloud IPs — that was 502'ing every lookup from Render. Proper UA + retry fixes it.
@@ -3002,7 +3025,16 @@ def barcode():
     has_serv = num("energy-kcal_serving") is not None
     per = serving if (has_serv and serving) else "100 g"
     sfx = "_serving" if has_serv else "_100g"
-    sodium = num("sodium" + sfx)
+    cal, protein, carbs, fat = num("energy-kcal" + sfx), num("proteins" + sfx), num("carbohydrates" + sfx), num("fat" + sfx)
+    try:
+        # raw float, NOT num(): rounding grams to 1 decimal before the mg conversion floored every
+        # sodium under 0.05 g (50 mg) to zero — Nutella's real 15 mg was showing as "0 mg".
+        sodium_mg = round(float(n.get("sodium" + sfx)) * 1000)
+    except Exception:  # noqa: BLE001
+        sodium_mg = None
+    # OFF is crowd-entered, NOT verified — sanity-check the numbers instead of badging the source.
+    cal, sodium_mg, flags = label_sanity(cal, protein, carbs, fat, sodium_mg)
+    allergens = [t.split(":", 1)[-1].replace("-", " ") for t in (p.get("allergens_tags") or [])]
     out = {
         "found": True,
         "code": code,
@@ -3010,16 +3042,19 @@ def barcode():
         "brand": (p.get("brands") or "").split(",")[0].strip(),
         "serving": per,
         "image": p.get("image_front_small_url") or "",
-        "calories": num("energy-kcal" + sfx),
-        "protein_g": num("proteins" + sfx),
-        "carbs_g": num("carbohydrates" + sfx),
-        "fat_g": num("fat" + sfx),
+        "calories": cal,
+        "protein_g": protein,
+        "carbs_g": carbs,
+        "fat_g": fat,
         "fiber_g": num("fiber" + sfx),
         "sugar_g": num("sugars" + sfx),
         "sat_fat_g": num("saturated-fat" + sfx),
-        "sodium_mg": (round(sodium * 1000) if sodium is not None else None),
-        "source": "Open Food Facts",
-        "accuracy_tier": "EXACT",
+        "sodium_mg": sodium_mg,
+        "allergens": allergens,
+        "estimated": "calories_recomputed" in flags,
+        "flags": flags,
+        "source": "Open Food Facts (community label data)",
+        "accuracy_tier": "LABEL" if flags else "EXACT",
     }
     _BARCODE_CACHE[code] = out
     return jsonify(out)
