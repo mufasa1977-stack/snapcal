@@ -61,6 +61,21 @@ def _route_nearby(route):
     body = STORE_FIXTURE if "kind=store" in route.request.url else FOOD_FIXTURE
     route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
 
+
+# Deterministic USDA name-search response for the "add an item the camera missed" flow — a query
+# containing 'quickfail' simulates a no-match so the gate can exercise the manual quick-add fallback too.
+def _route_nutrition(route):
+    url = route.request.url
+    if "quickfail" in url:
+        route.fulfill(status=404, content_type="application/json", body=json.dumps({"error": "not_found", "query": "x"}))
+        return
+    route.fulfill(status=200, content_type="application/json", body=json.dumps({
+        "food": "Cheddar cheese", "fdcId": 1, "dataType": "SR Legacy",
+        "serving": "per 100 g (3.5 oz)", "source": "USDA FoodData Central", "accuracy_tier": "VERIFIED",
+        "nutrients": {"calories": 403, "protein_g": 25, "carbs_g": 1.3, "fat_g": 33,
+                      "fiber_g": 0, "sugar_g": 0.5, "sat_fat_g": 21, "sodium_mg": 621}
+    }))
+
 results = []
 
 
@@ -154,6 +169,7 @@ def main():
                                   permissions=["geolocation"])
         page = ctx.new_page()
         page.route("**/api/nearby*", _route_nearby)   # deterministic near-me data (Overpass is too slow/flaky to gate on)
+        page.route("**/api/nutrition*", _route_nutrition)   # deterministic USDA name-search for the "add missed item" flow
 
         def _benign(msg):
             # maplibre throws an AbortError when an in-flight tile/style request is cancelled by a tab
@@ -559,6 +575,82 @@ def main():
         check("scan results: each item has a Remove button that drops a wrong item before logging",
               rmitem["before"] == 2 and rmitem["rowsBefore"] == 2 and rmitem["rowsAfter"] == 1 and rmitem["remaining"] == 1 and ("Chicken" in rmitem["firstName"]),
               "delBtns=" + str(rmitem["before"]) + " rowsAfter=" + str(rmitem["rowsAfter"]) + " remaining=" + str(rmitem["remaining"]) + " first=" + str(rmitem["firstName"]))
+
+        # ADD A MISSED ITEM: scan caught the eggs but not the cheese -> search the SAME USDA path,
+        # append it to the SAME meal, totals recalc, and the existing portion/remove controls still
+        # work on the newly-added item (add-only: nothing about the original item/flow changes).
+        addmiss = page.evaluate("""async () => {
+            window.analyzeResult = { items:[
+              {name:'Scrambled Eggs', calories:220, protein_g:14, carbs_g:2, fat_g:16, fiber_g:0, sugar_g:1, sat_fat_g:5, sodium_mg:380}
+            ], mults:[1],
+            total:{calories:220,protein_g:14,carbs_g:2,fat_g:16,fiber_g:0,sugar_g:1,sat_fat_g:5,sodium_mg:380,band_pct:0},
+            health_score:70, quality_grade:'B', verdict:'', coach_tip:'', swaps:[], good_flags:[], bad_flags:[], satiety:'' };
+            renderScanCard(); renderAddMissedRow();
+            var hasAddBtn = !!document.getElementById('addMissedBtn');
+            document.getElementById('addMissedBtn').click();
+            var hasForm = !!document.getElementById('missedForm');
+            document.getElementById('missedQ').value = 'cheddar cheese';
+            document.getElementById('missedSearchBtn').click();
+            await new Promise(function(r){ var t=0; var iv=setInterval(function(){ t+=40; if (document.querySelector('#missedPick') || t>4000){ clearInterval(iv); r(); } }, 40); });
+            var pickPresent = !!document.querySelector('#missedPick');
+            var pickText = pickPresent ? (document.querySelector('#missedPick .item-l .n')||{}).textContent : '';
+            if (pickPresent) document.querySelector('#missedPick').click();
+            var rowsAfterAdd = document.querySelectorAll('#resultItems .item-row').length;
+            var itemCount = window.analyzeResult.items.length;
+            var multCount = window.analyzeResult.mults.length;
+            var totalTextAfterAdd = document.getElementById('totalKcal').textContent;
+            var mealName = document.getElementById('mealName').value;
+            var formResetToBtn = !!document.getElementById('addMissedBtn');
+            // portion +/- still works on the NEWLY added item (index 1)
+            var pBtn = document.querySelector('#resultItems .pbtn[data-i="1"][data-d="1"]');
+            if (pBtn) pBtn.click();
+            var multAfterPortion = window.analyzeResult.mults[1];
+            var totalAfterPortion = document.getElementById('totalKcal').textContent;
+            // remove still works on the newly added item
+            var delBtn = document.querySelector('#resultItems .item-del[data-del="1"]');
+            if (delBtn) delBtn.click();
+            var itemCountAfterDel = window.analyzeResult.items.length;
+            return { hasAddBtn: hasAddBtn, hasForm: hasForm, pickPresent: pickPresent, pickText: pickText,
+                      rowsAfterAdd: rowsAfterAdd, itemCount: itemCount, multCount: multCount,
+                      totalTextAfterAdd: totalTextAfterAdd, mealName: mealName, formResetToBtn: formResetToBtn,
+                      multAfterPortion: multAfterPortion, totalAfterPortion: totalAfterPortion, itemCountAfterDel: itemCountAfterDel };
+        }""")
+        check("scan results: '+ Add an item the camera missed' searches USDA + appends to the SAME meal, totals recalc",
+              addmiss["hasAddBtn"] and addmiss["hasForm"] and addmiss["pickPresent"] and "Cheddar" in addmiss["pickText"]
+              and addmiss["rowsAfterAdd"] == 2 and addmiss["itemCount"] == 2 and addmiss["multCount"] == 2
+              and "623" in addmiss["totalTextAfterAdd"] and "Cheddar" in addmiss["mealName"] and addmiss["formResetToBtn"],
+              "rows=" + str(addmiss["rowsAfterAdd"]) + " items=" + str(addmiss["itemCount"]) + " total=" + str(addmiss["totalTextAfterAdd"]) + " meal=" + str(addmiss["mealName"]))
+        check("scan results: portion +/- and Remove still work on a just-added missed item (add-only, no regression)",
+              addmiss["multAfterPortion"] == 1.25 and "724" in addmiss["totalAfterPortion"] and addmiss["itemCountAfterDel"] == 1,
+              "multAfterPortion=" + str(addmiss["multAfterPortion"]) + " totalAfterPortion=" + str(addmiss["totalAfterPortion"]) + " itemsAfterDel=" + str(addmiss["itemCountAfterDel"]))
+
+        # ADD A MISSED ITEM -> quick-add fallback when the USDA search can't find it
+        quickadd = page.evaluate("""async () => {
+            window.analyzeResult = { items:[
+              {name:'Scrambled Eggs', calories:220, protein_g:14, carbs_g:2, fat_g:16, fiber_g:0, sugar_g:1, sat_fat_g:5, sodium_mg:380}
+            ], mults:[1],
+            total:{calories:220,protein_g:14,carbs_g:2,fat_g:16,fiber_g:0,sugar_g:1,sat_fat_g:5,sodium_mg:380,band_pct:0},
+            health_score:70, quality_grade:'B', verdict:'', coach_tip:'', swaps:[], good_flags:[], bad_flags:[], satiety:'' };
+            renderScanCard(); renderAddMissedRow();
+            document.getElementById('addMissedBtn').click();
+            document.getElementById('missedQ').value = 'mystery sauce quickfail';
+            document.getElementById('missedSearchBtn').click();
+            await new Promise(function(r){ var t=0; var iv=setInterval(function(){ t+=40; if (document.getElementById('missedQuickBtn') || t>4000){ clearInterval(iv); r(); } }, 40); });
+            var quickBtnPresent = !!document.getElementById('missedQuickBtn');
+            if (quickBtnPresent) document.getElementById('missedQuickBtn').click();
+            var formPresent = !!document.getElementById('missedQaAddBtn');
+            if (document.getElementById('missedQaName')) document.getElementById('missedQaName').value = 'Mystery Sauce';
+            if (document.getElementById('missedQaCal')) document.getElementById('missedQaCal').value = '120';
+            if (document.getElementById('missedQaAddBtn')) document.getElementById('missedQaAddBtn').click();
+            var itemCount = window.analyzeResult.items.length;
+            var lastItem = window.analyzeResult.items[1] || {};
+            var totalText = document.getElementById('totalKcal').textContent;
+            return { quickBtnPresent: quickBtnPresent, formPresent: formPresent, itemCount: itemCount, lastName: lastItem.name, lastCal: lastItem.calories, totalText: totalText };
+        }""")
+        check("scan results: 'quick add manually' fallback appends a name+calories item when USDA search finds nothing",
+              quickadd["quickBtnPresent"] and quickadd["formPresent"] and quickadd["itemCount"] == 2
+              and quickadd["lastName"] == "Mystery Sauce" and quickadd["lastCal"] == 120 and "340" in quickadd["totalText"],
+              "items=" + str(quickadd["itemCount"]) + " last=" + str(quickadd["lastName"]) + "/" + str(quickadd["lastCal"]) + " total=" + str(quickadd["totalText"]))
 
         # ACCESSIBILITY + ROUTE-CORRIDOR UI
         ts = page.evaluate("""() => {

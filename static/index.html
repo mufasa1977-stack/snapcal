@@ -1311,6 +1311,7 @@
       <button class="scan-x" id="resultClose" type="button" aria-label="Close">&times;</button>
       <div class="sec-title" style="margin:0 0 8px">Detected food</div>
       <div id="resultItems"></div>
+      <div id="addMissedWrap"></div>
       <div class="total-row">
         <div>Total<div class="m" id="totalMacros"></div></div>
         <div id="totalKcal" style="font-variant-numeric:tabular-nums"></div>
@@ -3198,6 +3199,7 @@ $("#analyzeBtn").addEventListener("click", async function(){
     analyzeResult = normalizeResult(data);
     analyzeResult.mults = analyzeResult.items.map(function(){ return 1; });
     renderScanCard();
+    renderAddMissedRow();
     $("#mealName").value = analyzeResult.items.map(function(it){ return it.name; }).join(", ") || "Meal";
     if (!isPremium()) bumpScan();
     $("#resultCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -3553,6 +3555,182 @@ $("#resultItems").addEventListener("click", function(e){
   renderScanCard();
 });
 
+/* ---------------- Add an item the camera missed (e.g. caught the eggs, not the cheese) ----------------
+   Reuses the EXISTING /api/nutrition USDA name-search (works without any Gemini/AI credits) to find real
+   numbers for the missed item, then appends it to analyzeResult so it logs as part of the SAME meal.
+   Falls back to a manual quick-add when the search can't find it. Search fetch is time-boxed (~8s) so
+   a slow/cold server can never leave the button stuck spinning. */
+var _missedSearchAbort = null;
+
+function renderAddMissedRow(){
+  var wrap = $("#addMissedWrap"); if (!wrap) return;
+  wrap.innerHTML =
+    '<button type="button" id="addMissedBtn" style="width:100%;margin-top:10px;border:1.5px solid var(--brand);' +
+    'background:var(--soft);color:var(--brand);font-weight:800;border-radius:11px;padding:11px 12px;' +
+    'cursor:pointer;font-family:inherit;font-size:13.5px">＋ Add an item the camera missed</button>';
+  var b = $("#addMissedBtn");
+  if (b) b.addEventListener("click", openMissedSearch);
+}
+
+function quickAddToggleHTML(){
+  return '<button type="button" id="missedQuickBtn" style="margin-top:10px;border:none;background:none;' +
+    'color:var(--brand);font-size:12.5px;font-weight:700;cursor:pointer;padding:4px 0;font-family:inherit">' +
+    'Can&rsquo;t find it? Quick add manually</button>';
+}
+
+function wireQuickAdd(prefillName){
+  var qb = $("#missedQuickBtn"); if (!qb) return;
+  qb.addEventListener("click", function(){
+    var res = $("#missedResults"); if (!res) return;
+    res.innerHTML =
+      '<div style="margin-top:2px">' +
+        '<label class="field-lbl" for="missedQaName" style="margin-top:6px">Food name</label>' +
+        '<input class="txt" id="missedQaName" type="text" autocomplete="off" value="' + esc(prefillName || "") + '">' +
+        '<div style="display:flex;gap:8px;margin-top:10px">' +
+          '<div style="flex:1"><label class="field-lbl" for="missedQaCal" style="margin-top:0">Calories</label>' +
+            '<input class="txt" id="missedQaCal" type="number" inputmode="numeric" min="0" placeholder="required"></div>' +
+          '<div style="flex:1"><label class="field-lbl" for="missedQaProtein" style="margin-top:0">Protein (g)</label>' +
+            '<input class="txt" id="missedQaProtein" type="number" inputmode="numeric" min="0" placeholder="opt"></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:10px">' +
+          '<div style="flex:1"><label class="field-lbl" for="missedQaCarb" style="margin-top:0">Carbs (g)</label>' +
+            '<input class="txt" id="missedQaCarb" type="number" inputmode="numeric" min="0" placeholder="opt"></div>' +
+          '<div style="flex:1"><label class="field-lbl" for="missedQaFat" style="margin-top:0">Fat (g)</label>' +
+            '<input class="txt" id="missedQaFat" type="number" inputmode="numeric" min="0" placeholder="opt"></div>' +
+        '</div>' +
+        '<button class="btn btn-dark" id="missedQaAddBtn" type="button" style="margin-top:12px">Add this item</button>' +
+      '</div>';
+    var nameInp = $("#missedQaName"); if (nameInp) nameInp.focus();
+    var addB = $("#missedQaAddBtn");
+    if (addB) addB.addEventListener("click", function(){
+      var nm = ($("#missedQaName").value || "").trim();
+      var cal = Number($("#missedQaCal").value);
+      if (!nm){ toast("Enter a food name", true); return; }
+      if (!cal || cal <= 0){ toast("Enter calories", true); return; }
+      appendMissedItem({
+        name: nm, qty: "",
+        calories: cal,
+        protein_g: Number($("#missedQaProtein").value) || 0,
+        carbs_g: Number($("#missedQaCarb").value) || 0,
+        fat_g: Number($("#missedQaFat").value) || 0,
+        fiber_g: 0, sugar_g: 0, sat_fat_g: 0, sodium_mg: 0
+      });
+    });
+  });
+}
+
+function openMissedSearch(){
+  var wrap = $("#addMissedWrap"); if (!wrap) return;
+  wrap.innerHTML =
+    '<div class="nf-card" id="missedForm" style="margin-top:10px">' +
+      '<label class="field-lbl" for="missedQ" style="margin-top:0">What did the camera miss?</label>' +
+      '<div style="display:flex;gap:8px">' +
+        '<input class="txt" id="missedQ" type="text" autocomplete="off" placeholder="e.g. cheddar cheese" style="flex:1">' +
+        '<button class="btn btn-dark" id="missedSearchBtn" type="button" style="margin-top:0;padding:0 18px;white-space:nowrap">Search</button>' +
+      '</div>' +
+      '<div id="missedResults" style="margin-top:10px"></div>' +
+      '<button type="button" id="missedCancelBtn" style="margin-top:10px;border:none;background:none;' +
+      'color:var(--ink2);font-size:12.5px;font-weight:700;cursor:pointer;padding:4px 0;font-family:inherit">Cancel</button>' +
+    '</div>';
+  var inp = $("#missedQ");
+  if (inp){
+    inp.focus();
+    inp.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); runMissedSearch(); } });
+  }
+  var sb = $("#missedSearchBtn"); if (sb) sb.addEventListener("click", runMissedSearch);
+  var cb = $("#missedCancelBtn");
+  if (cb) cb.addEventListener("click", function(){
+    if (_missedSearchAbort) { try { _missedSearchAbort.abort(); } catch(e){} }
+    renderAddMissedRow();
+  });
+}
+
+function runMissedSearch(){
+  var inp = $("#missedQ"), res = $("#missedResults");
+  var q = (inp && inp.value || "").trim();
+  if (!q){ if (inp) inp.focus(); return; }
+  var sb = $("#missedSearchBtn");
+  if (sb){ sb.disabled = true; sb.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-color:rgba(255,255,255,.35);border-top-color:#fff;vertical-align:-3px"></span>'; }
+  if (res) res.innerHTML = '<div class="nf-empty" style="padding:8px 0">Checking the USDA database&hellip;</div>';
+
+  if (_missedSearchAbort) { try { _missedSearchAbort.abort(); } catch(e){} }
+  var ac = ("AbortController" in window) ? new AbortController() : null;
+  _missedSearchAbort = ac;
+  var timedOut = false;
+  var to = ac ? setTimeout(function(){ timedOut = true; try { ac.abort(); } catch(e){} }, 8000) : null;
+
+  function stopSpin(){ if (sb){ sb.disabled = false; sb.textContent = "Search"; } }
+
+  fetch(API_BASE + "/api/nutrition?q=" + encodeURIComponent(q), {
+    headers: { "X-Device-Id": DEVICE_ID },
+    signal: ac ? ac.signal : undefined
+  }).then(function(r){
+    return r.json().catch(function(){ return null; }).then(function(d){ return { ok: r.ok, data: d }; });
+  }).then(function(out){
+    clearTimeout(to);
+    stopSpin();
+    if (!res) return;
+    if (!out.ok || !out.data || out.data.error || !out.data.nutrients || !Object.keys(out.data.nutrients).length){
+      res.innerHTML = '<div class="nf-empty" style="padding:8px 0">No USDA match for &ldquo;' + esc(q) +
+        '&rdquo; — try a simpler name, or use quick add below.</div>' + quickAddToggleHTML();
+      wireQuickAdd(q);
+      return;
+    }
+    var d = out.data, n = d.nutrients;
+    res.innerHTML =
+      '<div class="item-row" id="missedPick" role="button" tabindex="0" style="cursor:pointer;border-bottom:none;padding:8px 0">' +
+        '<div class="item-l"><div class="n">' + esc(d.food) + '</div><div class="q">' + esc(d.serving) + '</div></div>' +
+        '<div class="item-r"><div class="c">' + fmtNum(Math.round(n.calories || 0)) + ' Cal</div>' +
+          '<div class="m">P ' + Math.round(n.protein_g || 0) + 'g &middot; C ' + Math.round(n.carbs_g || 0) +
+          'g &middot; F ' + Math.round(n.fat_g || 0) + 'g</div></div>' +
+      '</div>' +
+      '<div class="goal-desc" style="margin:4px 2px 0">Tap to add this to your plate.</div>' +
+      quickAddToggleHTML();
+    function pickIt(){
+      appendMissedItem({
+        name: d.food, qty: d.serving,
+        calories: n.calories || 0, protein_g: n.protein_g || 0, carbs_g: n.carbs_g || 0, fat_g: n.fat_g || 0,
+        fiber_g: n.fiber_g || 0, sugar_g: n.sugar_g || 0, sat_fat_g: n.sat_fat_g || 0, sodium_mg: n.sodium_mg || 0
+      });
+    }
+    var pick = $("#missedPick");
+    if (pick){
+      pick.addEventListener("click", pickIt);
+      pick.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); pickIt(); } });
+    }
+    wireQuickAdd(q);
+  }).catch(function(){
+    clearTimeout(to);
+    stopSpin();
+    if (!res) return;
+    var msg = timedOut
+      ? "That took too long — try again, or use quick add below."
+      : "Couldn&rsquo;t reach the USDA database right now — try again, or use quick add below.";
+    res.innerHTML = '<div class="nf-empty" style="padding:8px 0">' + msg + '</div>' + quickAddToggleHTML();
+    wireQuickAdd(q);
+  });
+}
+
+/* Appends a found/quick-added item to the SAME in-progress scan (add-only — never touches existing items),
+   recalcs via the existing effectiveResult()/renderScanCard() pipeline, and hands the whole plate back to
+   the untouched #addBtn "Add to today's log" flow as ONE meal. */
+function appendMissedItem(item){
+  if (!analyzeResult) return;
+  if (!analyzeResult.mults) analyzeResult.mults = analyzeResult.items.map(function(){ return 1; });
+  analyzeResult.items.push({
+    name: String(item.name || "Food item"), qty: String(item.qty || ""),
+    calories: int(item.calories), protein_g: int(item.protein_g),
+    carbs_g: int(item.carbs_g), fat_g: int(item.fat_g),
+    fiber_g: int(item.fiber_g), sugar_g: int(item.sugar_g),
+    sat_fat_g: int(item.sat_fat_g), sodium_mg: int(item.sodium_mg)
+  });
+  analyzeResult.mults.push(1);
+  renderScanCard();
+  renderAddMissedRow();
+  var mn = $("#mealName"); if (mn) mn.value = analyzeResult.items.map(function(it){ return it.name; }).join(", ") || "Meal";
+  toast("Added " + item.name);
+}
+
 $("#resultDetail").addEventListener("click", function(e){
   if (e.target.closest("#coachUnlock")) openPaywall();
 });
@@ -3596,6 +3774,8 @@ function resetScan(){
   selectedFile = null;
   analyzeResult = null;
   if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+  if (_missedSearchAbort) { try { _missedSearchAbort.abort(); } catch(e){} _missedSearchAbort = null; }
+  var amw = $("#addMissedWrap"); if (amw) amw.innerHTML = "";
   $("#previewImg").src = "";
   $("#previewCard").style.display = "none";
   $("#resultCard").style.display = "none";
