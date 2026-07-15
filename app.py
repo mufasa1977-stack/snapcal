@@ -106,7 +106,7 @@ CORS_ORIGINS = [
 PROFILE_DEFAULTS = {"daily_calories": 2000, "protein_g": 150, "carbs_g": 200, "fat_g": 65}
 # Body fields synced from "About you" so Coach Cal can personalise across devices (not just localStorage).
 PROFILE_NUM_KEYS = ("age", "height_in", "cur_weight", "goal_weight")
-PROFILE_TEXT_KEYS = ("sex", "activity", "goal_dir")
+PROFILE_TEXT_KEYS = ("sex", "activity", "goal_dir", "coach_intensity")
 MACRO_KEYS = ("calories", "protein_g", "carbs_g", "fat_g")
 
 # Provenance accuracy ladder (see ACCURACY_ENGINE.md). EXACT = read off a real label or a
@@ -2087,6 +2087,18 @@ def chat():
                    "a limit), gentle non-judgmental encouragement, regular balanced meals. Never tell them to eat less "
                    "or restrict. If they sound in distress about food or body, gently suggest the NEDA Helpline "
                    "(1-800-931-2237).")
+    # Coaching-intensity dial, set once at onboarding (the quiz's "how do you want Coach Cal to talk to you"
+    # question). "middle" / unset = today's default tone, unchanged — this only adds a clause for the two
+    # non-default picks, so existing users who never saw the quiz get byte-identical behavior.
+    intensity = str(d.get("intensity") or "").strip().lower()
+    if intensity == "hard":
+        system += ("\n\nCOACHING STYLE: the user asked to be coached EXTRA HARD. Be direct and hold them "
+                   "accountable — call out slipping patterns plainly, don't soften a miss into a non-issue, push "
+                   "them to commit to a concrete next action. Stay respectful, never insulting or shaming.")
+    elif intensity == "soft":
+        system += ("\n\nCOACHING STYLE: the user asked to be coached EXTRA SOFT. Be gentle, patient, and "
+                   "encouraging — celebrate small wins, frame misses as normal and fixable, never scold, pressure, "
+                   "or use guilt.")
     fast = d.get("fasting")
     if isinstance(fast, dict) and fast.get("hours"):
         el = _int(fast.get("elapsed_min"), 0)

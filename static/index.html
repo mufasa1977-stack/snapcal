@@ -691,6 +691,30 @@
   .locp-body b{color:var(--ink);font-weight:700}
   .locp-allow{display:block;width:100%;border:none;background:var(--brand);color:#fff;font-weight:800;font-size:15px;border-radius:13px;padding:13px;cursor:pointer;font-family:inherit}
   .locp-skip{display:block;width:100%;border:none;background:transparent;color:var(--ink3);font-weight:600;font-size:14px;padding:11px;margin-top:4px;cursor:pointer;font-family:inherit}
+  /* ---------- QUIZ ONBOARDING (2026-07-15): confessional quiz + plan reveal + hard paywall, new users only ---------- */
+  .qz-overlay{position:fixed;inset:0;z-index:10000;background:var(--bg);display:none;flex-direction:column;overflow-y:auto}
+  .qz-top{display:flex;align-items:center;gap:10px;padding:16px 16px 6px;position:sticky;top:0;background:var(--bg);z-index:2}
+  .qz-back{width:34px;height:34px;flex:none;border:none;background:var(--card);border-radius:50%;color:var(--ink2);font-size:20px;font-weight:800;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.08);font-family:inherit;line-height:1}
+  .qz-skip{flex:none;border:none;background:none;color:var(--ink3);font-size:13px;font-weight:650;cursor:pointer;font-family:inherit}
+  .qz-bar{flex:1;height:6px;border-radius:6px;background:var(--track);overflow:hidden}
+  .qz-bar-fg{height:100%;background:var(--brand);border-radius:6px;transition:width .35s ease}
+  .qz-body{flex:1;display:flex;flex-direction:column;justify-content:center;padding:18px 20px 40px;max-width:420px;margin:0 auto;width:100%;box-sizing:border-box}
+  .qz-hero{font-size:44px;text-align:center;margin-bottom:6px}
+  .qz-h1{font-size:23px;font-weight:800;color:var(--ink);text-align:center;margin-bottom:8px}
+  .qz-h2{font-size:19px;font-weight:800;color:var(--ink);margin-bottom:14px;line-height:1.3}
+  .qz-sub{font-size:14px;color:var(--ink2);line-height:1.5;margin-bottom:16px}
+  .qz-body>.qz-sub:first-child,.qz-hero+.qz-h1+.qz-sub{text-align:center}
+  .qz-input{width:100%;text-align:center;font-size:22px;font-weight:700;margin-bottom:18px}
+  .qz-opt{margin-bottom:10px}
+  .qz-plan-card{background:var(--card);border-radius:16px;padding:22px 18px;text-align:center;box-shadow:var(--shadow);margin-bottom:16px}
+  .qz-plan-cal{font-size:34px;font-weight:800;color:var(--ink)}
+  .qz-plan-cal span{font-size:14px;font-weight:650;color:var(--ink2)}
+  .qz-macro-row{display:flex;justify-content:center;gap:16px;margin-top:14px;flex-wrap:wrap}
+  .qz-macro{font-size:13.5px;font-weight:700;color:var(--ink2);display:flex;align-items:center;gap:6px}
+  .qz-macro em{font-style:normal;color:var(--ink3);font-weight:600}
+  .qz-dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+  .qz-coach-line{display:flex;align-items:center;gap:10px;background:var(--soft);border-radius:14px;padding:13px 14px;font-size:13.5px;color:var(--ink);line-height:1.4;margin-bottom:18px}
+  .qz-cal-ic{flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center}
   .cd-dir-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin:12px 0 2px;border:none;background:var(--brand);color:#fff;font-weight:800;font-size:15px;border-radius:13px;padding:13px;text-decoration:none;box-sizing:border-box}
   .cd-dir-btn:active{opacity:.85}
   .scan-x{position:absolute;top:10px;right:10px;width:34px;height:34px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:22px;line-height:34px;text-align:center;cursor:pointer;z-index:6;padding:0;font-family:inherit;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);box-shadow:0 2px 8px rgba(0,0,0,.2)}
@@ -3753,6 +3777,273 @@ function showOnboarding(){
   ov.querySelector(".locp-skip").onclick = function(){ done(); };
 }
 
+/* ============================================================================================
+   QUIZ ONBOARDING (built 2026-07-15) — hard-paywall confessional quiz for BRAND-NEW users.
+   Lane 3 / genome law: quiz-front onboarding + hard paywall ≈5x conversion vs freemium.
+   Fires ONLY on a device that has never onboarded (no snapcal_onboarded flag) — see the init() gate
+   below. showOnboarding() above is left completely untouched (still the regression gate's target +
+   still callable) so nothing already verified changes for existing/already-onboarded users.
+   Flip QUIZ_ONBOARDING_ENABLED=false to instantly roll back to the old single-card onboarding
+   without touching any logic — a one-line kill switch if something's wrong post-ship.
+   ============================================================================================ */
+var QUIZ_ONBOARDING_ENABLED = true;
+var QZ_STEPS = ["intro","goal","sex","age","height","weight_cur","weight_goal","activity","habits","derail","intensity","perms","reveal","paywall"];
+var QZ_COACH_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" fill="#fff" aria-hidden="true"><rect x="2.5" y="9" width="8.6" height="5" rx="2.2"/><path fill-rule="evenodd" clip-rule="evenodd" d="M14 7a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm0 4.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg>';
+var QZ_GOAL = [
+  { v: "lose", t: "🔥 Lose fat", d: "Drop weight, stay full on protein" },
+  { v: "recomp", t: "💪 Lose + tone", d: "Lean out and keep the muscle" },
+  { v: "maintain", t: "⚖️ Maintain", d: "Stay right where I am" },
+  { v: "gain", t: "📈 Build muscle", d: "Eat to grow, train to match" }
+];
+var QZ_SEX = [ { v: "male", t: "Male" }, { v: "female", t: "Female" } ];
+var QZ_ACTIVITY = [
+  { v: "sedentary", t: "Sedentary", d: "Desk job, little exercise" },
+  { v: "light", t: "Lightly active", d: "Light exercise 1-3 days/week" },
+  { v: "moderate", t: "Moderately active", d: "Moderate exercise 3-5 days/week" },
+  { v: "very", t: "Very active", d: "Hard exercise 6-7 days/week" },
+  { v: "extra", t: "Extra active", d: "Physical job or training 2x/day" }
+];
+var QZ_HABITS = [
+  { v: "consistent", t: "Pretty consistent", d: "I eat around the same times most days" },
+  { v: "graze", t: "I graze all day", d: "Little bites here and there, hard to track" },
+  { v: "skip_binge", t: "I skip meals, then overeat", d: "Nothing till afternoon, then it catches up" },
+  { v: "eat_out", t: "I eat out a lot", d: "Restaurants, takeout, on the road" }
+];
+var QZ_DERAIL = [
+  { v: "late_night", t: "Late-night snacking", d: "The kitchen calls after 9pm" },
+  { v: "travel", t: "Eating out & travel", d: "Hard to stay on track away from home" },
+  { v: "stress", t: "Stress or emotional eating", d: "Food when I'm not really hungry" },
+  { v: "time", t: "No time to plan", d: "Whatever's fastest wins" }
+];
+var QZ_DERAIL_TXT = { late_night: "late-night snacking", travel: "eating out & travel", stress: "stress eating", time: "having time to plan" };
+var QZ_INTENSITY = [
+  { v: "hard", t: "Extra hard", d: "Push me, hold me to it — no excuses" },
+  { v: "middle", t: "Right in the middle", d: "Firm but fair — the default" },
+  { v: "soft", t: "Extra soft", d: "Gentle, encouraging, never pushy" }
+];
+var _qz = { i: 0, stepId: "intro", a: {} };
+function _qzOpt(o, groupVal){
+  return '<button type="button" class="pw-plan qz-opt" data-qv="' + o.v + '" aria-pressed="' + (groupVal === o.v ? "true" : "false") + '">' +
+    '<div class="pw-plan-row"><span class="pw-plan-name">' + esc(o.t) + '</span></div>' +
+    (o.d ? '<div class="pw-plan-sub">' + esc(o.d) + '</div>' : '') + '</button>';
+}
+function _qzShell(bodyHtml, opts){
+  opts = opts || {};
+  var total = QZ_STEPS.length - 2;   /* reveal + paywall aren't "question" steps for the progress bar */
+  var stepIx = Math.min(_qz.i, total);
+  var pct = Math.max(4, Math.round(stepIx / total * 100));
+  return '<div class="qz-top">' +
+      (opts.back === false ? '<span style="width:34px"></span>' : '<button type="button" class="qz-back" id="qzBack" aria-label="Back">‹</button>') +
+      '<div class="qz-bar"><div class="qz-bar-fg" style="width:' + pct + '%"></div></div>' +
+      '<span style="width:34px"></span>' +
+    '</div>' +
+    '<div class="qz-body">' + bodyHtml + '</div>';
+}
+function _qzNextIndex(){
+  var i = _qz.i + 1;
+  if (QZ_STEPS[i] === "weight_goal" && _qz.a.goal === "maintain") i++;   // skip goal-weight for Maintain
+  return i;
+}
+function _qzPrevIndex(){
+  var i = _qz.i - 1;
+  if (QZ_STEPS[i] === "weight_goal" && _qz.a.goal === "maintain") i--;
+  return Math.max(0, i);
+}
+function _qzAdvance(){ _qzGoto(_qzNextIndex()); }
+function _qzGoto(i){
+  if (i >= QZ_STEPS.length){ _qzFinish(true); return; }
+  _qz.i = i; _qz.stepId = QZ_STEPS[i];
+  if (_qz.stepId === "reveal") _qzApplyAndCalc();
+  _qzRender();
+}
+function _qzPickChoice(v){
+  var map = { goal: "goal", sex: "sex", activity: "activity", habits: "habits", derail: "derail", intensity: "intensity" };
+  var key = map[_qz.stepId]; if (!key) return;
+  _qz.a[key] = v;
+  _qzAdvance();
+}
+function _qzOnNext(){
+  var id = _qz.stepId;
+  if (id === "intro"){ _qzAdvance(); return; }
+  if (id === "age"){
+    var age = int($("#qzAge").value);
+    if (!age || age < 13 || age > 100){ toast("Enter a valid age", true); return; }
+    _qz.a.age = age; _qzAdvance(); return;
+  }
+  if (id === "height"){
+    var ft = int($("#qzFt").value), inch = int($("#qzIn").value) || 0;
+    if (!ft || ft < 3 || ft > 8){ toast("Enter your height", true); return; }
+    _qz.a.ft = ft; _qz.a.inch = inch; _qzAdvance(); return;
+  }
+  if (id === "weight_cur"){
+    var w = parseFloat($("#qzWCur").value);
+    if (!w || w < 50){ toast("Enter your current weight", true); return; }
+    _qz.a.wcur = w; _qzAdvance(); return;
+  }
+  if (id === "weight_goal"){
+    var wg = parseFloat($("#qzWGoal").value);
+    if (!wg || wg < 50){ toast("Enter your goal weight", true); return; }
+    _qz.a.wgoal = wg; _qzAdvance(); return;
+  }
+  if (id === "perms"){
+    try { Promise.resolve(requestAllPerms()).catch(function(){}); } catch(e){}   // fire in the background, never block (same lesson as showOnboarding)
+    _qzAdvance(); return;
+  }
+  if (id === "reveal"){ _qzAdvance(); return; }
+}
+/* Feed the quiz answers into the SAME "About You" calc the Profile tab uses (calcTargets) — reuses the
+   exact Mifflin-St Jeor math + persistence (localStorage + /api/profile) instead of rebuilding it. */
+function _qzApplyAndCalc(){
+  _pSex = (_qz.a.sex === "female") ? "female" : "male"; if (typeof _segSet === "function") _segSet("pSexSeg", "sex", _pSex);
+  _pGoalDir = _qz.a.goal || "lose"; if (typeof _segSet === "function") _segSet("pGoalSeg", "pg", _pGoalDir);
+  if ($("#pAge")) $("#pAge").value = _qz.a.age || "";
+  if ($("#pHeightFt")) $("#pHeightFt").value = _qz.a.ft || "";
+  if ($("#pHeightIn")) $("#pHeightIn").value = _qz.a.inch || 0;
+  if ($("#pCurWeight")) $("#pCurWeight").value = _qz.a.wcur || "";
+  if ($("#pGoalWeight")) $("#pGoalWeight").value = _qz.a.wgoal || _qz.a.wcur || "";
+  if ($("#pActivity")) $("#pActivity").value = _qz.a.activity || "sedentary";
+  if (_qz.a.intensity){
+    try { localStorage.setItem("snapcal_coach_intensity", _qz.a.intensity); } catch(e){}
+    try { api("/api/profile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ coach_intensity: _qz.a.intensity }) }); } catch(e){}
+  }
+  try { calcTargets(); } catch(e){}
+}
+function _qzRevealBody(){
+  var cal = int($("#pCal") ? $("#pCal").value : 0), pro = int($("#pPro") ? $("#pPro").value : 0),
+      carb = int($("#pCarb") ? $("#pCarb").value : 0), fat = int($("#pFat") ? $("#pFat").value : 0);
+  var derailTxt = QZ_DERAIL_TXT[_qz.a.derail] || "staying consistent";
+  return (
+    '<div class="qz-hero">🎉</div><div class="qz-h1">Your plan is ready</div>' +
+    '<div class="qz-plan-card">' +
+      '<div class="qz-plan-cal">' + fmtNum(cal) + ' <span>Cal / day</span></div>' +
+      '<div class="qz-macro-row">' +
+        '<div class="qz-macro"><span class="qz-dot" style="background:#F26D6D"></span>' + pro + 'g <em>protein</em></div>' +
+        '<div class="qz-macro"><span class="qz-dot" style="background:#E8A24C"></span>' + carb + 'g <em>carbs</em></div>' +
+        '<div class="qz-macro"><span class="qz-dot" style="background:#5B8DEF"></span>' + fat + 'g <em>fat</em></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="qz-coach-line"><span class="qz-cal-ic" style="background:linear-gradient(135deg,#60A5FA,#2563EB)">' + QZ_COACH_SVG + '</span>' +
+      '<span>Coach Cal here — since ' + esc(derailTxt) + ' is your thing, I\'ll check in right when it matters most.</span></div>' +
+    '<button class="btn btn-dark" id="qzNext" type="button">See what\'s unlocked</button>'
+  );
+}
+function _qzPaywallBody(){
+  var html = paywallHtml({ showLater: false });
+  if (typeof CLOSED_TESTING !== "undefined" && CLOSED_TESTING){
+    html += '<button type="button" id="qzDevSkip" style="border:none;background:none;color:var(--ink3);font-family:inherit;font-size:12px;font-weight:650;width:100%;margin-top:10px;cursor:pointer;opacity:.75">⚙ Dev bypass — closed testing only, skip paywall</button>';
+  }
+  return html;
+}
+function _qzRender(){
+  var ov = document.getElementById("qzOnboard"); if (!ov) return;
+  var body = "", opts = { back: _qz.i > 0 };
+  switch (_qz.stepId){
+    case "intro":
+      opts.back = false;
+      body = '<div class="qz-hero">🎯</div><div class="qz-h1">Let\'s build YOUR plan</div>' +
+        '<div class="qz-sub" style="text-align:center">A few quick questions — then Coach Cal has your personalized calorie &amp; macro targets, ready to go. Takes about a minute.</div>' +
+        '<button class="btn btn-dark" id="qzNext" type="button">Let\'s go</button>';
+      break;
+    case "goal":
+      body = '<div class="qz-h2">What\'s your main goal right now?</div>' + QZ_GOAL.map(function(o){ return _qzOpt(o, _qz.a.goal); }).join("");
+      break;
+    case "sex":
+      body = '<div class="qz-h2">Which fits you best?</div><div class="qz-sub">Used to calculate your calorie targets accurately.</div>' +
+        QZ_SEX.map(function(o){ return _qzOpt(o, _qz.a.sex); }).join("");
+      break;
+    case "age":
+      body = '<div class="qz-h2">How old are you?</div>' +
+        '<input class="txt qz-input" id="qzAge" type="number" inputmode="numeric" min="13" max="100" placeholder="Age" value="' + (_qz.a.age || "") + '">' +
+        '<button class="btn btn-dark" id="qzNext" type="button">Next</button>';
+      break;
+    case "height":
+      body = '<div class="qz-h2">How tall are you?</div>' +
+        '<div style="display:flex;gap:8px;margin-bottom:18px"><input class="txt qz-input" id="qzFt" style="margin-bottom:0" type="number" inputmode="numeric" placeholder="ft" value="' + (_qz.a.ft || "") + '">' +
+        '<input class="txt qz-input" id="qzIn" style="margin-bottom:0" type="number" inputmode="numeric" placeholder="in" value="' + (_qz.a.inch || "") + '"></div>' +
+        '<button class="btn btn-dark" id="qzNext" type="button">Next</button>';
+      break;
+    case "weight_cur":
+      body = '<div class="qz-h2">What\'s your current weight?</div>' +
+        '<input class="txt qz-input" id="qzWCur" type="number" inputmode="decimal" placeholder="lb" value="' + (_qz.a.wcur || "") + '">' +
+        '<button class="btn btn-dark" id="qzNext" type="button">Next</button>';
+      break;
+    case "weight_goal":
+      body = '<div class="qz-h2">What\'s your goal weight?</div>' +
+        '<input class="txt qz-input" id="qzWGoal" type="number" inputmode="decimal" placeholder="lb" value="' + (_qz.a.wgoal || "") + '">' +
+        '<button class="btn btn-dark" id="qzNext" type="button">Next</button>';
+      break;
+    case "activity":
+      body = '<div class="qz-h2">How active are you day to day?</div>' + QZ_ACTIVITY.map(function(o){ return _qzOpt(o, _qz.a.activity); }).join("");
+      break;
+    case "habits":
+      body = '<div class="qz-h2">How would you describe your eating lately?</div><div class="qz-sub">Be honest — no judgment, it just helps Coach Cal understand you.</div>' +
+        QZ_HABITS.map(function(o){ return _qzOpt(o, _qz.a.habits); }).join("");
+      break;
+    case "derail":
+      body = '<div class="qz-h2">What usually throws you off track?</div>' + QZ_DERAIL.map(function(o){ return _qzOpt(o, _qz.a.derail); }).join("");
+      break;
+    case "intensity":
+      body = '<div class="qz-h2">How do you want Coach Cal to talk to you?</div><div class="qz-sub">Extra hard, extra soft, or right down the middle — your call.</div>' +
+        QZ_INTENSITY.map(function(o){ return _qzOpt(o, _qz.a.intensity); }).join("");
+      break;
+    case "perms":
+      body = '<div class="qz-hero">👋</div><div class="qz-h1">One more thing</div>' +
+        '<div class="qz-sub" style="text-align:left">SnapCal uses:' +
+        '<div style="margin:12px 0 4px;display:flex;flex-direction:column;gap:9px">' +
+          '<div>📷 <b>Camera</b> — scan your food &amp; barcodes</div>' +
+          '<div>📍 <b>Location</b> — healthy spots near you &amp; on your drive</div>' +
+          '<div>🔔 <b>Notifications</b> — Coach Cal\'s daily check-ins</div>' +
+        '</div>Everything stays <b>private</b> — never shared or sold. Change these anytime in Settings.</div>' +
+        '<button class="btn btn-dark" id="qzNext" type="button">Enable &amp; continue</button>';
+      break;
+    case "reveal":
+      opts.back = false; body = _qzRevealBody();
+      break;
+    case "paywall":
+      opts.back = false; body = _qzPaywallBody();
+      break;
+  }
+  ov.innerHTML = _qzShell(body, opts);
+  if (_qz.stepId === "paywall" && typeof selectPlan === "function") selectPlan(_pwPlan);
+}
+function _qzFinish(completed){
+  var ov = document.getElementById("qzOnboard"); if (ov) ov.style.display = "none";
+  lsSet("snapcal_onboarded", 1);
+  try { localStorage.setItem("snapcal_quiz_done", "1"); } catch(e){}
+  if (typeof updatePushUI === "function") { try { updatePushUI(); } catch(e){} }
+  if (typeof updateHealthUI === "function") { try { updateHealthUI(); } catch(e){} }
+  if (completed) toast("You're all set 🎉");
+}
+function _qzClick(e){
+  if (e.target.closest("#qzBack")){ _qzGoto(_qzPrevIndex()); return; }
+  var opt = e.target.closest(".qz-opt");
+  if (opt){ _qzPickChoice(opt.getAttribute("data-qv")); return; }
+  if (e.target.closest("#qzNext")){ _qzOnNext(); return; }
+  var planEl = e.target.closest(".pw-plan:not(.qz-opt)");
+  if (planEl){ selectPlan(planEl.getAttribute("data-plan")); return; }
+  if (e.target.closest("#pwBuy")){
+    (async function(){ var ok = await purchasePremium(_pwPlan); if (ok) _qzFinish(true); })();
+    return;
+  }
+  if (e.target.closest("#pwRestore")){
+    (async function(){ await restorePremium(); if (isPremium()) _qzFinish(true); })();
+    return;
+  }
+  if (e.target.closest("#qzDevSkip")){ _qzFinish(true); return; }
+}
+function showQuizOnboarding(){
+  var ov = document.getElementById("qzOnboard");
+  if (!ov){
+    ov = document.createElement("div");
+    ov.id = "qzOnboard"; ov.className = "qz-overlay";
+    document.body.appendChild(ov);
+    ov.addEventListener("click", _qzClick);
+  }
+  ov.style.display = "flex";
+  _qz = { i: 0, stepId: "intro", a: {} };
+  _qzRender();
+}
+
 /* Give Coach Cal real eyes: if a destination is saved, find food ALONG the drive; else just what's near now. */
 function loadChatNearby(){
   if (_chatLocTried || !navigator.geolocation) return;
@@ -4151,6 +4442,7 @@ async function sendChat(text){
     eaten_today: (todayData.meals || []).map(function(m){ return m.name; }).filter(Boolean).join(", "),
     nearby: (areaList || _chatNearby), has_location: (area ? true : _chatHasLoc), route_to: (area ? "" : _chatRouteTo), area: area,
     gentle: _gentle, budget: _budget,
+    intensity: (function(){ try { return localStorage.getItem("snapcal_coach_intensity") || ""; } catch(e){ return ""; } })(),
     fasting: (function(){ var s = _fastState(); return s ? { hours: s.hours, elapsed_min: Math.round((Date.now() - new Date(s.start).getTime()) / 60000) } : null; })(),
     local_time: (function(){ try { return new Date().toLocaleTimeString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch(e){ try { return new Date().toLocaleTimeString(); } catch(e2){ return ""; } } })()
   };
@@ -4671,8 +4963,12 @@ function selectPlan(plan){
   var btn = document.getElementById("pwBuy");
   if (btn) btn.textContent = (_pwPlan === "annual") ? "Start Annual — $39.99/yr" : "Start Monthly — $7.99/mo";
 }
-function openPaywall(){
-  var html =
+// Shared paywall markup — used by the in-app "Go Premium" sheet (openPaywall) AND the new-user quiz's hard
+// paywall step. Reuse, don't rebuild [[feedback_add_only_never_regress]]. opts.showLater=false drops the
+// "Maybe later" dismiss button (the quiz's hard-paywall step has its own clearly-marked dev-only bypass instead).
+function paywallHtml(opts){
+  opts = opts || {}; var showLater = opts.showLater !== false;
+  return (
     '<div class="sheet-h">SnapCal Premium</div>' +
     '<div class="sheet-sub">Unlock your full daily coach — Coach Cal that talks, guides your day, and never runs out. Priced honestly, cancel anytime.</div>' +
     '<div class="card">' +
@@ -4699,10 +4995,13 @@ function openPaywall(){
       '<div class="pw-honest">No hidden fees. Cancel in one tap. Your logged data stays yours — free, even if you cancel.</div>' +
       '<button class="btn btn-dark" id="pwBuy" type="button">Start Annual — $39.99/yr</button>' +
       '<button id="pwRestore" type="button" style="border:none;background:none;color:var(--ink2);font-family:inherit;font-size:13px;font-weight:650;width:100%;margin-top:8px;cursor:pointer">Restore purchases</button>' +
-      '<button id="pwLater" type="button" style="border:none;background:none;color:var(--ink2);font-family:inherit;font-size:14px;font-weight:650;width:100%;margin-top:6px;cursor:pointer">Maybe later</button>' +
+      (showLater ? '<button id="pwLater" type="button" style="border:none;background:none;color:var(--ink2);font-family:inherit;font-size:14px;font-weight:650;width:100%;margin-top:6px;cursor:pointer">Maybe later</button>' : '') +
       ((window.Billing && window.Billing.isNative) ? '' : '<div class="pw-note">Preview build: payments aren\'t connected on the web — “Unlock” enables Premium locally for testing.</div>') +
-    '</div>';
-  $("#sheetBody").innerHTML = html; $(".sheet-card").scrollTop = 0; openSheet();
+    '</div>'
+  );
+}
+function openPaywall(){
+  $("#sheetBody").innerHTML = paywallHtml({ showLater: true }); $(".sheet-card").scrollTop = 0; openSheet();
   selectPlan(_pwPlan);   // highlight the default (annual) + set the button label
 }
 function updatePremiumUI(){
@@ -6528,8 +6827,16 @@ function renderWeightChart(w){
   loadLesson();
   applyGentle();
   loadToday();
-  /* First launch on this device → explain + request all permissions together (no surprise prompts later). */
-  if (!lsGet("snapcal_onboarded")) setTimeout(showOnboarding, 600);
+  /* First launch on this device → the confessional quiz + personalized plan reveal + hard paywall (new users
+     only; existing/already-onboarded devices never see this — lsGet("snapcal_onboarded") is already true for
+     them, this branch simply never fires, so their flow is 100% untouched). QUIZ_ONBOARDING_ENABLED is a
+     one-line rollback switch to the old permission-only card if something's wrong post-ship. */
+  if (!lsGet("snapcal_onboarded")){
+    setTimeout(function(){
+      if (typeof QUIZ_ONBOARDING_ENABLED !== "undefined" && QUIZ_ONBOARDING_ENABLED && typeof showQuizOnboarding === "function") showQuizOnboarding();
+      else showOnboarding();
+    }, 600);
+  }
   /* On the native app, auto-sync today's steps in the background once Health is already connected. */
   if (_healthNative() && window.Health.isConnected && window.Health.isConnected()){
     setTimeout(function(){ window.Health.pull().then(function(d){ if (d){ api("/api/health", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(d) }).then(function(){ _renderHealthStats(d); }).catch(function(){}); } }).catch(function(){}); }, 1500);

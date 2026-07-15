@@ -965,6 +965,90 @@ def main():
               onb2["hiddenSync"] and onb2["flag"] == "1",
               "hiddenSync=%s flag=%s" % (onb2["hiddenSync"], onb2["flag"]))
 
+        # QUIZ ONBOARDING (2026-07-15): confessional quiz + plan reveal + hard paywall for brand-new users.
+        # Drives the WHOLE flow (14 steps) via real DOM clicks/inputs + reads the computed plan, mirroring the
+        # 2 checks above's pattern of calling the entry function directly for determinism.
+        qz = page.evaluate("""() => {
+            try { localStorage.removeItem('snapcal_c_snapcal_onboarded'); localStorage.removeItem('snapcal_coach_intensity'); } catch(e){}
+            var ex = document.getElementById('qzOnboard'); if (ex) ex.remove();
+            showQuizOnboarding();
+            var ov = document.getElementById('qzOnboard');
+            var introVisible = !!ov && getComputedStyle(ov).display !== 'none' && ov.textContent.indexOf("Let's build YOUR plan") >= 0;
+            function pick(v){ var b = ov.querySelector('.qz-opt[data-qv="' + v + '"]'); if (b) b.click(); }
+            function next(){ var b = ov.querySelector('#qzNext'); if (b) b.click(); }
+            next();                       // intro -> goal
+            pick('recomp');                // goal -> sex (recomp, NOT maintain -> weight_goal page must show)
+            pick('female');                // sex -> age
+            ov.querySelector('#qzAge').value = '30'; next();      // age -> height
+            ov.querySelector('#qzFt').value = '5'; ov.querySelector('#qzIn').value = '6'; next();   // height -> weight_cur
+            ov.querySelector('#qzWCur').value = '160'; next();    // weight_cur -> weight_goal
+            var sawWeightGoal = ov.textContent.indexOf('goal weight') >= 0;
+            ov.querySelector('#qzWGoal').value = '140'; next();   // weight_goal -> activity
+            pick('moderate');              // activity -> habits
+            pick('consistent');            // habits -> derail
+            pick('late_night');            // derail -> intensity
+            pick('soft');                  // intensity -> perms
+            next();                        // perms -> reveal
+            var calEl = ov.querySelector('.qz-plan-cal');
+            var revealHasCal = !!calEl && /\\d/.test(calEl.textContent) && calEl.textContent.indexOf('Cal') >= 0;
+            next();                        // reveal -> paywall
+            var pwHtml = ov.innerHTML;
+            var hasPlans = ov.querySelectorAll('.pw-plan:not(.qz-opt)').length === 2;
+            var hasDevSkip = !!ov.querySelector('#qzDevSkip');
+            var flagBefore = localStorage.getItem('snapcal_c_snapcal_onboarded');
+            ov.querySelector('#qzDevSkip').click();
+            var flagAfter = localStorage.getItem('snapcal_c_snapcal_onboarded');
+            var hiddenAfter = getComputedStyle(ov).display === 'none';
+            return { introVisible: introVisible, sawWeightGoal: sawWeightGoal, revealHasCal: revealHasCal,
+                     hasPlans: hasPlans, hasDevSkip: hasDevSkip, flagBefore: flagBefore, flagAfter: flagAfter,
+                     hiddenAfter: hiddenAfter, dailyCal: (typeof profile !== 'undefined' ? profile.daily_calories : 0),
+                     intensitySaved: localStorage.getItem('snapcal_coach_intensity') };
+        }""")
+        check("quiz onboarding: fresh device shows the confessional quiz + reaches the plan reveal with a real computed calorie target",
+              qz["introVisible"] and qz["sawWeightGoal"] and qz["revealHasCal"] and qz["dailyCal"] and int(qz["dailyCal"]) > 0,
+              "intro=%s sawWeightGoal=%s revealHasCal=%s dailyCal=%s" % (qz["introVisible"], qz["sawWeightGoal"], qz["revealHasCal"], qz["dailyCal"]))
+        check("quiz onboarding: coaching-intensity answer persists to localStorage for /api/chat to pick up",
+              qz["intensitySaved"] == "soft", "intensitySaved=%s" % qz["intensitySaved"])
+        check("quiz onboarding: paywall step REUSES the real plan-selector (2 plans) + a closed-testing dev bypass",
+              qz["hasPlans"] and qz["hasDevSkip"], "hasPlans=%s hasDevSkip=%s" % (qz["hasPlans"], qz["hasDevSkip"]))
+        check("quiz onboarding: dev bypass completes onboarding (sets the flag, hides the overlay) without a purchase",
+              not qz["flagBefore"] and qz["flagAfter"] == "1" and qz["hiddenAfter"],
+              "before=%s after=%s hidden=%s" % (qz["flagBefore"], qz["flagAfter"], qz["hiddenAfter"]))
+
+        # Skip-logic lock: 'Maintain' goal must NEVER show the goal-weight page (the calc uses current weight).
+        qzSkip = page.evaluate("""() => {
+            try { localStorage.removeItem('snapcal_c_snapcal_onboarded'); } catch(e){}
+            var ex = document.getElementById('qzOnboard'); if (ex) ex.remove();
+            showQuizOnboarding();
+            var ov = document.getElementById('qzOnboard');
+            function pick(v){ var b = ov.querySelector('.qz-opt[data-qv="' + v + '"]'); if (b) b.click(); }
+            function next(){ var b = ov.querySelector('#qzNext'); if (b) b.click(); }
+            next(); pick('maintain'); pick('male');
+            ov.querySelector('#qzAge').value = '40'; next();
+            ov.querySelector('#qzFt').value = '6'; ov.querySelector('#qzIn').value = '0'; next();
+            ov.querySelector('#qzWCur').value = '190'; next();   // weight_cur -> should skip straight to ACTIVITY
+            var landedOnActivity = ov.textContent.indexOf('How active are you') >= 0;
+            var ex2 = document.getElementById('qzOnboard'); if (ex2) ex2.remove();
+            return { landedOnActivity: landedOnActivity };
+        }""")
+        check("quiz onboarding: 'Maintain' goal skips the goal-weight page",
+              qzSkip["landedOnActivity"], "landedOnActivity=%s" % qzSkip["landedOnActivity"])
+
+        # Add-only lock: an ALREADY-onboarded device must NEVER see the quiz (or the old card) again on reload —
+        # the new-user-only gate must not regress existing/verified users' experience.
+        page.evaluate("() => { try { localStorage.setItem('snapcal_c_snapcal_onboarded', '1'); } catch(e){} }")
+        page.reload(wait_until="domcontentloaded", timeout=20000)
+        page.wait_for_timeout(1200)   # let the 600ms auto-onboarding timer fire if it wrongly would
+        existingUserState = page.evaluate("""() => {
+            var qo = document.getElementById('qzOnboard'), ob = document.getElementById('onboard');
+            return { qzShown: !!qo && getComputedStyle(qo).display !== 'none',
+                     obShown: !!ob && getComputedStyle(ob).display !== 'none' };
+        }""")
+        check("quiz onboarding: an already-onboarded device is NEVER shown the quiz (or the old card) again — add-only law",
+              not existingUserState["qzShown"] and not existingUserState["obShown"],
+              "qzShown=%s obShown=%s" % (existingUserState["qzShown"], existingUserState["obShown"]))
+        page.evaluate("() => { window.premiumActive = true; try { goal = 'lose_weight'; } catch(e){} }")   # restore gate state after reload for any later checks
+
         # 10. no JS errors
         check("no JS console / page errors", len(errors) == 0,
               ("; ".join(errors[:3])) if errors else "")
