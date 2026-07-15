@@ -108,7 +108,11 @@
   main{
     max-width:480px;
     margin:0 auto;
-    padding:20px 16px calc(96px + env(safe-area-inset-bottom));
+    /* P1-3 2026-07-15: 96px only cleared the nav bar — the 58px mic FAB floats HIGHER (bottom:88px,
+       so its top edge sits at 88+58=146px above the viewport bottom) and was overlapping the last
+       tappable row on short screens (e.g. "Quick add" on Scan). 96 -> 166px clears the FAB + a buffer,
+       on every tab. */
+    padding:20px 16px calc(166px + env(safe-area-inset-bottom));
     position:relative;z-index:1;
   }
   /* ---------- tabs ---------- */
@@ -222,6 +226,14 @@
     padding:28px 12px;background:var(--card);border-radius:var(--r);
     box-shadow:var(--shadow);
   }
+  /* ---- P1-6 2026-07-15: History empty state — faint chart skeleton + CTA ---- */
+  .history-empty{padding:34px 20px 26px}
+  .hist-skel{display:block;width:100%;max-width:230px;height:70px;margin:0 auto 16px;opacity:.4}
+  .hist-skel rect{fill:var(--ink3)}
+  .hist-skel line{stroke:var(--line);stroke-width:1}
+  .hist-empty-t{font-size:15px;font-weight:800;color:var(--ink)}
+  .hist-empty-s{font-size:13px;color:var(--ink2);margin-top:5px}
+  .history-empty #histAddMealBtn{margin:16px auto 0;max-width:200px}
   /* ---------- scan ---------- */
   .cam-btn{
     width:100%;border:none;cursor:pointer;
@@ -293,6 +305,7 @@
   /* Gentle (ED-safe) mode: hide the numeric calorie/macro readouts, show the balance banner */
   .gentle-only{display:none}
   body.gentle .gentle-only{display:block}
+  body.gentle .gentle-only.neda-card{display:flex}   /* neda-card needs flex (icon + text row), not the generic block */
   body.gentle .ring-center .big, body.gentle .ring-center .lbl, body.gentle .cal-steps,
   body.gentle .ring-meta, body.gentle .macro-rings, body.gentle #scanHint, body.gentle #workoutCard{display:none}
   body.gentle .ring-wrap .ring-box:after{content:"🌿";font-size:40px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
@@ -387,7 +400,10 @@
   .nav-inner{
     max-width:452px;margin:0 auto;display:flex;position:relative;
     pointer-events:auto;
-    background:var(--glass-bg);
+    /* P0-1 2026-07-15: raised from the shared --glass-bg (.62) to .80 JUST for the nav — the lower
+       opacity let busy page content bleed through and wash out the inactive tab labels/icons
+       (audit measured ~6.7:1 rendered contrast despite #49514A being ~8.2:1 on a solid white backdrop). */
+    background:rgba(255,255,255,.80);
     -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
     border:1px solid var(--glass-brd);
     border-radius:26px;
@@ -395,7 +411,7 @@
     /* layered shadow + floor-gap glow so the bar visibly floats above the content */
     box-shadow:0 2px 6px rgba(40,34,20,.10),0 14px 30px rgba(40,34,20,.20),0 26px 50px rgba(40,34,20,.16),inset 0 1px 0 rgba(255,255,255,.6);
   }
-  body.dark .nav-inner{box-shadow:0 2px 6px rgba(0,0,0,.4),0 16px 34px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06)}
+  body.dark .nav-inner{background:rgba(30,34,31,.80);box-shadow:0 2px 6px rgba(0,0,0,.4),0 16px 34px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06)}
   /* the springy accent pill that slides behind the active tab */
   #navPill{
     position:absolute;top:8px;left:0;width:0;height:calc(100% - 16px);
@@ -408,12 +424,20 @@
   .tabbtn{
     flex:1;border:none;background:none;cursor:pointer;font-family:inherit;
     display:flex;flex-direction:column;align-items:center;gap:3px;
-    padding:8px 0 6px;color:var(--ink2);border-radius:18px;position:relative;z-index:1;
-    transform:translateY(0) scale(.92);opacity:.94;
+    padding:8px 0 6px;
+    /* P0-1 2026-07-15: darkened from --ink2 (#49514A) toward #333B34 — stays neutral gray (NOT brand
+       green, so the active tab stays clearly distinct) but reads far more legible against the glass. */
+    color:#333B34;border-radius:18px;position:relative;z-index:1;
+    /* base recede eased from .92/.94 -> .97/.97 (still visibly smaller/dimmer than the active pop, but the
+       old scale-down was compounding with the tiny 11px font to push rendered text under ~10px). */
+    transform:translateY(0) scale(.97);opacity:.97;
     transition:transform .28s cubic-bezier(.34,1.56,.64,1),opacity .2s ease,color .2s ease;
   }
-  .tabbtn svg{width:24px;height:24px;transition:filter .2s ease}
-  .tabbtn span{font-size:11px;font-weight:600;transition:font-weight .2s ease}
+  body.dark .tabbtn{color:#C9D1CB}
+  /* base bumped 24->26px + font 11->15.5px so that even after the .97 recede scale, rendered size clears
+     the legibility floor (icon >=24px, label >=14.5px semibold) -- was rendering ~22px/~10px before. */
+  .tabbtn svg{width:26px;height:26px;stroke-width:2.1;transition:filter .2s ease}
+  .tabbtn span{font-size:15.5px;font-weight:600;transition:font-weight .2s ease}
   .tabbtn:active{transform:translateY(0) scale(.85)}
   /* ACTIVE tab lifts + glows; inactive tabs recede (handled by base scale/opacity above) */
   .tabbtn.active{
@@ -467,6 +491,14 @@
   .nut-h{font-size:11.5px;font-weight:700;color:var(--ink3);text-transform:uppercase;
     letter-spacing:.05em;margin:18px 2px 8px}
   .nut-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+  /* ---- P0-2 2026-07-15: collapsed "Full nutrition breakdown" expander (scan flow only) ---- */
+  .nutx{margin-top:16px;border-top:1px solid var(--line);padding-top:2px}
+  .nutx-sum{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+    padding:12px 2px;font-size:13.5px;font-weight:700;color:var(--ink);-webkit-tap-highlight-color:transparent}
+  .nutx-sum::-webkit-details-marker{display:none}
+  .nutx-car{font-size:12px;color:var(--ink3);transition:transform .2s ease}
+  .nutx[open] .nutx-car{transform:rotate(180deg)}
+  .nutx-body .nut-h:first-child{margin-top:2px}
   .nut{display:flex;justify-content:space-between;align-items:baseline;
     border-bottom:1px solid var(--line);padding:7px 0}
   .nut .k{font-size:13px;color:var(--ink2)}
@@ -475,6 +507,17 @@
   .tip{display:flex;gap:8px;font-size:13px;line-height:1.45;background:#EFF6FF;border:1px solid #DBEAFE;
     color:#1E3A5F;border-radius:12px;padding:11px 13px;margin-top:16px}
   .tip b{font-weight:700}
+  /* ---- P1-5 2026-07-15: NEDA helpline — its own dignified, visible (not alarming) support card ---- */
+  /* display intentionally NOT set here — .gentle-only{display:none} must keep winning outside Gentle
+     mode; body.gentle .gentle-only.neda-card{display:flex} (above) both shows it AND lays it out flex. */
+  .neda-card{gap:11px;align-items:flex-start;background:#EFF6FF;border:1px solid #DBEAFE}
+  .neda-ic{flex:none;width:32px;height:32px;border-radius:50%;background:#fff;display:flex;
+    align-items:center;justify-content:center;font-size:16px;box-shadow:0 1px 3px rgba(30,58,95,.18)}
+  .neda-t{font-size:13.5px;font-weight:750;color:#1E3A5F}
+  .neda-s{font-size:12.5px;color:#1E3A5F;opacity:.85;line-height:1.45;margin-top:3px}
+  body.dark .neda-card{background:#10243A;border-color:#1E3A5A}
+  body.dark .neda-ic{background:#1A3350}
+  body.dark .neda-t,body.dark .neda-s{color:#BFD8F5}
   /* ---------- coach: swaps + meal ideas ---------- */
   .coach-h{font-size:11.5px;font-weight:700;color:var(--brand);text-transform:uppercase;
     letter-spacing:.05em;margin:18px 2px 9px;display:flex;align-items:center;gap:6px}
@@ -1080,7 +1123,17 @@
     <div class="card gentle-only" id="gentleBanner">
       <div class="goal-title" style="margin:0">🌿 Balanced day</div>
       <div class="goal-desc" id="gentleMsg" style="margin:6px 2px 0">You’re showing up for yourself — that’s what counts. Focus on protein and whole foods, and let the numbers rest today.</div>
-      <div class="goal-desc" style="margin:10px 2px 0;font-size:11.5px;color:var(--ink3)">If food or your body feels overwhelming, you’re not alone — NEDA Helpline <b>1-800-931-2237</b>.</div>
+    </div>
+
+    <!-- P1-5 2026-07-15: pulled out of the tiny 11.5px muted line inside gentleBanner into its own
+         soft, readable card — same gentle-only visibility, just no longer easy to miss. Supportive
+         tone (not alarm-red): reuses the app's calm "Coach Cal blue" info-card language. -->
+    <div class="card gentle-only neda-card" id="nedaCard">
+      <span class="neda-ic" aria-hidden="true">💬</span>
+      <div>
+        <div class="neda-t">You don’t have to navigate this alone</div>
+        <div class="neda-s">If food or your body feels overwhelming, the NEDA Helpline is free and confidential — <b>1-800-931-2237</b>.</div>
+      </div>
     </div>
 
     <div class="card ring-wrap">
@@ -1314,13 +1367,17 @@
     <div class="card" id="resultCard" style="position:relative">
       <button class="scan-x" id="resultClose" type="button" aria-label="Close">&times;</button>
       <div class="sec-title" style="margin:0 0 8px">Detected food</div>
-      <div id="resultItems"></div>
-      <div id="addMissedWrap"></div>
       <div class="total-row">
         <div>Total<div class="m" id="totalMacros"></div></div>
         <div id="totalKcal" style="font-variant-numeric:tabular-nums"></div>
       </div>
       <div id="scanConfidence"></div>
+      <!-- P0-2 2026-07-15: Coach Cal's verdict+tip get a RESERVED slot right under the total/confidence
+           chip, rendered synchronously with everything else (no async section arrives later to push it
+           down) — so it always lands inside the first viewport instead of ~2800px down. -->
+      <div id="resultCoachTop"></div>
+      <div id="resultItems"></div>
+      <div id="addMissedWrap"></div>
       <div class="note" id="resultNote" style="display:none"></div>
       <div id="resultDetail"></div>
       <label class="field-lbl" for="mealName">Meal name</label>
@@ -3526,12 +3583,35 @@ function macroBubble(label, val, target, cls){
 }
 function cap(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : "—"; }
 
-function buildDetailHTML(r){
+/* P0-2 2026-07-15: Coach Cal's health-grade verdict + coaching tip, pulled out of buildDetailHTML so the
+   scan flow can paint it into the RESERVED #resultCoachTop slot near the top of the card (see renderScanCard)
+   instead of after the full items list + every nutrition table. Same markup buildDetailHTML used to emit
+   inline — History's openMealSheet still gets it inline via buildDetailHTML(r) (no opts), unchanged. */
+function buildCoachTopHTML(r){
   if (!r.items.length) return "";
+  var html = "";
+  if (r.verdict || r.quality_grade) {
+    var g = r.quality_grade || "C";
+    html += '<div class="verdict">' +
+      '<div class="grade ' + g + '">' + esc(g) + '</div>' +
+      '<div><div class="verdict-t">' + esc(r.verdict || "Nutrition breakdown") + '</div>' +
+      '<div class="verdict-s">Health score ' + int(r.health_score) + '/100' +
+        (r.satiety ? ' &middot; ' + cap(r.satiety) + ' satiety' : '') + '</div></div></div>';
+  }
+  if (r.coach_tip) {
+    html += '<div class="tip">💡<div><b>Coach Cal:</b> ' + esc(r.coach_tip) + '</div></div>';
+  }
+  return html;
+}
+
+function buildDetailHTML(r, opts){
+  if (!r.items.length) return "";
+  opts = opts || {};
   var t = r.total, html = "";
 
-  /* verdict + grade + score */
-  if (r.verdict || r.quality_grade) {
+  /* verdict + grade + score — SKIPPED here when the caller already painted it up top via
+     buildCoachTopHTML (opts.hideTop, scan flow only). History's meal sheet keeps it inline. */
+  if (!opts.hideTop && (r.verdict || r.quality_grade)) {
     var g = r.quality_grade || "C";
     html += '<div class="verdict">' +
       '<div class="grade ' + g + '">' + esc(g) + '</div>' +
@@ -3582,26 +3662,33 @@ function buildDetailHTML(r){
     statRow("Cholesterol", fmtNum(t.cholesterol_mg) + " mg", t.cholesterol_mg >= 300) +
     statRow("Sodium", fmtNum(t.sodium_mg) + " mg", t.sodium_mg >= 1500) + '</div>';
 
-  /* micronutrients */
-  html += '<div class="nut-h">Micronutrients</div><div class="nut-grid">' +
+  /* micronutrients + smart metrics */
+  var pd = t.calories > 0 ? (t.protein_g / t.calories * 100).toFixed(1) + " g/100 Cal" : "—";
+  var ed = t.est_weight_g > 0 ? Math.round(t.calories / t.est_weight_g * 100) + " Cal/100g" : "—";
+  var nutHTML = '<div class="nut-h">Micronutrients</div><div class="nut-grid">' +
     statRow("Potassium", fmtNum(t.potassium_mg) + " mg") +
     statRow("Calcium", t.calcium_mg + " mg") +
     statRow("Iron", t.iron_mg + " mg") +
     statRow("Vitamin A", t.vitamin_a_dv + "% DV") +
     statRow("Vitamin C", t.vitamin_c_dv + "% DV") +
-    statRow("Vitamin D", t.vitamin_d_dv + "% DV") + '</div>';
-
-  /* smart metrics */
-  var pd = t.calories > 0 ? (t.protein_g / t.calories * 100).toFixed(1) + " g/100 Cal" : "—";
-  var ed = t.est_weight_g > 0 ? Math.round(t.calories / t.est_weight_g * 100) + " Cal/100g" : "—";
-  html += '<div class="nut-h">Smart metrics</div><div class="nut-grid">' +
+    statRow("Vitamin D", t.vitamin_d_dv + "% DV") + '</div>' +
+    '<div class="nut-h">Smart metrics</div><div class="nut-grid">' +
     statRow("Protein density", pd) +
     statRow("Energy density", ed) +
     statRow("Satiety", cap(r.satiety)) +
     statRow("Est. weight", t.est_weight_g > 0 ? fmtNum(t.est_weight_g) + " g" : "—") + '</div>';
+  /* P0-2 2026-07-15: scan flow (opts.collapseNutrition) tucks these two tables — the biggest
+     contributors to the 2777px scroll-depth — behind a collapsed-by-default expander. History's
+     meal sheet (no opts) keeps them inline, unchanged. */
+  if (opts.collapseNutrition) {
+    html += '<details class="nutx"><summary class="nutx-sum">Full nutrition breakdown <span class="nutx-car">&#9662;</span></summary>' +
+      '<div class="nutx-body">' + nutHTML + '</div></details>';
+  } else {
+    html += nutHTML;
+  }
 
-  /* coach tip */
-  if (r.coach_tip) {
+  /* coach tip — SKIPPED here when already painted up top (opts.hideTop, scan flow). History keeps it inline. */
+  if (!opts.hideTop && r.coach_tip) {
     html += '<div class="tip">💡<div><b>Coach Cal:</b> ' + esc(r.coach_tip) + '</div></div>';
   }
 
@@ -3772,7 +3859,11 @@ function renderScanCard(){
   if (analyzeResult.note) { note.textContent = analyzeResult.note; note.style.display = "block"; }
   else { note.style.display = "none"; }
 
-  $("#resultDetail").innerHTML = buildDetailHTML(eff);
+  /* P0-2 2026-07-15: Coach Cal's grade+tip render into the reserved top slot FIRST (synchronously,
+     same pass as everything else -> nothing renders later to push it back down), and the heavy
+     nutrition tables collapse behind a tap so the items list + coach line both fit the first screen. */
+  var ct = $("#resultCoachTop"); if (ct) ct.innerHTML = buildCoachTopHTML(eff);
+  $("#resultDetail").innerHTML = buildDetailHTML(eff, { hideTop: true, collapseNutrition: true });
   $("#resultCard").style.display = "block";
 }
 
@@ -4070,7 +4161,26 @@ async function loadHistory(){
     var days = (data && data.days) || [];
     if (!days.length) {
       $("#chartCard").style.display = "none";
-      list.innerHTML = '<div class="empty">No history yet.<br>Logged days will show up here.</div>';
+      /* P1-6 2026-07-15: was a single bare line + ~550px of dead space below it. Add a faint chart
+         skeleton (sets expectation that a real chart builds here) + a one-tap shortcut into logging. */
+      list.innerHTML =
+        '<div class="empty history-empty">' +
+          '<svg class="hist-skel" viewBox="0 0 220 84" aria-hidden="true">' +
+            '<line x1="0" y1="80" x2="220" y2="80"></line>' +
+            [14, 34, 22, 46, 30, 52, 20].map(function(h, i){
+              var x = 6 + i * 31, y = 80 - h;
+              return '<rect x="' + x + '" y="' + y + '" width="18" height="' + h + '" rx="4"></rect>';
+            }).join('') +
+          '</svg>' +
+          '<div class="hist-empty-t">No history yet</div>' +
+          '<div class="hist-empty-s">Your first week&rsquo;s chart builds as you log.</div>' +
+          '<button class="btn btn-dark" id="histAddMealBtn" type="button">&#65291; Add a meal</button>' +
+        '</div>';
+      var hb = document.getElementById("histAddMealBtn");
+      if (hb) hb.addEventListener("click", function(){
+        switchTab("today");
+        setTimeout(function(){ try { openAddMeal(); } catch(e){} }, 260);
+      });
       return;
     }
     var goal = Math.max(int(profile.daily_calories), 1);
@@ -4134,8 +4244,12 @@ function showLocPrimer(onAllow, onDismiss){
   }
   ov.style.display = "flex";
   function done(){ ov.style.display = "none"; }
-  ov.querySelector(".locp-allow").onclick = function(){ done(); if (onAllow) onAllow(); };
-  ov.querySelector(".locp-skip").onclick  = function(){ done(); if (onDismiss) onDismiss(); };
+  /* P1-4 2026-07-15: prime the SHARED flag on BOTH buttons — the copy says "you'll only be asked
+     this once" full stop, not "once per Allow". Without this, tapping "Not now" left the flag unset,
+     so the very next location-needing tab (e.g. Coach Cal then Eat Out) re-showed this same explainer,
+     breaking the promise. */
+  ov.querySelector(".locp-allow").onclick = function(){ lsSet("snapcal_loc_primed", 1); done(); if (onAllow) onAllow(); };
+  ov.querySelector(".locp-skip").onclick  = function(){ lsSet("snapcal_loc_primed", 1); done(); if (onDismiss) onDismiss(); };
 }
 function snapGeo(onOk, onErr, opts){
   var g = navigator.geolocation;
@@ -4144,7 +4258,6 @@ function snapGeo(onOk, onErr, opts){
     g.getCurrentPosition(onOk, onErr, opts); return;
   }
   showLocPrimer(function(){                           /* first time only: they understand + agreed -> hand to the browser's own one-time prompt */
-    lsSet("snapcal_loc_primed", 1);
     g.getCurrentPosition(onOk, onErr, opts);
   }, function(){
     if (onErr) onErr({ code: 1, message: "dismissed" });   /* "Not now": soft, no nag — they can tap any location feature again later */
@@ -4156,11 +4269,16 @@ function snapGeo(onOk, onErr, opts){
    location prompt later), we explain everything on first launch and request them together from ONE
    tap. Gesture-backed (the "Enable" click). Sets snapcal_onboarded so it never shows again. */
 async function requestAllPerms(){
+  /* P1-4 2026-07-15: prime the flag as the VERY FIRST (synchronous) statement, before the notification
+     permission await below. requestAllPerms is async, so its body only runs up to the first `await` —
+     the old code buried the location flag-set AFTER the (awaited) notification prompt, so if the user
+     opened Coach Cal right after onboarding while that first await was still pending, snapGeo() would
+     find the flag still unset and show the "you'll only be asked this once" explainer a 2nd time. */
+  lsSet("snapcal_loc_primed", 1);
   // 1) Notifications (daily check-ins)
   try { if ("Notification" in window && Notification.permission === "default") await Notification.requestPermission(); } catch(e){}
-  // 2) Location (eat-out / on-route). Prime the flag so snapGeo never re-asks.
+  // 2) Location (eat-out / on-route). Flag already primed above.
   try {
-    lsSet("snapcal_loc_primed", 1);
     await new Promise(function(res){ if (navigator.geolocation) navigator.geolocation.getCurrentPosition(function(){res();}, function(){res();}, { timeout: 8000 }); else res(); });
   } catch(e){}
   // 3) Camera (scan food / barcode). Request then immediately release the stream.
@@ -4634,13 +4752,28 @@ function _calSpringOut(done){
   } catch(e){ done(); }
 }
 
+/* P1-7 2026-07-15: TTS cold-start investigation (timeboxed) — root cause confirmed in render.yaml:
+   `gunicorn --workers 2`. get_gemini_client() in app.py is a LAZY per-PROCESS singleton, so each of the
+   2 worker processes independently pays a one-time cold init + first-Gemini-TTS-model-call tax
+   (audit measured 2.5-8.1s) the first time IT personally handles a /api/tts request -> occasionally
+   trips our own except-Exception->502 handler. Not a quota/model issue (no quota errors in the 502
+   bodies). The old prewarm only fired inside openVoice() (same synchronous burst as things that could
+   immediately need real speech) and only ever hit ONE connection, so it only had a chance of warming
+   ONE of the 2 workers. Fix: fire prewarmTTS() much earlier (app boot, ~1.2s in) AND as 2 distinct-text
+   requests (so neither is a cache hit) to raise the odds BOTH workers get touched before a user's first
+   real line — plus a client-side one-retry on the actual speak path below (_playChunk/fail()). */
+function prewarmTTS(){
+  if (!isPremium()) return;   // TTS is Premium-only; free users' speak() never calls /api/tts anyway
+  try { new Audio("/api/tts?voice=Charon&text=ok").load(); } catch(e){}
+  setTimeout(function(){ try { new Audio("/api/tts?voice=Charon&text=ok.").load(); } catch(e){} }, 900);   // 2nd, distinct cache key -> 2nd connection, better odds of hitting the OTHER gunicorn worker
+}
 function openVoice(){
   var w = $("#voiceWrap"); if (!w) return;
   w.classList.add("show"); w.setAttribute("aria-hidden", "false");
   calSpeakStop();                 /* start in the breathing idle state */
   _calSpringIn();                 /* spring rise over the blurred food screen */
   loadChatNearby();   /* ask for location + pull nearby spots so Coach Cal can find food on your way */
-  try { new Audio("/api/tts?voice=Charon&text=ok").load(); } catch(e){}   /* pre-warm the TTS path so his first spoken line has no cold-start stall */
+  prewarmTTS();   /* belt-and-suspenders: also re-touch the TTS path right when voice opens (see app-boot prewarm in the init IIFE for the EARLY warm) */
   try { fetch(API_BASE + "/api/profile", { headers: { "X-Device-Id": DEVICE_ID } }); } catch(e){}   /* wake the (free-tier, sleeps-when-idle) server NOW so his first question doesn't hit a cold boot */
   if (!_chatMsgs.length){
     voiceRender("coach", "Hey, I'm Coach Cal! Tap the mic and talk to me — or type. Ask me what to eat, what a word like ‘protein’ or ‘macros’ means, anything at all.");
@@ -4743,21 +4876,27 @@ function _renderBriefing(text, block){
   var c = $("#briefChat"); if (c) c.addEventListener("click", function(){ try { openVoice(); } catch(e){} });
   var s = $("#briefSpeak"); if (s) s.addEventListener("click", function(){ try { speak(text, true); } catch(e){} });
 }
-function _playChunk(fullText){
-  if (!_ttsOn || !_ttsQueue.length){ _ttsOn = false; return; }
-  var chunk = _ttsQueue.shift();
-  var a = (_ttsNext && _ttsNext.src.indexOf(encodeURIComponent(chunk.slice(0, 60))) !== -1) ? _ttsNext : new Audio(_ttsUrl(chunk));
-  _calAudio = a; _ttsNext = null;
-  if (_ttsQueue.length){ try { _ttsNext = new Audio(_ttsUrl(_ttsQueue[0])); _ttsNext.preload = "auto"; _ttsNext.load(); } catch(e){} }  /* prefetch next while this plays → no gaps */
-  /* ONE voice per reply: if Coach Cal's voice (Gemini) has already started, a later chunk failure just SKIPS that
-     chunk (tiny gap) — never switch to the device voice mid-reply (that caused the guy→girl→guy flip). Only fall
-     back to the device voice if the very first chunk never plays. */
+/* P1-7 2026-07-15: wire (or re-wire, on retry) an <audio> chunk's play/end/error handlers. Pulled out
+   of _playChunk so the ONE-retry below can reuse the exact same wiring instead of duplicating it. */
+function _wireTtsChunk(a, chunk, fullText, isRetry){
+  _calAudio = a;
+  try { _calWireAudio(a); } catch(e){}   /* route THIS chunk through the AnalyserNode for the live mouth/halo */
   function fail(){
     if (a !== _calAudio) return;
+    /* ONE client-side retry on a load/play failure (covers the 502 cold-start blip — see prewarmTTS
+       above): re-request the SAME chunk once before ever falling back to the device voice. Only the
+       first attempt retries (isRetry guards against retrying forever); later-chunk failures after the
+       voice has already started still just skip ahead (unchanged behavior — never flip voices mid-reply). */
+    if (!isRetry && !_ttsStarted){
+      var a2 = new Audio(_ttsUrl(chunk));
+      _wireTtsChunk(a2, chunk, fullText, true);
+      var p2 = a2.play();
+      if (p2 && p2.catch) p2.catch(function(){ /* handled by a2's own onerror -> fail(true) path */ });
+      return;
+    }
     if (!_ttsStarted){ _ttsOn = false; _speakFallback(fullText); }
     else { _playChunk(fullText); }
   }
-  try { _calWireAudio(a); } catch(e){}   /* route THIS chunk through the AnalyserNode for the live mouth/halo */
   a.onplay = function(){ _ttsStarted = true; try { calSpeakStart(); } catch(e){} };   /* Cal starts "talking" */
   a.onended = function(){
     _ttsStarted = true;
@@ -4765,6 +4904,15 @@ function _playChunk(fullText){
     _playChunk(fullText);
   };
   a.onerror = fail;
+  return fail;
+}
+function _playChunk(fullText){
+  if (!_ttsOn || !_ttsQueue.length){ _ttsOn = false; return; }
+  var chunk = _ttsQueue.shift();
+  var a = (_ttsNext && _ttsNext.src.indexOf(encodeURIComponent(chunk.slice(0, 60))) !== -1) ? _ttsNext : new Audio(_ttsUrl(chunk));
+  _ttsNext = null;
+  if (_ttsQueue.length){ try { _ttsNext = new Audio(_ttsUrl(_ttsQueue[0])); _ttsNext.preload = "auto"; _ttsNext.load(); } catch(e){} }  /* prefetch next while this plays → no gaps */
+  var fail = _wireTtsChunk(a, chunk, fullText, false);
   var p = a.play();
   if (p && p.catch) p.catch(fail);
 }
@@ -7271,6 +7419,7 @@ function renderWeightChart(w){
     setTimeout(function(){ window.Health.pull().then(function(d){ if (d){ api("/api/health", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(d) }).then(function(){ _renderHealthStats(d); }).catch(function(){}); } }).catch(function(){}); }, 1500);
   }
   setTimeout(prewarmSheets, 2500);   /* warm meal-plan + grocery in the background -> instant first tap */
+  setTimeout(prewarmTTS, 1200);   /* P1-7 2026-07-15: warm the TTS path (both gunicorn workers, see prewarmTTS) well before any real "Talk to Coach Cal" tap or briefing 🔊 */
 })();
 </script>
 </body>

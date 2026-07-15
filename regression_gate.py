@@ -1238,6 +1238,204 @@ def main():
               "qzShown=%s obShown=%s" % (existingUserState["qzShown"], existingUserState["obShown"]))
         page.evaluate("() => { window.premiumActive = true; try { goal = 'lose_weight'; } catch(e){} }")   # restore gate state after reload for any later checks
 
+        # ==================== 2026-07-15 AUDIT PUNCH LIST ====================
+
+        # P0-1: TAB BAR LEGIBILITY. Measure the RENDERED (post-transform) size, same method as the
+        # audit's pixel-sample screenshot — getBoundingClientRect for the icon (already post-transform),
+        # and computed unscaled font-size x the tabbtn's own CSS transform scaleX for the label (a plain
+        # computed-style read would miss the .97 recede scale the audit's real bug was hiding inside).
+        page.evaluate("() => switchTab('today')")   # today = active -> eatout/scan/history/profile = inactive
+        tabbar = page.evaluate("""() => {
+            function scaleOf(el){
+                var m = getComputedStyle(el).transform;
+                if (!m || m === 'none') return 1;
+                var mm = m.match(/matrix\\(([^)]+)\\)/);
+                if (!mm) return 1;
+                return parseFloat(mm[1].split(',')[0]);
+            }
+            function luminance(rgb){
+                var m = rgb.match(/[\\d.]+/g).map(Number);
+                var lin = m.slice(0,3).map(function(v){ v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4); });
+                return 0.2126*lin[0] + 0.7152*lin[1] + 0.0722*lin[2];
+            }
+            var btn = document.querySelector('.tabbtn[data-tab="eatout"]');   // inactive (today is active)
+            var span = btn.querySelector('span'), svg = btn.querySelector('svg');
+            var s = scaleOf(btn);
+            var renderedFont = parseFloat(getComputedStyle(span).fontSize) * s;
+            var svgRect = svg.getBoundingClientRect();
+            var strokeW = parseFloat(getComputedStyle(svg).strokeWidth || svg.getAttribute('stroke-width'));
+            var ink = getComputedStyle(span).color;
+            var navBg = getComputedStyle(document.querySelector('.nav-inner')).backgroundColor;
+            var alphaM = navBg.match(/[\\d.]+/g);
+            var navAlpha = alphaM && alphaM.length > 3 ? parseFloat(alphaM[3]) : 1;
+            var Lwhite = 1, Link = luminance(ink);
+            var contrastOnWhite = (Lwhite + 0.05) / (Link + 0.05);
+            return { renderedFont: renderedFont, svgW: svgRect.width, svgH: svgRect.height, strokeW: strokeW,
+                     ink: ink, navBg: navBg, navAlpha: navAlpha, contrastOnWhite: contrastOnWhite, scale: s };
+        }""")
+        check("P0-1 tab bar: inactive label renders >= 14.5px (was ~13.33px/11px base x .92 scale)",
+              tabbar["renderedFont"] >= 14.5, "renderedFont=%.2fpx (base x scale=%.2f)" % (tabbar["renderedFont"], tabbar["scale"]))
+        check("P0-1 tab bar: inactive icon renders >= 24px (was ~22px)",
+              tabbar["svgW"] >= 24 and tabbar["svgH"] >= 24, "svg=%.1fx%.1fpx" % (tabbar["svgW"], tabbar["svgH"]))
+        check("P0-1 tab bar: inactive icon stroke-width >= 2.1 (was 1.8)",
+              tabbar["strokeW"] >= 2.1, "strokeW=%s" % tabbar["strokeW"])
+        check("P0-1 tab bar: inactive ink >= 8.5:1 contrast on a white backdrop (was ~6.7:1 rendered)",
+              tabbar["contrastOnWhite"] >= 8.5, "ink=%s contrastOnWhite=%.2f:1" % (tabbar["ink"], tabbar["contrastOnWhite"]))
+        check("P0-1 tab bar: nav glass raised to ~.80 opacity (was .62) so the backdrop never washes labels",
+              tabbar["navAlpha"] >= 0.75, "navBg=%s alpha=%.2f" % (tabbar["navBg"], tabbar["navAlpha"]))
+
+        # P0-2: COACH CAL VERDICT BURIED. DOM-order assertion (per the fix-brief's own fallback — the
+        # vision /api/analyze call is too flaky for a headless gate) using the SAME window.analyzeResult +
+        # renderScanCard() injection pattern already used above for the scan-result checks.
+        page.evaluate("() => switchTab('scan')")
+        coachtop = page.evaluate("""() => {
+            var items = [];
+            for (var i = 0; i < 6; i++) items.push({ name: 'Item ' + i, calories: 200, protein_g: 10, carbs_g: 20, fat_g: 8,
+                fiber_g: 1, sugar_g: 2, sat_fat_g: 3, sodium_mg: 300 });
+            window.analyzeResult = { items: items, mults: items.map(function(){ return 1; }),
+                total: { calories: 1200, protein_g: 60, carbs_g: 120, fat_g: 48, fiber_g: 6, sugar_g: 12, sat_fat_g: 18, sodium_mg: 1800,
+                         potassium_mg: 500, calcium_mg: 100, iron_mg: 2, vitamin_a_dv: 10, vitamin_c_dv: 10, vitamin_d_dv: 10, est_weight_g: 500, band_pct: 0 },
+                health_score: 40, quality_grade: 'D', satiety: 'medium', good_flags: [], bad_flags: ['High sodium'],
+                verdict: 'This meal is very high in calories, saturated fat, and sodium.',
+                coach_tip: 'Opt for a grilled option and swap the fries for a side salad.',
+                swaps: [], note: '' };
+            renderScanCard();
+            var top = document.getElementById('resultCoachTop'), items_el = document.getElementById('resultItems'),
+                detail = document.getElementById('resultDetail');
+            var topHasVerdict = !!top.querySelector('.verdict'), topHasTip = !!top.querySelector('.tip');
+            var itemsFollowsTop = !!(top.compareDocumentPosition(items_el) & Node.DOCUMENT_POSITION_FOLLOWING);
+            var detailHasVerdict = !!detail.querySelector('.verdict'), detailHasTip = !!detail.querySelector('.tip');   // must NOT duplicate
+            var nutx = detail.querySelector('details.nutx');
+            var nutxCollapsed = !!nutx && !nutx.open;
+            var nutxHasMicro = !!nutx && /Micronutrients/.test(nutx.textContent) && /Smart metrics/.test(nutx.textContent);
+            var topRect = top.getBoundingClientRect();
+            return { topHasVerdict: topHasVerdict, topHasTip: topHasTip, itemsFollowsTop: itemsFollowsTop,
+                     detailHasVerdict: detailHasVerdict, detailHasTip: detailHasTip,
+                     nutxPresent: !!nutx, nutxCollapsed: nutxCollapsed, nutxHasMicro: nutxHasMicro, topTop: topRect.top };
+        }""")
+        check("P0-2 scan result: Coach Cal grade+tip render into the TOP slot, BEFORE the item list",
+              coachtop["topHasVerdict"] and coachtop["topHasTip"] and coachtop["itemsFollowsTop"],
+              str(coachtop))
+        check("P0-2 scan result: grade+tip do NOT also duplicate further down in #resultDetail",
+              not coachtop["detailHasVerdict"] and not coachtop["detailHasTip"], str(coachtop))
+        check("P0-2 scan result: Micronutrients + Smart metrics collapsed behind a closed-by-default expander",
+              coachtop["nutxPresent"] and coachtop["nutxCollapsed"] and coachtop["nutxHasMicro"], str(coachtop))
+
+        # History's meal-detail sheet (openMealSheet) must be UNCHANGED — verdict/tip stay inline, no opts.
+        histsheet = page.evaluate("""() => {
+            var r = { items: [{ name: 'Test', calories: 100, protein_g: 5, carbs_g: 10, fat_g: 3 }],
+                total: { calories: 100, protein_g: 5, carbs_g: 10, fat_g: 3, fiber_g: 0, sugar_g: 0, sat_fat_g: 0, sodium_mg: 0,
+                         potassium_mg: 0, calcium_mg: 0, iron_mg: 0, vitamin_a_dv: 0, vitamin_c_dv: 0, vitamin_d_dv: 0, est_weight_g: 100, band_pct: 0 },
+                health_score: 80, quality_grade: 'B', satiety: 'medium', good_flags: [], bad_flags: [],
+                verdict: 'Solid choice.', coach_tip: 'Keep it up.', swaps: [] };
+            var html = buildDetailHTML(r);
+            return { hasVerdictInline: html.indexOf('class="verdict"') >= 0, hasTipInline: html.indexOf('class="tip"') >= 0,
+                     hasCollapsedExpander: html.indexOf('class="nutx"') >= 0 };
+        }""")
+        check("P0-2 add-only: History's buildDetailHTML(r) (no opts) is UNCHANGED — verdict/tip stay inline, no collapse",
+              histsheet["hasVerdictInline"] and histsheet["hasTipInline"] and not histsheet["hasCollapsedExpander"],
+              str(histsheet))
+
+        # P1-3: MIC FAB OVERLAP. The 58px FAB floats at bottom:88px (top edge 146px above the viewport
+        # floor) — <main>'s bottom padding must clear that + a buffer, on every tab (viewport-independent
+        # since padding is a fixed px value, so no phone-viewport swap needed for this lock).
+        mainpad = page.evaluate("() => parseFloat(getComputedStyle(document.querySelector('main')).paddingBottom)")
+        check("P1-3 mic FAB: <main> bottom padding clears the FAB's full extent (88+58=146px) + buffer",
+              mainpad >= 160, "paddingBottom=%.0fpx" % mainpad)
+
+        # P1-4: LOCATION PROMPT FIRES TWICE. (a) dismissing ("Not now") must ALSO prime the shared flag —
+        # the copy says "asked once" full stop, not "once per Allow". (b) requestAllPerms() must prime the
+        # flag SYNCHRONOUSLY (before its first await) so a location feature opened right after onboarding
+        # never re-races it. (c) two consecutive snapGeo() calls (Coach Cal then Eat Out) must only ever
+        # show the custom explainer ONCE.
+        # NOTE: every await is Promise.race'd with a timeout — page.evaluate has NO default timeout, and
+        # an unsettled browser-permission promise hung this gate for 10+ min twice on 2026-07-15. A stall
+        # now returns 'timeout:<step>' in the trace and FAILS the check instead of hanging the run.
+        locfix = page.evaluate("""async () => {
+            var steps = [];
+            function tmo(p, tag, ms){
+                var settled = false;
+                return Promise.race([
+                    Promise.resolve(p).then(function(){ if (!settled){ settled = true; steps.push(tag); } }),
+                    new Promise(function(r){ setTimeout(function(){ if (!settled){ settled = true; steps.push('timeout:' + tag); } r(); }, ms || 8000); })
+                ]);
+            }
+            try { localStorage.removeItem('snapcal_c_snapcal_loc_primed'); } catch(e){}
+            var ex = document.getElementById('locPrimer'); if (ex) ex.remove();
+            await tmo(new Promise(function(resolve){
+                showLocPrimer(function(){ resolve(); }, function(){ resolve(); });
+                document.querySelector('#locPrimer .locp-skip').click();   // "Not now"
+            }), 'dismiss');
+            var flagAfterDismiss = localStorage.getItem('snapcal_c_snapcal_loc_primed');
+
+            try { localStorage.removeItem('snapcal_c_snapcal_loc_primed'); } catch(e){}
+            // The whole point of the fix: the flag must be set in the SYNCHRONOUS window before
+            // requestAllPerms' first await. So call it, read the flag immediately, and do NOT await
+            // the promise — headless Chrome's camera/notification prompts never settle. Fire-and-forget
+            // is exactly how the real onboarding code calls it (Promise.resolve(requestAllPerms()).catch()).
+            requestAllPerms().catch(function(){});
+            var flagImmediatelyAfterCall = localStorage.getItem('snapcal_c_snapcal_loc_primed');
+
+            try { localStorage.removeItem('snapcal_c_snapcal_loc_primed'); } catch(e){}
+            var showCount = 0, origShow = window.showLocPrimer;
+            window.showLocPrimer = function(onAllow, onDismiss){
+                showCount++; origShow(onAllow, onDismiss);
+                var b = document.querySelector('#locPrimer .locp-allow'); if (b) b.click();
+            };
+            await tmo(new Promise(function(resolve){ snapGeo(function(){ resolve(); }, function(){ resolve(); }); }), 'geo1');   // simulates Coach Cal opening
+            await tmo(new Promise(function(resolve){ snapGeo(function(){ resolve(); }, function(){ resolve(); }); }), 'geo2');   // simulates Eat Out right after
+            window.showLocPrimer = origShow;
+            return { flagAfterDismiss: flagAfterDismiss, flagImmediatelyAfterCall: flagImmediatelyAfterCall,
+                     showCount: showCount, steps: steps };
+        }""")
+        check("P1-4 location prompt: 'Not now' also primes the shared flag (explainer truly shows once, not once-per-Allow)",
+              locfix["flagAfterDismiss"] == "1", "flagAfterDismiss=%s" % locfix["flagAfterDismiss"])
+        check("P1-4 location prompt: requestAllPerms() primes the flag SYNCHRONOUSLY (closes the onboarding/Coach-Cal race)",
+              locfix["flagImmediatelyAfterCall"] == "1", "flagImmediatelyAfterCall=%s" % locfix["flagImmediatelyAfterCall"])
+        # NOTE on steps: 'dismiss' must resolve (pure DOM). geo1/geo2 CALLBACK timeouts are tolerated —
+        # headless Chrome's geolocation flakes on rapid successive getCurrentPosition calls (hung this
+        # gate twice on 2026-07-15) — because the behavior under test (show the explainer or not) is
+        # decided SYNCHRONOUSLY inside snapGeo before geolocation is ever consulted; showCount is the
+        # complete measurement of it.
+        check("P1-4 location prompt: 2 consecutive location features (Coach Cal then Eat Out) show the explainer only ONCE",
+              locfix["showCount"] == 1 and "dismiss" in locfix["steps"],
+              "showCount=%s steps=%s" % (locfix["showCount"], locfix["steps"]))
+        page.evaluate("() => { try { localStorage.setItem('snapcal_c_snapcal_loc_primed', '1'); } catch(e){} }")   # restore gate's primed state for any later checks
+
+        # P1-5: NEDA HELPLINE — its own visible, dignified card (not a buried 11.5px line).
+        neda = page.evaluate("""() => {
+            var was = document.body.classList.contains('gentle');
+            document.body.classList.add('gentle');
+            var card = document.getElementById('nedaCard');
+            var visible = !!card && getComputedStyle(card).display !== 'none';
+            var hasNumber = visible && /1-800-931-2237/.test(card.textContent);
+            var hasIcon = visible && !!card.querySelector('.neda-ic');
+            if (!was) document.body.classList.remove('gentle');
+            return { visible: visible, hasNumber: hasNumber, hasIcon: hasIcon };
+        }""")
+        check("P1-5 NEDA helpline: has its own visible card (icon + readable text) in Gentle mode",
+              neda["visible"] and neda["hasNumber"] and neda["hasIcon"], str(neda))
+
+        # P1-6: HISTORY EMPTY STATE — friendly skeleton + a working "+ Add a meal" shortcut to Today.
+        hist = page.evaluate("""async () => {
+            var real = window.api;
+            window.api = function(u, opts){ if (u.indexOf('/api/history') >= 0) return Promise.resolve({ days: [] }); return real(u, opts); };
+            await Promise.race([loadHistory(), new Promise(function(r){ setTimeout(r, 8000); })]);   // never hang the gate on a stray await inside loadHistory
+            window.api = real;
+            var empty = document.querySelector('#historyList .history-empty');
+            var hasSkel = !!empty && !!empty.querySelector('.hist-skel');
+            var hasCta = !!empty && !!document.getElementById('histAddMealBtn');
+            if (hasCta) document.getElementById('histAddMealBtn').click();
+            return { hasSkel: hasSkel, hasCta: hasCta };
+        }""")
+        page.wait_for_timeout(400)
+        histNav = page.evaluate("() => document.getElementById('tab-today').classList.contains('active')")
+        check("P1-6 history empty state: friendly skeleton + '+ Add a meal' present",
+              hist["hasSkel"] and hist["hasCta"], str(hist))
+        check("P1-6 history empty state: '+ Add a meal' shortcut jumps to Today",
+              histNav, "today tab active=%s" % histNav)
+        page.evaluate("() => { var a = document.getElementById('addMealCancelBtn'); if (a) a.click(); }")   # close the sheet it opened
+
         # 10. no JS errors
         check("no JS console / page errors", len(errors) == 0,
               ("; ".join(errors[:3])) if errors else "")
