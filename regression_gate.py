@@ -30,6 +30,15 @@ import time
 import subprocess
 import urllib.request
 
+# Windows consoles default stdout to the local codepage (cp1252 etc), which can't encode every
+# character a check's detail string might carry (e.g. a fullwidth "+" from UI copy). Force UTF-8
+# with a safe fallback so a detail string never crashes the gate mid-run.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 BASE = "http://127.0.0.1:5177"
 LAT, LNG = 40.2452, -75.6496          # Pottstown — chain-dense enough to exercise near + far bands
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -651,6 +660,94 @@ def main():
               quickadd["quickBtnPresent"] and quickadd["formPresent"] and quickadd["itemCount"] == 2
               and quickadd["lastName"] == "Mystery Sauce" and quickadd["lastCal"] == 120 and "340" in quickadd["totalText"],
               "items=" + str(quickadd["itemCount"]) + " last=" + str(quickadd["lastName"]) + "/" + str(quickadd["lastCal"]) + " total=" + str(quickadd["totalText"]))
+
+        # ============================================================================
+        # 2026-07-15 "+ ADD A MEAL" (Today screen) — the discoverability fix for a real tester
+        # (owner's mom) who couldn't find manual food logging: it existed, buried as fine print under
+        # the camera button on the Scan tab. This puts a big, obvious entry point right under the
+        # calorie ring on Today, at the moment of "I forgot to take a picture." feedback_discoverability_
+        # grandma_test.md is the law this enacts. Add-only: ring/macro rendering must be untouched.
+        # ============================================================================
+
+        # 1) The button renders VISIBLY on Today, positioned right under the ring (above the macro
+        #    rings card) — and the ring/macro elements it must never touch are still intact.
+        addmealbtn = page.evaluate("""async () => {
+            switchTab('today');
+            await new Promise(function(r){ setTimeout(r, 200); });
+            var btn = document.getElementById('addMealBtn');
+            var ringCard = document.querySelector('#tab-today .ring-wrap');
+            var macroCard = document.querySelector('#tab-today .macro-rings');
+            var visible = !!btn && btn.offsetParent !== null;
+            var ringRect = ringCard ? ringCard.getBoundingClientRect() : null;
+            var btnRect = btn ? btn.getBoundingClientRect() : null;
+            var macroRect = macroCard ? macroCard.getBoundingClientRect() : null;
+            var betweenRingAndMacros = !!(ringRect && btnRect && macroRect) &&
+                btnRect.top >= ringRect.bottom - 2 && btnRect.top <= macroRect.top + 2;
+            var ringIntact = !!document.getElementById('ringBig') && !!document.getElementById('metaEaten') && !!document.getElementById('proRing');
+            return { present: !!btn, visible: visible, betweenRingAndMacros: betweenRingAndMacros,
+                     ringIntact: ringIntact, btnText: btn ? btn.textContent.trim() : '' };
+        }""")
+        check("Today screen: '+ Add a meal' button renders visibly right under the calorie ring (ring/macros untouched, add-only)",
+              addmealbtn["present"] and addmealbtn["visible"] and addmealbtn["betweenRingAndMacros"]
+              and addmealbtn["ringIntact"] and "Add a meal" in addmealbtn["btnText"],
+              str(addmealbtn))
+
+        # 2) Tap it -> type a comma-separated multi-item entry -> each term resolves via the SAME USDA
+        #    /api/nutrition search the missed-item flow uses (mocked above) -> logs as ONE meal entry.
+        addmeal_multi = page.evaluate("""async () => {
+            switchTab('today');
+            window._recents = [{ name:'placeholder', calories:1, protein_g:0, carbs_g:0, fat_g:0 }];  // skip the real fetch, deterministic
+            var real = window.api, posted = null;
+            window.api = function(u, opts){
+                if (u.indexOf('/api/meals') >= 0 && opts && opts.method === 'POST'){ posted = JSON.parse(opts.body); return Promise.resolve({ ok:true, id:99 }); }
+                return real(u, opts);
+            };
+            document.getElementById('addMealBtn').click();
+            document.getElementById('addMealInput').value = 'cheesesteak, french fries';
+            document.getElementById('addMealFindBtn').click();
+            await new Promise(function(r){ var t=0; var iv=setInterval(function(){ t+=40; if (document.querySelectorAll('#addMealResolved .item-row').length>=2 || t>4000){ clearInterval(iv); r(); } }, 40); });
+            var rows = document.querySelectorAll('#addMealResolved .item-row').length;
+            var totalBefore = (document.getElementById('addMealTotalKcal')||{}).textContent || '';
+            var logVisible = document.getElementById('addMealLogBtn').style.display !== 'none';
+            document.getElementById('addMealLogBtn').click();
+            await new Promise(function(r){ setTimeout(r, 250); });
+            window.api = real;
+            var sheetClosed = document.getElementById('addMealWrap').innerHTML.trim() === '';
+            return { rows: rows, totalBefore: totalBefore, logVisible: logVisible, posted: posted, sheetClosed: sheetClosed };
+        }""")
+        posted_items = json.loads(addmeal_multi["posted"]["items_json"]) if addmeal_multi.get("posted") else []
+        check("Today: '+ Add a meal' resolves a comma-separated multi-item entry via USDA search and logs it as ONE meal",
+              addmeal_multi["rows"] == 2 and addmeal_multi["logVisible"] and "806" in addmeal_multi["totalBefore"]
+              and addmeal_multi["posted"] is not None and addmeal_multi["posted"].get("calories") == 806
+              and len(posted_items) == 2 and addmeal_multi["posted"].get("source") == "Manual entry"
+              and addmeal_multi["posted"].get("accuracy_tier") == "estimate" and addmeal_multi["sheetClosed"],
+              "rows=" + str(addmeal_multi["rows"]) + " total=" + str(addmeal_multi["totalBefore"]) + " posted=" + str(addmeal_multi["posted"]))
+
+        # 3) Small/Medium/Large portion picker (0.7x / 1.0x / 1.5x) updates the shown calories LIVE,
+        #    per item, before logging.
+        addmeal_portion = page.evaluate("""async () => {
+            switchTab('today');
+            window._recents = [{ name:'placeholder', calories:1, protein_g:0, carbs_g:0, fat_g:0 }];
+            document.getElementById('addMealBtn').click();
+            document.getElementById('addMealInput').value = 'cheddar cheese';
+            document.getElementById('addMealFindBtn').click();
+            await new Promise(function(r){ var t=0; var iv=setInterval(function(){ t+=40; if (document.querySelectorAll('#addMealResolved .item-row').length>=1 || t>4000){ clearInterval(iv); r(); } }, 40); });
+            var totalM = (document.getElementById('addMealTotalKcal')||{}).textContent || '';
+            var id = window._addMealItems[0]._id;
+            var sBtn = document.querySelector('[data-addmeal-size="'+id+'"][data-sz="S"]');
+            if (sBtn) sBtn.click();
+            var totalS = (document.getElementById('addMealTotalKcal')||{}).textContent || '';
+            // re-render replaces the DOM node the click fired on, so re-query fresh before reading its class
+            var sBtnAfter = document.querySelector('[data-addmeal-size="'+id+'"][data-sz="S"]');
+            var sOn = sBtnAfter ? sBtnAfter.classList.contains('on') : false;
+            var lBtn = document.querySelector('[data-addmeal-size="'+id+'"][data-sz="L"]');
+            if (lBtn) lBtn.click();
+            var totalL = (document.getElementById('addMealTotalKcal')||{}).textContent || '';
+            return { totalM: totalM, totalS: totalS, totalL: totalL, sOn: sOn };
+        }""")
+        check("Today: '+ Add a meal' Small/Medium/Large portion picker changes the shown total live (0.7x / 1.0x / 1.5x)",
+              "403" in addmeal_portion["totalM"] and "282" in addmeal_portion["totalS"] and "605" in addmeal_portion["totalL"] and addmeal_portion["sOn"],
+              str(addmeal_portion))
 
         # ACCESSIBILITY + ROUTE-CORRIDOR UI
         ts = page.evaluate("""() => {

@@ -1121,6 +1121,10 @@
       </div>
     </div>
 
+    <button class="btn btn-dark" id="addMealBtn" type="button" style="margin:0 0 4px">＋ Add a meal</button>
+    <div class="goal-desc" id="addMealHint" style="margin:2px 2px 14px;text-align:center">Forgot to snap a photo? Type what you ate.</div>
+    <div id="addMealWrap"></div>
+
     <div class="card">
       <div class="macro-rings">
         <div class="mring" data-m="pro">
@@ -2343,6 +2347,251 @@ if ($("#recentsList")) $("#recentsList").addEventListener("click", async functio
     toast("✓ Logged " + r.name);
     switchTab("today");
   } catch (err){ toast(err.message || "Couldn't log it", true); row.disabled = false; row.classList.remove("recent-adding"); }
+});
+
+/* ---------------- "+ Add a meal" (Today screen) — discoverable fallback for "I forgot to take a picture."
+   Type foods in plain words, comma/and-separated for multiple items; each is resolved via the EXISTING
+   USDA name-search path (/api/nutrition — works without any Gemini/AI credits, same endpoint the
+   Nutrition-facts lookup and the scan card's "item the camera missed" search already use). Portion pick
+   (Small/Medium/Large ~0.7/1.0/1.5x) updates the shown calories live, honest "≈ estimated" framing.
+   Recent foods surface first (reuses the /api/recents data the Scan-tab card already loads) so a regular
+   is two taps: tap the recent, tap Log. Falls back to a manual quick-add (name + calories) per item when
+   USDA has no match. Logs the whole plate as ONE meal via the existing /api/meals path — add-only, the
+   ring/macros/meals-list rendering are untouched. Fix for the "grandma couldn't find manual add" report
+   (feedback_discoverability_grandma_test — least-technical real user must SEE the entry point at the
+   moment of need, on the screen where the need arises). */
+var ADD_MEAL_SIZES = { S: 0.7, M: 1.0, L: 1.5 };
+var _addMealItems = [];   // [{ _id, name, qty, size, base:{calories,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sat_fat_g,sodium_mg}|null }]
+var _addMealSeq = 0;
+
+function addMealSizeChips(item){
+  return ["S", "M", "L"].map(function(sz){
+    return '<button type="button" class="fast-chip' + (item.size === sz ? ' on' : '') +
+      '" data-addmeal-size="' + item._id + '" data-sz="' + sz + '" style="flex:none;padding:6px 14px;font-size:12.5px">' + sz + '</button>';
+  }).join("");
+}
+
+function addMealItemHTML(item){
+  if (!item.base){
+    return '<div class="item-row" data-addmeal-row="' + item._id + '">' +
+        '<div class="item-l" style="flex:1">' +
+          '<div class="n">' + esc(item.name) + '</div>' +
+          '<div class="q" style="color:var(--bad)">No USDA match — enter calories to add it</div>' +
+          '<label class="field-lbl" style="margin:8px 2px 6px" for="amQaCal' + item._id + '">Calories</label>' +
+          '<input class="txt" id="amQaCal' + item._id + '" type="number" inputmode="numeric" min="0" placeholder="required" data-addmeal-qacal="' + item._id + '">' +
+          '<button class="btn btn-dark" type="button" data-addmeal-qasave="' + item._id + '" style="margin-top:10px">Save this item</button>' +
+        '</div>' +
+        '<button class="item-del" type="button" data-addmeal-del="' + item._id + '" aria-label="Remove ' + esc(item.name) + '">✕ Remove</button>' +
+      '</div>';
+  }
+  var m = ADD_MEAL_SIZES[item.size] || 1;
+  var cal = Math.round(item.base.calories * m), pro = Math.round(item.base.protein_g * m),
+      carb = Math.round(item.base.carbs_g * m), fat = Math.round(item.base.fat_g * m);
+  return '<div class="item-row" data-addmeal-row="' + item._id + '">' +
+      '<div class="item-l">' +
+        '<div class="n">' + esc(item.name) + '</div>' +
+        (item.qty ? '<div class="q">' + esc(item.qty) + '</div>' : '') +
+        '<div style="display:flex;gap:6px;margin-top:8px">' + addMealSizeChips(item) + '</div>' +
+        '<button class="item-del" type="button" data-addmeal-del="' + item._id + '" aria-label="Remove ' + esc(item.name) + '">✕ Remove</button>' +
+      '</div>' +
+      '<div class="item-r"><div class="c">' + fmtNum(cal) + ' Cal</div>' +
+        '<div class="m">P ' + pro + 'g &middot; C ' + carb + 'g &middot; F ' + fat + 'g</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function addMealTotals(){
+  return _addMealItems.reduce(function(t, item){
+    if (!item.base) return t;
+    var m = ADD_MEAL_SIZES[item.size] || 1;
+    t.calories += Math.round(item.base.calories * m);
+    t.protein_g += Math.round(item.base.protein_g * m);
+    t.carbs_g += Math.round(item.base.carbs_g * m);
+    t.fat_g += Math.round(item.base.fat_g * m);
+    return t;
+  }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+}
+
+function renderAddMealItems(){
+  var host = $("#addMealResolved"), lb = $("#addMealLogBtn"); if (!host) return;
+  if (!_addMealItems.length){ host.innerHTML = ""; if (lb) lb.style.display = "none"; return; }
+  var t = addMealTotals();
+  var ready = _addMealItems.filter(function(i){ return i.base; }).length;
+  host.innerHTML = _addMealItems.map(addMealItemHTML).join("") +
+    '<div class="total-row"><div>Total<div class="m">P ' + t.protein_g + 'g &middot; C ' + t.carbs_g +
+      'g &middot; F ' + t.fat_g + 'g</div></div><div id="addMealTotalKcal">' + fmtNum(t.calories) + ' Cal</div></div>' +
+    '<div class="goal-desc" style="margin-top:8px"><b style="color:#c77d20">≈ Estimated</b> — USDA numbers per serving; portion size is your best guess.</div>';
+  if (lb) lb.style.display = ready ? "block" : "none";
+}
+
+function renderAddMealRecents(){
+  var wrap = $("#addMealRecentWrap"); if (!wrap) return;
+  if (!_recents || !_recents.length){ wrap.innerHTML = ""; return; }
+  wrap.innerHTML = '<div class="goal-title" style="margin:16px 2px 8px">🔁 Recent &mdash; tap to add</div>' +
+    _recents.slice(0, 6).map(function(r, i){
+      var macros = [r.protein_g ? r.protein_g + "p" : "", r.carbs_g ? r.carbs_g + "c" : "", r.fat_g ? r.fat_g + "f" : ""].filter(Boolean).join(" · ");
+      return '<button class="recent-row" type="button" data-addmeal-recent="' + i + '">' +
+        '<span class="recent-name">' + esc(r.name) + '</span>' +
+        '<span class="recent-meta">' + int(r.calories) + ' cal' + (macros ? ' · ' + esc(macros) : '') + '</span>' +
+        '<span class="recent-plus">+</span></button>';
+    }).join("");
+}
+
+function addMealAddRecent(i){
+  var r = _recents[i]; if (!r) return;
+  _addMealSeq++;
+  _addMealItems.push({
+    _id: _addMealSeq, name: r.name, qty: "", size: "M",
+    base: { calories: int(r.calories), protein_g: int(r.protein_g), carbs_g: int(r.carbs_g), fat_g: int(r.fat_g),
+             fiber_g: 0, sugar_g: 0, sat_fat_g: 0, sodium_mg: 0 }
+  });
+  renderAddMealItems();
+  toast("Added " + r.name);
+}
+
+function addMealSetSize(id, sz){
+  var item = _addMealItems.filter(function(i){ return i._id === id; })[0]; if (!item || !ADD_MEAL_SIZES[sz]) return;
+  item.size = sz;
+  renderAddMealItems();
+}
+
+function addMealRemoveItem(id){
+  _addMealItems = _addMealItems.filter(function(i){ return i._id !== id; });
+  renderAddMealItems();
+}
+
+function addMealQuickAddSave(id){
+  var item = _addMealItems.filter(function(i){ return i._id === id; })[0]; if (!item) return;
+  var calInp = document.querySelector('[data-addmeal-qacal="' + id + '"]');
+  var cal = Number(calInp && calInp.value);
+  if (!cal || cal <= 0){ toast("Enter calories", true); if (calInp) calInp.focus(); return; }
+  item.base = { calories: cal, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sugar_g: 0, sat_fat_g: 0, sodium_mg: 0 };
+  item.size = "M";
+  renderAddMealItems();
+  toast("Added " + item.name);
+}
+
+/* Splits "cheesesteak, french fries" / "eggs and toast" / "eggs, toast and bacon" into separate terms. */
+function parseAddMealInput(raw){
+  return String(raw || "").split(/\s*,\s*|\s+and\s+/i).map(function(s){ return s.trim(); }).filter(Boolean);
+}
+
+var _addMealFindBusy = false;
+function addMealFindFoods(){
+  if (_addMealFindBusy) return;
+  var inp = $("#addMealInput");
+  var terms = parseAddMealInput(inp && inp.value);
+  if (!terms.length){ if (inp) inp.focus(); return; }
+  var btn = $("#addMealFindBtn");
+  _addMealFindBusy = true;
+  if (btn){ btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-color:rgba(255,255,255,.35);border-top-color:#fff;vertical-align:-3px"></span> Looking up&hellip;'; }
+
+  var lookups = terms.map(function(term){
+    var ac = ("AbortController" in window) ? new AbortController() : null;
+    var to = ac ? setTimeout(function(){ try { ac.abort(); } catch(e){} }, 8000) : null;
+    return fetch(API_BASE + "/api/nutrition?q=" + encodeURIComponent(term), {
+      headers: { "X-Device-Id": DEVICE_ID }, signal: ac ? ac.signal : undefined
+    }).then(function(r){ return r.json().catch(function(){ return null; }); })
+      .then(function(d){ clearTimeout(to); return { term: term, data: d }; })
+      .catch(function(){ clearTimeout(to); return { term: term, data: null }; });
+  });
+
+  Promise.all(lookups).then(function(results){
+    var misses = 0;
+    results.forEach(function(res){
+      var d = res.data, n = d && d.nutrients;
+      _addMealSeq++;
+      if (d && !d.error && n && Object.keys(n).length){
+        _addMealItems.push({
+          _id: _addMealSeq, name: d.food, qty: d.serving, size: "M",
+          base: { calories: n.calories || 0, protein_g: n.protein_g || 0, carbs_g: n.carbs_g || 0, fat_g: n.fat_g || 0,
+                   fiber_g: n.fiber_g || 0, sugar_g: n.sugar_g || 0, sat_fat_g: n.sat_fat_g || 0, sodium_mg: n.sodium_mg || 0 }
+        });
+      } else {
+        misses++;
+        _addMealItems.push({ _id: _addMealSeq, name: res.term, qty: "", size: "M", base: null });
+      }
+    });
+    if (inp) inp.value = "";
+    _addMealFindBusy = false;
+    if (btn){ btn.disabled = false; btn.textContent = "Find these foods"; }
+    renderAddMealItems();
+    if (misses) toast(misses + " item" + (misses > 1 ? "s" : "") + " needs a quick add below", true);
+  });
+}
+
+function openAddMeal(){
+  _addMealItems = [];
+  var wrap = $("#addMealWrap"); if (!wrap) return;
+  wrap.innerHTML =
+    '<div class="card" id="addMealCard">' +
+      '<div class="goal-title" style="margin:0">🍽️ Add a meal</div>' +
+      '<div class="goal-desc" style="margin:4px 2px 12px">Type what you ate &mdash; separate foods with a comma. e.g. cheesesteak, french fries</div>' +
+      '<textarea id="addMealInput" rows="2" placeholder="e.g. cheesesteak, french fries" autocomplete="off" style="width:100%;resize:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:11px;padding:11px 12px;font-size:15px;font-family:inherit"></textarea>' +
+      '<button class="btn btn-dark" id="addMealFindBtn" type="button">Find these foods</button>' +
+      '<div id="addMealRecentWrap"></div>' +
+      '<div id="addMealResolved" style="margin-top:4px"></div>' +
+      '<button class="btn btn-dark" id="addMealLogBtn" type="button" style="display:none">Log this meal</button>' +
+      '<button type="button" id="addMealCancelBtn" style="margin-top:10px;border:none;background:none;color:var(--ink2);font-size:12.5px;font-weight:700;cursor:pointer;padding:4px 0;font-family:inherit;display:block;width:100%;text-align:center">Cancel</button>' +
+    '</div>';
+  var inp = $("#addMealInput");
+  if (inp){
+    inp.focus();
+    inp.addEventListener("keydown", function(e){ if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); addMealFindFoods(); } });
+  }
+  var fb = $("#addMealFindBtn"); if (fb) fb.addEventListener("click", addMealFindFoods);
+  var lb = $("#addMealLogBtn"); if (lb) lb.addEventListener("click", logAddMeal);
+  var cb = $("#addMealCancelBtn"); if (cb) cb.addEventListener("click", closeAddMeal);
+  if (_recents && _recents.length) renderAddMealRecents();
+  else loadRecents().then(renderAddMealRecents);
+  var card = $("#addMealCard"); if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeAddMeal(){
+  _addMealItems = [];
+  var wrap = $("#addMealWrap"); if (wrap) wrap.innerHTML = "";
+}
+
+async function logAddMeal(){
+  var ready = _addMealItems.filter(function(i){ return i.base; });
+  if (!ready.length){ toast("Add at least one food first", true); return; }
+  var t = addMealTotals();
+  var items = ready.map(function(item){
+    var m = ADD_MEAL_SIZES[item.size] || 1;
+    return {
+      name: item.name, calories: Math.round(item.base.calories * m), protein_g: Math.round(item.base.protein_g * m),
+      carbs_g: Math.round(item.base.carbs_g * m), fat_g: Math.round(item.base.fat_g * m),
+      fiber_g: Math.round((item.base.fiber_g || 0) * m), sugar_g: Math.round((item.base.sugar_g || 0) * m),
+      sat_fat_g: Math.round((item.base.sat_fat_g || 0) * m), sodium_mg: Math.round((item.base.sodium_mg || 0) * m)
+    };
+  });
+  var name = items.map(function(i){ return i.name; }).join(", ") || "Meal";
+  var lb = $("#addMealLogBtn"); if (lb) lb.disabled = true;
+  try {
+    await api("/api/meals", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: todayStr(), time: nowTime(), name: name,
+        calories: t.calories, protein_g: t.protein_g, carbs_g: t.carbs_g, fat_g: t.fat_g,
+        items_json: JSON.stringify(items), source: "Manual entry", accuracy_tier: "estimate"
+      }) });
+    toast("✓ Added " + name);
+    closeAddMeal();
+    switchTab("today");
+  } catch (e){ toast(e.message || "Couldn't add it", true); }
+  finally { if (lb) lb.disabled = false; }
+}
+
+document.addEventListener("click", function(e){
+  if (!e.target.closest) return;
+  if (e.target.closest("#addMealBtn")){ openAddMeal(); return; }
+  var rec = e.target.closest("[data-addmeal-recent]");
+  if (rec){ addMealAddRecent(int(rec.getAttribute("data-addmeal-recent"))); return; }
+  var szBtn = e.target.closest("[data-addmeal-size]");
+  if (szBtn){ addMealSetSize(int(szBtn.getAttribute("data-addmeal-size")), szBtn.getAttribute("data-sz")); return; }
+  var delBtn = e.target.closest("[data-addmeal-del]");
+  if (delBtn){ addMealRemoveItem(int(delBtn.getAttribute("data-addmeal-del"))); return; }
+  var qaBtn = e.target.closest("[data-addmeal-qasave]");
+  if (qaBtn){ addMealQuickAddSave(int(qaBtn.getAttribute("data-addmeal-qasave"))); return; }
 });
 
 /* ---------------- My recipes: build a multi-ingredient meal once, log it in one tap ---------------- */
