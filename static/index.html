@@ -4452,6 +4452,7 @@ function _qzApplyAndCalc(){
   if (_qz.a.intensity){
     try { localStorage.setItem("snapcal_coach_intensity", _qz.a.intensity); } catch(e){}
     try { api("/api/profile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ coach_intensity: _qz.a.intensity }) }); } catch(e){}
+    try { _syncPushProfileIfSubscribed(); } catch(e){}
   }
   try { calcTargets(); } catch(e){}
 }
@@ -4662,6 +4663,78 @@ function voiceRender(role, text){
     d.appendChild(b);
   }
   log.appendChild(d); log.scrollTop = log.scrollHeight;
+}
+/* ---------------- CONVERSATIONAL LOGGING: chip that turns a chat proposal into a real diary entry ----------------
+   "I had a cheesesteak and fries" → Coach Cal replies AND the server attaches a log_proposal. This NEVER logs
+   silently — the user must tap ✓. Gentle mode (server-echoed on the proposal) shows food names only, no numbers. */
+function renderLogProposal(proposal){
+  if (!proposal || !Array.isArray(proposal.items) || !proposal.items.length) return;
+  var log = $("#voiceLog"); if (!log) return;
+  var hideNums = !!(proposal.gentle || _gentle);
+  var wrap = document.createElement("div");
+  wrap.className = "vmsg vmsg-coach log-proposal";
+  wrap.style.cssText = "display:block";
+  var head = document.createElement("div");
+  var lineText = proposal.items.map(function(it){
+    var nm = String((it && it.name) || "Food").slice(0, 60);
+    return hideNums ? nm : (nm + " ~" + int(it.calories) + " Cal");
+  }).join("  +  ");
+  head.innerHTML = "Log it: <b>" + esc(lineText) + "</b>";
+  wrap.appendChild(head);
+  var btnRow = document.createElement("div");
+  btnRow.style.cssText = "display:flex;gap:8px;margin-top:9px";
+  var okBtn = document.createElement("button");
+  okBtn.type = "button"; okBtn.textContent = "✓ Log"; okBtn.className = "btn btn-dark";
+  okBtn.style.cssText = "flex:1;padding:9px 10px;font-size:13.5px;margin:0";
+  var editBtn = document.createElement("button");
+  editBtn.type = "button"; editBtn.textContent = "✎ Edit";
+  editBtn.style.cssText = "flex:0 0 auto;border:1.5px solid var(--line);background:none;color:var(--ink);border-radius:9px;padding:9px 13px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit";
+  var xBtn = document.createElement("button");
+  xBtn.type = "button"; xBtn.textContent = "✕"; xBtn.setAttribute("aria-label", "Dismiss");
+  xBtn.style.cssText = "flex:0 0 auto;border:none;background:none;color:var(--ink3);font-size:16px;cursor:pointer;padding:9px 8px";
+  okBtn.addEventListener("click", function(){
+    okBtn.disabled = true; editBtn.disabled = true; xBtn.disabled = true; okBtn.textContent = "Logging…";
+    logProposalConfirm(proposal).then(function(ok){
+      if (ok){ wrap.remove(); toast("✓ Logged"); }
+      else { okBtn.disabled = false; editBtn.disabled = false; xBtn.disabled = false; okBtn.textContent = "✓ Log"; toast("Couldn’t log it — try again", true); }
+    });
+  });
+  editBtn.addEventListener("click", function(){
+    wrap.remove();
+    switchTab("today");
+    openAddMeal();
+    var inp = $("#addMealInput");
+    if (inp) inp.value = proposal.items.map(function(it){ return (it && it.name) || ""; }).filter(Boolean).join(", ");
+  });
+  xBtn.addEventListener("click", function(){ wrap.remove(); });
+  btnRow.appendChild(okBtn); btnRow.appendChild(editBtn); btnRow.appendChild(xBtn);
+  wrap.appendChild(btnRow);
+  log.appendChild(wrap); log.scrollTop = log.scrollHeight;
+}
+async function logProposalConfirm(proposal){
+  try {
+    var items = (proposal.items || []).map(function(it){
+      return {
+        name: String((it && it.name) || "Food").slice(0, 60),
+        calories: int(it.calories), protein_g: int(it.protein_g),
+        carbs_g: int(it.carbs_g), fat_g: int(it.fat_g)
+      };
+    });
+    if (!items.length) return false;
+    var t = items.reduce(function(a, i){ a.calories += i.calories; a.protein_g += i.protein_g; a.carbs_g += i.carbs_g; a.fat_g += i.fat_g; return a; },
+                         { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+    var name = items.map(function(i){ return i.name; }).join(", ") || "Meal";
+    await api("/api/meals", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: todayStr(), time: nowTime(), name: name,
+        calories: t.calories, protein_g: t.protein_g, carbs_g: t.carbs_g, fat_g: t.fat_g,
+        items_json: JSON.stringify(items), source: "Coach Cal chat", accuracy_tier: "estimate"
+      })
+    });
+    if (_curTab === "today") loadToday();
+    return true;
+  } catch (e){ return false; }
 }
 /* ===================== ALIVE Coach Cal — spring entrance + audio-reactive "talking" face =====================
    The coach RISES from the bottom with a spring (Motion One) over the blurred food screen, BREATHES when idle,
@@ -5048,6 +5121,9 @@ async function sendChat(text){
     /* Proactively drop a tappable directions button for EACH place Coach named — the user should never have to
        type "take me there" or ask "where is that". One tap → maps. Cap at 3 so two-spot answers stay clean. */
     try { _named.slice(0, 3).forEach(function(p){ renderDirectionsLink(p); }); } catch(e){}
+    /* CONVERSATIONAL LOGGING: the server only PROPOSES — it never logs anything itself. Render a confirm chip;
+       nothing is written to the diary until the user taps ✓. */
+    if (d.log_proposal) { try { renderLogProposal(d.log_proposal); } catch(e){} }
   } else {
     voiceRender("coach", "I’m having trouble connecting right now — give me a few seconds and ask me again.");
   }
@@ -5650,6 +5726,9 @@ async function updatePushUI(){
   btn.textContent = on ? "Turn off" : "Turn on";
   if (testBtn) testBtn.style.display = on ? "" : "none";
 }
+/* PROACTIVE COACH CAL nudges (2026-07-15) piggyback on this SAME push_subs row — the server needs to know
+   gentle mode + coach intensity to keep nudge COPY ED-safe (no numbers in gentle) and on-tone (soft/hard). */
+function _pushIntensity(){ try { return localStorage.getItem("snapcal_coach_intensity") || ""; } catch(e){ return ""; } }
 async function enablePush(){
   if (!isPremium()){ openPaywall(); return; }
   if (!_pushSupported()){ toast("Not supported here"); return; }
@@ -5675,12 +5754,36 @@ async function enablePush(){
         name: (profile && profile.name) || localStorage.getItem("snapcal_name") || "",
         goal: goal,
         daily_calories: int(profile.daily_calories),
-        protein_target_g: int(profile.protein_g)
+        protein_target_g: int(profile.protein_g),
+        gentle: _gentle,
+        intensity: _pushIntensity()
       })
     });
     toast(keyInfo.configured ? "🔔 Daily check-ins on" : "Saved — check-ins start once the server is set up");
   } catch (e){ toast("Couldn’t turn on check-ins"); }
   updatePushUI();
+}
+/* Keep the server's copy of gentle/intensity fresh when either changes AFTER check-ins are already on (e.g.
+   toggling Gentle mode later) — additive best-effort upsert into the SAME row; no-op if never subscribed. */
+async function _syncPushProfileIfSubscribed(){
+  try {
+    if (!_pushSupported()) return;
+    var sub = await _pushSubObj();
+    if (!sub) return;
+    await api("/api/push/subscribe", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscription: sub.toJSON ? sub.toJSON() : sub,
+        tz_offset_min: new Date().getTimezoneOffset(),
+        name: (profile && profile.name) || localStorage.getItem("snapcal_name") || "",
+        goal: goal,
+        daily_calories: int(profile.daily_calories),
+        protein_target_g: int(profile.protein_g),
+        gentle: _gentle,
+        intensity: _pushIntensity()
+      })
+    });
+  } catch (e){}
 }
 async function disablePush(){
   try {
@@ -5938,7 +6041,7 @@ function applyGentle(){
   if (st) st.textContent = _gentle ? "On — coaching on balance; numbers are hidden." : "Hide calories & macros — coach on balance & consistency, not numbers.";
   if (btn) btn.textContent = _gentle ? "Turn off" : "Turn on";
 }
-function setGentle(on){ _gentle = !!on; try { localStorage.setItem("snapcal_gentle", on ? "1" : "0"); } catch(e){} applyGentle(); }
+function setGentle(on){ _gentle = !!on; try { localStorage.setItem("snapcal_gentle", on ? "1" : "0"); } catch(e){} applyGentle(); _syncPushProfileIfSubscribed(); }
 if ($("#gentleToggle")) $("#gentleToggle").addEventListener("click", function(){ setGentle(!_gentle); toast(_gentle ? "🌿 Gentle mode on" : "Gentle mode off"); });
 
 /* Budget mode — OPT-IN price display. Off by default so it never offends a customer who doesn't care
@@ -7420,6 +7523,20 @@ function renderWeightChart(w){
   }
   setTimeout(prewarmSheets, 2500);   /* warm meal-plan + grocery in the background -> instant first tap */
   setTimeout(prewarmTTS, 1200);   /* P1-7 2026-07-15: warm the TTS path (both gunicorn workers, see prewarmTTS) well before any real "Talk to Coach Cal" tap or briefing 🔊 */
+  /* PROACTIVE NUDGE deep-link (2026-07-15): a tapped nudge notification lands here as /?nudge=meal|water|workout
+     (see sw.js notificationclick + the tick endpoint's per-type URL). One tap → the exact next action, no hunting. */
+  (function(){
+    try {
+      var na = new URLSearchParams(location.search).get("nudge");
+      if (!na) return;
+      setTimeout(function(){
+        switchTab("today");
+        if (na === "meal") openAddMeal();
+        else if (na === "water"){ var wc = $("#waterCard"); if (wc) wc.scrollIntoView({ behavior: "smooth", block: "center" }); }
+        else if (na === "workout"){ var woc = $("#workoutCard"); if (woc) woc.scrollIntoView({ behavior: "smooth", block: "center" }); }
+      }, 700);
+    } catch(e){}
+  })();
 })();
 </script>
 </body>

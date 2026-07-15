@@ -29,6 +29,7 @@ import sys
 import time
 import subprocess
 import urllib.request
+import urllib.error
 
 # Windows consoles default stdout to the local codepage (cp1252 etc), which can't encode every
 # character a check's detail string might carry (e.g. a fullwidth "+" from UI copy). Force UTF-8
@@ -42,6 +43,12 @@ except Exception:
 BASE = "http://127.0.0.1:5177"
 LAT, LNG = 40.2452, -75.6496          # Pottstown — chain-dense enough to exercise near + far bands
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+# PROACTIVE COACH CAL nudge tick (2026-07-15): arm a throwaway key BEFORE ensure_server() spawns the app.py
+# subprocess so it inherits these and /api/nudge/tick is actually reachable to gate. A real deploy needs
+# Tariq to set NUDGE_TICK_KEY in Render's dashboard — this is gate-only, never a real secret.
+os.environ.setdefault("NUDGE_TICK_KEY", "gate-test-nudge-key-not-real")
+os.environ.setdefault("NUDGES_ENABLED", "1")
 
 # Deterministic fixtures: /api/nearby is backed by Overpass, which is slow + flaky (18s+). The gate must
 # test OUR rendering, not Overpass's mood — so we intercept /api/nearby and return known data.
@@ -168,6 +175,143 @@ def main():
               len(_m._FDC_NUTRIENTS) >= 28, "%d nutrients in _FDC_NUTRIENTS" % len(_m._FDC_NUTRIENTS))
     except Exception as e:  # noqa: BLE001
         check("allergy-safe scan + meal plan (in-process)", False, "exception: " + str(e)[:120])
+
+    # ---- PROACTIVE COACH CAL nudge engine — HARD LAWS (in-process unit checks, no browser needed) ----
+    # Seeds real rows into the SAME db the server uses via a throwaway uid, calls the nudge helper functions
+    # directly, then cleans up. Added 2026-07-15 alongside the greenlit meal-gap/water/workout nudge engine.
+    try:
+        import re as _re
+        from datetime import date as _date, timedelta as _td
+        _nm = _m  # the app.py module already imported above for the allergy/accuracy checks
+        UID = "_gate_nudge_test_uid"
+        UID2 = "_gate_nudge_test_uid_nohist"
+
+        def _wipe(uid):
+            con = _nm.get_db()
+            try:
+                for tbl in ("meals", "exercise", "water_log", "nudge_log", "push_subs"):
+                    con.execute("DELETE FROM " + tbl + " WHERE uid = ?", (uid,))
+                con.commit()
+            finally:
+                con.close()
+
+        _wipe(UID); _wipe(UID2)
+        con = _nm.get_db()
+        try:
+            # 5 days of meals (first ~07:30, second ~12:15) -> a clean learned pattern; TODAY left empty.
+            for i in range(1, 6):
+                d = (_date.today() - _td(days=i)).isoformat()
+                con.execute("INSERT INTO meals(date, time, name, calories, protein_g, carbs_g, fat_g, uid) VALUES (?,?,?,?,?,?,?,?)",
+                           (d, "07:30", "Breakfast", 400, 20, 40, 15, UID))
+                con.execute("INSERT INTO meals(date, time, name, calories, protein_g, carbs_g, fat_g, uid) VALUES (?,?,?,?,?,?,?,?)",
+                           (d, "12:15", "Lunch", 600, 30, 60, 20, UID))
+            # 4 days of water history (glasses>0), today untouched.
+            for i in range(1, 5):
+                d = (_date.today() - _td(days=i)).isoformat()
+                con.execute("INSERT INTO water_log(uid, date, glasses) VALUES (?,?,?)", (UID, d, 6))
+            # 4 days of exercise history around 18:00, today untouched.
+            for i in range(1, 5):
+                d = (_date.today() - _td(days=i)).isoformat()
+                con.execute("INSERT INTO exercise(uid, date, time, name, minutes, calories) VALUES (?,?,?,?,?,?)",
+                           (UID, d, "18:00", "Walk", 30, 150))
+            con.commit()
+        finally:
+            con.close()
+
+        learned = _nm._nudge_learn_meal_times(UID)
+        check("nudge: meal-time learning — median first/second-meal minutes from 14d history",
+              learned[0] == 450 and learned[1] == 735 and learned[2] == 5, "learned=%s" % (learned,))
+        no_hist = _nm._nudge_learn_meal_times(UID2)
+        check("nudge: meal-gap silently unavailable for a user with NO meal history (never nags an unused feature)",
+              no_hist[0] is None, "no_hist=%s" % (no_hist,))
+
+        gap = _nm._nudge_meal_gap_candidate(UID, 450 + _nm.NUDGE_GRACE_MIN + 1, False)
+        check("nudge: MEAL-GAP fires ~90min past the user's own learned first-log time with nothing logged today",
+              bool(gap) and gap[0] == "meal_gap", "gap=%s" % (gap,))
+        gap_early = _nm._nudge_meal_gap_candidate(UID, 450 + 10, False)
+        check("nudge: MEAL-GAP does NOT fire before the 90min grace window",
+              gap_early is None, "gap_early=%s" % (gap_early,))
+        gap_gentle = _nm._nudge_meal_gap_candidate(UID, 450 + _nm.NUDGE_GRACE_MIN + 1, True)
+        check("nudge: GENTLE MODE — meal-gap copy NEVER mentions a number (neither gentle nor default copy does)",
+              bool(gap_gentle) and not _re.search(r"\d", gap_gentle[2]) and not _re.search(r"\d", gap[2]),
+              "gentle_body=%r default_body=%r" % (gap_gentle[2] if gap_gentle else None, gap[2] if gap else None))
+
+        water_none = _nm._nudge_water_candidate(UID2, 17 * 60, False)
+        check("nudge: WATER silently unavailable for a user with NO water-logging history",
+              water_none is None, "water_none=%s" % (water_none,))
+        water_hit = _nm._nudge_water_candidate(UID, 17 * 60, False)
+        check("nudge: WATER fires late afternoon for a user WITH a logging habit + none today",
+              bool(water_hit) and water_hit[0] == "water", "water_hit=%s" % (water_hit,))
+        water_early = _nm._nudge_water_candidate(UID, 10 * 60, False)
+        check("nudge: WATER does NOT fire before late afternoon",
+              water_early is None, "water_early=%s" % (water_early,))
+
+        wo_none = _nm._nudge_workout_candidate(UID2, 20 * 60, False)
+        check("nudge: WORKOUT silently unavailable for a user with NO exercise history",
+              wo_none is None, "wo_none=%s" % (wo_none,))
+        wo_hit = _nm._nudge_workout_candidate(UID, 18 * 60 + _nm.NUDGE_GRACE_MIN + 1, False)
+        check("nudge: WORKOUT fires ~90min past the user's typical hour with none logged today",
+              bool(wo_hit) and wo_hit[0] == "workout", "wo_hit=%s" % (wo_hit,))
+
+        check("nudge: QUIET HOURS block 21:00-09:00 local (21:00/03:00/08:59 blocked, 09:00/14:00 allowed)",
+              _nm._nudge_in_quiet_hours(21 * 60) and _nm._nudge_in_quiet_hours(3 * 60)
+              and _nm._nudge_in_quiet_hours(8 * 60 + 59) and not _nm._nudge_in_quiet_hours(9 * 60)
+              and not _nm._nudge_in_quiet_hours(14 * 60),
+              "21:00=%s 03:00=%s 08:59=%s 09:00=%s 14:00=%s" % tuple(
+                  _nm._nudge_in_quiet_hours(m) for m in (21*60, 3*60, 8*60+59, 9*60, 14*60)))
+
+        con = _nm.get_db()
+        try:
+            con.execute("INSERT INTO nudge_log(uid, type, date, ts, ab_bucket) VALUES (?,?,?,?,?)",
+                       (UID, "meal_gap", "2099-01-01", "x", "nudges_on"))
+            con.execute("INSERT INTO nudge_log(uid, type, date, ts, ab_bucket) VALUES (?,?,?,?,?)",
+                       (UID, "water", "2099-01-01", "x", "nudges_on"))
+            con.commit()
+        finally:
+            con.close()
+        check("nudge: MAX 2/DAY cap — count reflects exactly the 2 seeded rows for that local date",
+              _nm._nudge_count_today(UID, "2099-01-01") == 2,
+              "count=%s" % _nm._nudge_count_today(UID, "2099-01-01"))
+        check("nudge: NEVER REPEAT A TYPE same day — sent_types_today includes both seeded types",
+              _nm._nudge_sent_types_today(UID, "2099-01-01") == {"meal_gap", "water"},
+              "types=%s" % _nm._nudge_sent_types_today(UID, "2099-01-01"))
+        check("nudge: a fresh local date has zero nudges logged (dedupe is per-day, not global)",
+              _nm._nudge_count_today(UID, "2099-01-02") == 0)
+
+        b1, b2 = _nm._nudge_ab_bucket(UID), _nm._nudge_ab_bucket(UID)
+        check("nudge: A/B bucket is a DETERMINISTIC function of uid (same uid -> same bucket every call)",
+              b1 == b2 and b1 in ("nudges_on", "control"), "b1=%s b2=%s" % (b1, b2))
+        buckets = [_nm._nudge_ab_bucket("gate-synthetic-uid-%d" % i) for i in range(300)]
+        on_frac = buckets.count("nudges_on") / float(len(buckets))
+        check("nudge: A/B split is roughly 50/50 across many uids (sanity, not exact)",
+              0.35 <= on_frac <= 0.65, "on_frac=%.2f" % on_frac)
+
+        check("nudge: fail-closed — NUDGES_ENABLED requires NUDGE_TICK_KEY to be set (gate armed it for this run)",
+              bool(_nm.NUDGE_TICK_KEY) and _nm.NUDGES_ENABLED, "key_set=%s enabled=%s" % (bool(_nm.NUDGE_TICK_KEY), _nm.NUDGES_ENABLED))
+
+        _wipe(UID); _wipe(UID2)
+    except Exception as e:  # noqa: BLE001
+        check("nudge engine hard-laws (in-process)", False, "exception: " + str(e)[:160])
+
+    # ---- /api/nudge/tick AUTH (real HTTP against the running server; no browser needed) ----
+    try:
+        req = urllib.request.Request(BASE + "/api/nudge/tick", data=b"", method="POST",
+                                     headers={"X-Nudge-Key": "definitely-the-wrong-key"})
+        wrong_status = None
+        try:
+            urllib.request.urlopen(req, timeout=8)
+        except urllib.error.HTTPError as he:
+            wrong_status = he.code
+        check("nudge tick endpoint: wrong X-Nudge-Key is REJECTED (403)", wrong_status == 403, "status=%s" % wrong_status)
+
+        req2 = urllib.request.Request(BASE + "/api/nudge/tick", data=b"", method="POST",
+                                      headers={"X-Nudge-Key": os.environ.get("NUDGE_TICK_KEY", "")})
+        with urllib.request.urlopen(req2, timeout=15) as resp2:
+            body2 = json.loads(resp2.read().decode("utf-8"))
+        check("nudge tick endpoint: correct key -> 200 with sent/skipped/dead/failed/total in the response",
+              all(k in body2 for k in ("sent", "skipped", "dead", "failed", "total")), "body=%s" % body2)
+    except Exception as e:  # noqa: BLE001
+        check("nudge tick endpoint auth (HTTP)", False, "exception: " + str(e)[:160])
 
     from playwright.sync_api import sync_playwright
     errors = []
@@ -487,6 +631,84 @@ def main():
               "fab=" + str(vc["fab"]) + " user=" + str(vc["user"]) + " coachReplies=" + str(vc["coach"]))
         check("talk to coach cal: sends nearby places + location + route destination",
               vc["bodyHasLoc"], "payload carries nearby + has_location + route_to: " + str(vc["bodyHasLoc"]))
+
+        # CONVERSATIONAL LOGGING (PROACTIVE COACH CAL half 2, 2026-07-15): chat can PROPOSE a log, but must
+        # NEVER silently write it — only a tap on "Log it" may call /api/meals.
+        lp = page.evaluate("""async () => {
+            var realApi = window.api, mealsPosted = null;
+            window.api = function(u, opts){
+                if (u.indexOf('/api/chat') >= 0){
+                    return Promise.resolve({ reply: 'Nice, a cheesesteak with fries — solid choice!', log_proposal: { items: [
+                        { name: 'Cheesesteak', calories: 700, protein_g: 35, carbs_g: 60, fat_g: 30 },
+                        { name: 'French fries', calories: 450, protein_g: 5, carbs_g: 55, fat_g: 22 }
+                    ], estimate: true, gentle: false } });
+                }
+                if (u.indexOf('/api/meals') >= 0 && opts && opts.method === 'POST'){
+                    try { mealsPosted = JSON.parse(opts.body); } catch(e){}
+                    return Promise.resolve({ id: 999 });
+                }
+                return realApi(u, opts);
+            };
+            openVoice();
+            sendChat('I just had a cheesesteak and fries');
+            await new Promise(function(r){ var t=0; var iv=setInterval(function(){ t+=50; if (document.querySelector('#voiceLog .log-proposal') || t>4000){ clearInterval(iv); r(); } }, 50); });
+            var chip = document.querySelector('#voiceLog .log-proposal');
+            var chipText = chip ? chip.textContent : '';
+            var postedBeforeClick = mealsPosted;   // must stay null until the user taps — never auto-logs
+            var btns = chip ? chip.querySelectorAll('button') : [];
+            if (btns.length) btns[0].click();   // "Log it"
+            await new Promise(function(r){ var t=0; var iv=setInterval(function(){ t+=50; if (mealsPosted || t>3000){ clearInterval(iv); r(); } }, 50); });
+            window.api = realApi; closeVoice();
+            return { chipPresent: !!chip, chipText: chipText, postedBeforeClick: postedBeforeClick, mealsPosted: mealsPosted };
+        }""")
+        check("conversational logging: an eating-report reply renders a confirm chip, NOT auto-logged before the tap",
+              lp["chipPresent"] and lp["postedBeforeClick"] is None,
+              "chipPresent=" + str(lp["chipPresent"]) + " postedBeforeClick=" + str(lp["postedBeforeClick"]))
+        check("conversational logging: chip shows both food names + estimated calories (non-gentle)",
+              "Cheesesteak" in lp["chipText"] and "French fries" in lp["chipText"] and "700" in lp["chipText"],
+              "chipText=" + lp["chipText"][:120])
+        mp = lp["mealsPosted"] or {}
+        check("conversational logging: tapping 'Log it' posts THROUGH /api/meals — both items, summed totals, estimate tier",
+              mp.get("calories") == 1150 and mp.get("accuracy_tier") == "estimate" and mp.get("source") == "Coach Cal chat"
+              and "Cheesesteak" in (mp.get("name") or "") and "French fries" in (mp.get("name") or ""),
+              "posted=" + str(mp))
+
+        # Gentle mode: the SAME proposal must show food names only, no numbers — and the dismiss (X) button
+        # must NEVER post anything (a 3rd way to confirm "never silently logs").
+        lpg = page.evaluate("""async () => {
+            var realApi = window.api, mealsPosted = null, wasGentle = _gentle;
+            _gentle = true;
+            window.api = function(u, opts){
+                if (u.indexOf('/api/chat') >= 0){
+                    return Promise.resolve({ reply: 'Got it, logged that mentally with you.', log_proposal: { items: [
+                        { name: 'Grilled chicken bowl', calories: 550, protein_g: 45, carbs_g: 40, fat_g: 18 }
+                    ], estimate: true, gentle: true } });
+                }
+                if (u.indexOf('/api/meals') >= 0 && opts && opts.method === 'POST'){
+                    try { mealsPosted = JSON.parse(opts.body); } catch(e){}
+                    return Promise.resolve({ id: 998 });
+                }
+                return realApi(u, opts);
+            };
+            openVoice();
+            sendChat('I just ate a grilled chicken bowl');
+            await new Promise(function(r){ var t=0; var iv=setInterval(function(){ t+=50; if (document.querySelector('#voiceLog .log-proposal') || t>4000){ clearInterval(iv); r(); } }, 50); });
+            var chip = document.querySelector('#voiceLog .log-proposal');
+            var chipText = chip ? chip.textContent : '';
+            var btns = chip ? chip.querySelectorAll('button') : [];
+            if (btns.length > 2) btns[2].click();   // "✕" dismiss
+            await new Promise(function(r){ setTimeout(r, 300); });
+            var stillThere = !!document.querySelector('#voiceLog .log-proposal');
+            _gentle = wasGentle;
+            window.api = realApi; closeVoice();
+            return { chipText: chipText, mealsPostedAfterDismiss: mealsPosted, stillThere: stillThere };
+        }""")
+        check("conversational logging: GENTLE MODE chip shows food name only, NO numbers",
+              "Grilled chicken bowl" in lpg["chipText"] and not __import__("re").search(r"\d", lpg["chipText"]),
+              "chipText=" + lpg["chipText"][:120])
+        check("conversational logging: dismissing (X) NEVER posts to /api/meals and removes the chip",
+              lpg["mealsPostedAfterDismiss"] is None and not lpg["stillThere"],
+              "posted=" + str(lpg["mealsPostedAfterDismiss"]) + " stillThere=" + str(lpg["stillThere"]))
 
         # GREEN "Talk to Coach Cal" on the home card must open the VOICE panel (talk), not the picks sheet
         bchat = page.evaluate("""() => {

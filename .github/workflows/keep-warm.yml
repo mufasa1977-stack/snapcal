@@ -7,6 +7,7 @@ on:
   schedule:
     - cron: "*/10 * * * *"   # keep-warm (every 10 min)
     - cron: "5 * * * *"      # push fan-out (hourly at :05) — server picks who's due in their LOCAL morning/midday/evening
+    - cron: "*/30 * * * *"   # PROACTIVE nudge tick (every 30 min) — server picks who's due for a meal-gap/water/workout nudge
   workflow_dispatch:
 
 jobs:
@@ -29,3 +30,15 @@ jobs:
           if [ -z "$PUSH_RUN_SECRET" ]; then echo "PUSH_RUN_SECRET not set — skipping push run"; exit 0; fi
           curl -fsS --max-time 90 -X POST "https://snapcal-api-lgla.onrender.com/api/push/run" \
             -H "X-Push-Secret: $PUSH_RUN_SECRET" && echo " push run OK" || echo "push run failed — retries next hour"
+
+      # PROACTIVE COACH CAL nudges (meal-gap / water / workout). SEPARATE secret from PUSH_RUN_SECRET on purpose
+      # (independent kill switch). Dormant (server returns 503) until Tariq sets NUDGE_TICK_KEY in Render env —
+      # that's his own step, not automatable from here. Add the SAME value as a GitHub repo secret to arm this.
+      - name: Fire due proactive nudges
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '*/30 * * * *' }}
+        env:
+          NUDGE_TICK_KEY: ${{ secrets.NUDGE_TICK_KEY }}
+        run: |
+          if [ -z "$NUDGE_TICK_KEY" ]; then echo "NUDGE_TICK_KEY not set — skipping nudge tick"; exit 0; fi
+          curl -fsS --max-time 90 -X POST "https://snapcal-api-lgla.onrender.com/api/nudge/tick" \
+            -H "X-Nudge-Key: $NUDGE_TICK_KEY" && echo " nudge tick OK" || echo "nudge tick failed — retries in 30 min"

@@ -5,6 +5,7 @@ Serves static/index.html at /, JSON API under /api/*, listens on 0.0.0.0:5177.
 The Gemini API key is read server-side from gemini_key.txt and never sent to the client.
 """
 
+import hashlib
 import json
 import math
 import os
@@ -497,6 +498,31 @@ def init_db():
                    created TEXT
                )"""
         )
+        # PROACTIVE COACH CAL (2026-07-15, greenlit): every push-triggered nudge (meal-gap/water/workout) gets
+        # ONE row here — the source of truth for the hard daily caps (max 2/day, never repeat a type same day)
+        # and the A/B (nudges_on/control) retention comparison.
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS nudge_log(
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   uid TEXT,
+                   type TEXT,
+                   date TEXT,
+                   ts TEXT,
+                   ab_bucket TEXT
+               )"""
+        )
+        # Per-USER water history mirror. The original `water` table (above) is a single shared-date counter
+        # (no uid) — a pre-existing simplification left byte-identical here (add-only law). This parallel table
+        # is written alongside it (see /api/water) purely so the nudge engine can tell whether THIS user has a
+        # real water-logging habit before ever nudging about it.
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS water_log(
+                   uid TEXT,
+                   date TEXT,
+                   glasses INTEGER NOT NULL DEFAULT 0,
+                   PRIMARY KEY (uid, date)
+               )"""
+        )
         # Migration: store the full rich breakdown per meal so History can show it.
         cols = [r[1] for r in con.execute("PRAGMA table_info(meals)").fetchall()]
         if "detail_json" not in cols:
@@ -513,6 +539,16 @@ def init_db():
             con.execute("ALTER TABLE meals ADD COLUMN accuracy_tier TEXT")
         if "confidence" not in cols:
             con.execute("ALTER TABLE meals ADD COLUMN confidence INT")
+        # PROACTIVE COACH CAL migration: push_subs gains the fields the nudge engine needs — gentle/intensity
+        # so nudge COPY can respect ED-safety + the coaching-intensity dial, and a stable ab_bucket (set once
+        # at first subscribe, never overwritten) for the nudges_on/control D30 retention comparison.
+        pcols = [r[1] for r in con.execute("PRAGMA table_info(push_subs)").fetchall()]
+        if "gentle" not in pcols:
+            con.execute("ALTER TABLE push_subs ADD COLUMN gentle INTEGER DEFAULT 0")
+        if "intensity" not in pcols:
+            con.execute("ALTER TABLE push_subs ADD COLUMN intensity TEXT DEFAULT ''")
+        if "ab_bucket" not in pcols:
+            con.execute("ALTER TABLE push_subs ADD COLUMN ab_bucket TEXT")
         con.commit()
     finally:
         con.close()
@@ -1760,6 +1796,24 @@ CHAT_SYSTEM = (
     "closer one (e.g. 'Want me to take you to the closer one, 1.2 mi away?')."
 )
 
+# CONVERSATIONAL LOGGING (2026-07-15, PROACTIVE COACH CAL half 2): lets chat WRITE to the diary. The model
+# NEVER logs anything itself — it only PROPOSES; the client always shows a confirm chip and the user must tap
+# to actually log (never silent). Always appended (cheap, no extra Gemini call) so any turn can carry a proposal.
+LOG_PROPOSAL_CLAUSE = (
+    "\n\nEATING-REPORT DETECTION: if — and ONLY if — the user's LATEST message reports food they ATE, ARE EATING, "
+    "or JUST FINISHED (e.g. 'I had a cheesesteak and fries', 'just ate a salad', 'having pizza rn', 'I ate two "
+    "eggs') — NOT a question, NOT a future/hypothetical meal, NOT a craving, NOT something you suggested — do TWO "
+    "things: (1) reply naturally and warmly acknowledging what they ate, in character as Coach Cal (1-2 sentences; "
+    "if gentle mode is on, do NOT mention any numbers in this sentence), then (2) on a NEW LINE at the very end of "
+    "your reply, append EXACTLY ONE block in this EXACT machine-readable format (valid JSON, one line, nothing "
+    "after it, no markdown fence): [LOG_PROPOSAL]{\"items\":[{\"name\":\"<food name>\",\"calories\":<int>,"
+    "\"protein_g\":<int>,\"carbs_g\":<int>,\"fat_g\":<int>}]}[/LOG_PROPOSAL] — list EVERY distinct food they "
+    "mentioned as its OWN item, and estimate realistic calories/macros for a typical restaurant-or-home portion "
+    "from your own nutrition knowledge (never ask a clarifying question first — always give your single best "
+    "estimate). Do NOT include the [LOG_PROPOSAL] block for anything else — no block for questions, plans, "
+    "cravings, or 'what should I eat'."
+)
+
 # Injected ONLY when the user signals budget/price interest — keeps the default reply lean (no extra tokens,
 # no latency) for the 90% of turns that aren't about money, and surfaces estimated prices when they matter.
 PRICE_CLAUSE = (
@@ -2076,6 +2130,7 @@ def chat():
         protein_target=_int(d.get("protein_target_g"), 0), screen=screen,
         eaten=str(d.get("eaten_today") or "nothing logged yet")[:200],
     )
+    system += LOG_PROPOSAL_CLAUSE
     if goal == "recomp":
         system += RECOMP_CHAT_CLAUSE
     system += _body_clause(d)
@@ -2177,8 +2232,42 @@ def chat():
         # LLM down (e.g. Gemini quota/credits depleted, transient outage). DON'T dead-end — degrade gracefully:
         # if we have real nearby places, name the closest open one from the data (no LLM needed); else a friendly note.
         return jsonify({"reply": _degraded_reply(d), "degraded": True})
+    # CONVERSATIONAL LOGGING: pull the [LOG_PROPOSAL]{...}[/LOG_PROPOSAL] block (if any) out of the raw reply
+    # BEFORE any cleanup/truncation touches it, sanitize it hard (server never trusts model JSON blindly), and
+    # never surface a malformed block to the client — the chip simply doesn't appear, the reply still does.
+    log_proposal = None
+    m = re.search(r"\[LOG_PROPOSAL\]\s*(\{.*?\})\s*\[/LOG_PROPOSAL\]", reply, re.DOTALL)
+    if m:
+        reply = (reply[:m.start()] + reply[m.end():]).strip()
+        try:
+            payload = json.loads(m.group(1))
+            items_in = payload.get("items") if isinstance(payload, dict) else None
+            if isinstance(items_in, list) and items_in:
+                items_out = []
+                for it in items_in[:8]:
+                    if not isinstance(it, dict):
+                        continue
+                    nm = re.sub(r"[^A-Za-z0-9 .,'&/()-]", "", str(it.get("name") or "Food")).strip()[:60] or "Food"
+                    items_out.append({
+                        "name": nm,
+                        "calories": max(0, min(3000, _int(it.get("calories"), 0))),
+                        "protein_g": max(0, min(300, _int(it.get("protein_g"), 0))),
+                        "carbs_g": max(0, min(400, _int(it.get("carbs_g"), 0))),
+                        "fat_g": max(0, min(300, _int(it.get("fat_g"), 0))),
+                    })
+                if items_out:
+                    # gentle is ECHOED from the request (server-authoritative for the client's display rule —
+                    # never trust a client-only toggle for what the ED-safety UI does): gentle mode shows food
+                    # names only, no numbers, even though the full macro data still travels with the proposal
+                    # so a confirmed log is accurate.
+                    log_proposal = {"items": items_out, "estimate": True, "gentle": bool(d.get("gentle"))}
+        except Exception:  # noqa: BLE001 - malformed block from the model -> just strip it, never crash the reply
+            pass
     reply = reply.replace("**", "").replace("*", "").replace("—", " - ").replace("–", "-").strip()[:reply_cap]
-    return jsonify({"reply": reply or "I'm here — what can I help you with?"})
+    out = {"reply": reply or "I'm here — what can I help you with?"}
+    if log_proposal:
+        out["log_proposal"] = log_proposal
+    return jsonify(out)
 
 
 # ---------- Coach Cal as a DAILY MENTOR: proactive time-aware briefing (the app's soul) ----------
@@ -2372,19 +2461,26 @@ def push_subscribe():
     if goal not in GOAL_LABELS:
         goal = "maintain"
     name = re.sub(r"[^A-Za-z .'-]", "", str(d.get("name") or "")).strip()[:24]
+    uid = _uid()
+    gentle = 1 if d.get("gentle") else 0
+    intensity = re.sub(r"[^a-z]", "", str(d.get("intensity") or "").strip().lower())[:8]
     con = get_db()
     try:
         con.execute(
             """INSERT INTO push_subs(uid, sub_json, tz_offset_min, name, goal, daily_calories,
-                                     protein_target_g, enabled, last_slot, last_date, created)
-               VALUES(?,?,?,?,?,?,?,1,NULL,NULL,?)
+                                     protein_target_g, enabled, last_slot, last_date, created,
+                                     gentle, intensity, ab_bucket)
+               VALUES(?,?,?,?,?,?,?,1,NULL,NULL,?,?,?,?)
                ON CONFLICT(uid) DO UPDATE SET
                    sub_json=excluded.sub_json, tz_offset_min=excluded.tz_offset_min, name=excluded.name,
                    goal=excluded.goal, daily_calories=excluded.daily_calories,
-                   protein_target_g=excluded.protein_target_g, enabled=1""",
-            (_uid(), json.dumps(sub), _int(d.get("tz_offset_min"), 0), name, goal,
+                   protein_target_g=excluded.protein_target_g, enabled=1,
+                   gentle=excluded.gentle, intensity=excluded.intensity""",
+            # ab_bucket is intentionally NOT in the ON CONFLICT UPDATE clause — it's assigned once at first
+            # subscribe and never changes, so the nudges_on/control D30 comparison stays clean per user.
+            (uid, json.dumps(sub), _int(d.get("tz_offset_min"), 0), name, goal,
              _int(d.get("daily_calories"), 2000), _int(d.get("protein_target_g"), 0),
-             datetime.utcnow().isoformat()),
+             datetime.utcnow().isoformat(), gentle, intensity, _nudge_ab_bucket(uid)),
         )
         con.commit()
     finally:
@@ -2491,6 +2587,247 @@ def push_test():
             con.close()
         return jsonify({"error": "subscription_expired"}), 410
     return jsonify({"error": "send_failed"}), 502
+
+
+# ---------------------------------------------------------------- PROACTIVE NUDGE ENGINE (Coach Cal, 2026-07-15)
+# Greenlit by Tariq 2026-07-15: "Cal can even say I noticed you didn't log a meal today and it's 3pm - did you
+# not eat or forget?" REUSES the existing web-push infra above (VAPID, push_subs, _push_send) — this section
+# only adds WHEN/WHAT to send. Driven externally by the same GitHub-Action-as-cron pattern as push_run, via a
+# SEPARATE shared secret (NUDGE_TICK_KEY) so the two schedulers can be rotated/disabled independently.
+NUDGE_TICK_KEY = os.environ.get("NUDGE_TICK_KEY", "").strip()
+_NUDGES_ENV = os.environ.get("NUDGES_ENABLED", "").strip().lower()
+# FAIL-CLOSED: no key configured in Render env -> nudges are OFF no matter what NUDGES_ENABLED says. This is
+# Tariq's own atom (setting NUDGE_TICK_KEY in the Render dashboard) — the tick endpoint stays dormant until he does.
+NUDGES_ENABLED = bool(NUDGE_TICK_KEY) and (_NUDGES_ENV not in ("0", "false", "off"))
+
+NUDGE_MAX_PER_DAY = 2            # HARD LAW: at most 2 nudges/user/day, total across all types
+NUDGE_QUIET_START_MIN = 21 * 60  # HARD LAW: quiet hours 21:00-09:00 user-local — never nudge in this window
+NUDGE_QUIET_END_MIN = 9 * 60
+NUDGE_WATER_HOUR_MIN = 16 * 60   # "late afternoon" per spec
+NUDGE_GRACE_MIN = 90             # minutes past the user's LEARNED time before a meal-gap/workout nudge fires
+
+
+def _nudge_ab_bucket(uid):
+    """Deterministic 50/50 hash bucket, stable per uid forever (never recomputed after first assignment) so the
+       nudges_on vs control D30 repeat-log retention comparison is clean."""
+    h = hashlib.sha256(("snapcal-nudge-ab:" + str(uid)).encode("utf-8")).hexdigest()
+    return "nudges_on" if (int(h[:8], 16) % 2 == 0) else "control"
+
+
+def _nudge_in_quiet_hours(local_minutes):
+    if local_minutes is None:
+        return True  # unknown local time -> fail closed, never nudge blind
+    return local_minutes >= NUDGE_QUIET_START_MIN or local_minutes < NUDGE_QUIET_END_MIN
+
+
+def _parse_hhmm(s):
+    """meals.time / exercise.time are stored 'HH:MM' 24h LOCAL (see nowTime() client-side) -> minutes since
+       midnight, or None if unparseable. No timezone math needed: it's already the user's own wall clock."""
+    m = re.match(r"^(\d{1,2}):(\d{2})$", str(s or "").strip())
+    if not m:
+        return None
+    h, mi = int(m.group(1)), int(m.group(2))
+    return h * 60 + mi if (0 <= h <= 23 and 0 <= mi <= 59) else None
+
+
+def _nudge_count_today(uid, local_date):
+    con = get_db()
+    try:
+        row = con.execute("SELECT COUNT(*) c FROM nudge_log WHERE uid = ? AND date = ?", (uid, local_date)).fetchone()
+    finally:
+        con.close()
+    return int(row["c"]) if row else 0
+
+
+def _nudge_sent_types_today(uid, local_date):
+    con = get_db()
+    try:
+        rows = con.execute("SELECT type FROM nudge_log WHERE uid = ? AND date = ?", (uid, local_date)).fetchall()
+    finally:
+        con.close()
+    return set(r["type"] for r in rows)
+
+
+def _nudge_learn_meal_times(uid):
+    """Median first-meal-of-day and second-("midday")-meal-of-day minutes-since-midnight, learned from this
+       user's last 14 LOCAL calendar days of logged meals. Returns (first_med, mid_med, days_with_data) — both
+       Nones when there isn't enough history yet (new/sparse logger -> this nudge type silently sits out, per
+       the never-nag-about-a-feature-they-don't-use law)."""
+    since = (date.today() - timedelta(days=14)).isoformat()
+    con = get_db()
+    try:
+        rows = con.execute("SELECT date, time FROM meals WHERE uid = ? AND date >= ? ORDER BY date, time",
+                           (uid, since)).fetchall()
+    finally:
+        con.close()
+    by_day = {}
+    for r in rows:
+        t = _parse_hhmm(r["time"])
+        if t is not None:
+            by_day.setdefault(r["date"], []).append(t)
+    firsts, seconds = [], []
+    for _day, times in by_day.items():
+        times.sort()
+        firsts.append(times[0])
+        if len(times) > 1:
+            seconds.append(times[1])
+    if len(firsts) < 3:   # not enough history -> feature data doesn't exist for this user yet
+        return None, None, len(firsts)
+    firsts.sort()
+    seconds.sort()
+    first_med = firsts[len(firsts) // 2]
+    mid_med = seconds[len(seconds) // 2] if len(seconds) >= 3 else None
+    return first_med, mid_med, len(firsts)
+
+
+def _nudge_meal_gap_candidate(uid, local_minutes, gentle):
+    """(a) MEAL-GAP: nothing logged ~90min past this user's own learned logging time. Copy NEVER mentions
+       calories/numbers (curious/warm tone, per Tariq's own phrasing) — gentle mode changes wording, not content."""
+    if local_minutes is None:
+        return None
+    first_med, mid_med, _days = _nudge_learn_meal_times(uid)
+    if first_med is None:
+        return None
+    today = date.today().isoformat()
+    con = get_db()
+    try:
+        cnt = con.execute("SELECT COUNT(*) c FROM meals WHERE uid = ? AND date = ?", (uid, today)).fetchone()["c"]
+    finally:
+        con.close()
+    if cnt == 0 and local_minutes > first_med + NUDGE_GRACE_MIN:
+        body = ("Haven't seen a meal logged yet today — no rush, just checking in. Tap whenever you're ready."
+                if gentle else
+                "Did you skip breakfast, or just forget to log it? You can tell me or add it by hand whenever you're ready.")
+        return ("meal_gap", "Coach Cal", body)
+    if mid_med is not None and cnt < 2 and local_minutes > mid_med + NUDGE_GRACE_MIN:
+        body = ("Just checking in — no midday meal logged yet. Add it whenever suits you, no pressure at all."
+                if gentle else
+                "Did you skip lunch, or forget to log it? Easy to add — just tell me or enter it by hand.")
+        return ("meal_gap", "Coach Cal", body)
+    return None
+
+
+def _nudge_water_candidate(uid, local_minutes, gentle):
+    """(b) WATER: only nudges a user who has an established water-logging habit (>=3 days in the last 14) —
+       never nags someone who's never used the feature."""
+    if local_minutes is None or local_minutes < NUDGE_WATER_HOUR_MIN:
+        return None
+    since = (date.today() - timedelta(days=14)).isoformat()
+    today = date.today().isoformat()
+    con = get_db()
+    try:
+        hist = con.execute("SELECT COUNT(*) c FROM water_log WHERE uid = ? AND date >= ? AND glasses > 0",
+                           (uid, since)).fetchone()["c"]
+        today_row = con.execute("SELECT glasses FROM water_log WHERE uid = ? AND date = ?", (uid, today)).fetchone()
+    finally:
+        con.close()
+    if hist < 3:
+        return None
+    glasses = int(today_row["glasses"]) if today_row else 0
+    if glasses == 0:
+        return ("water", "Coach Cal", "Haven't logged any water today — a glass now goes a long way. Tap to log one.")
+    return None
+
+
+def _nudge_workout_candidate(uid, local_minutes, gentle):
+    """(c) WORKOUT: only nudges a user who has logged exercise before (>=3 rows in the last 30 days) — never
+       nags someone who doesn't use the Workouts card."""
+    if local_minutes is None:
+        return None
+    since = (date.today() - timedelta(days=30)).isoformat()
+    today = date.today().isoformat()
+    con = get_db()
+    try:
+        rows = con.execute("SELECT time FROM exercise WHERE uid = ? AND date >= ?", (uid, since)).fetchall()
+        today_cnt = con.execute("SELECT COUNT(*) c FROM exercise WHERE uid = ? AND date = ?", (uid, today)).fetchone()["c"]
+    finally:
+        con.close()
+    times = sorted(t for t in (_parse_hhmm(r["time"]) for r in rows) if t is not None)
+    if len(times) < 3:
+        return None
+    typical = times[len(times) // 2]
+    if today_cnt == 0 and local_minutes > typical + NUDGE_GRACE_MIN:
+        return ("workout", "Coach Cal", "Did you get your workout in today, or is it still ahead of you? Tap to log it when you do.")
+    return None
+
+
+_NUDGE_DEEP_LINK = {"meal_gap": "/?nudge=meal", "water": "/?nudge=water", "workout": "/?nudge=workout"}
+
+
+@app.post("/api/nudge/tick")
+def nudge_tick():
+    """SCHEDULER endpoint (GitHub Action cron, every ~30 min) — the PROACTIVE Coach Cal engine. For every
+       nudges_on-bucketed, enabled push subscriber whose LOCAL time is outside quiet hours and under today's cap,
+       evaluate meal-gap -> water -> workout in order and send AT MOST one due nudge (never repeating a type
+       already sent today). FAIL-CLOSED: refuses to run at all unless NUDGE_TICK_KEY is configured (Render env,
+       owner's step) AND the caller presents it — a bare curl from anywhere can never trigger a fan-out."""
+    if not NUDGE_TICK_KEY or not NUDGES_ENABLED:
+        return jsonify({"error": "nudges_not_configured"}), 503
+    secret = (request.headers.get("X-Nudge-Key") or request.args.get("key") or "").strip()
+    if secret != NUDGE_TICK_KEY:
+        return jsonify({"error": "forbidden"}), 403
+    sent = skipped = dead = failed = 0
+    con = get_db()
+    try:
+        rows = con.execute("SELECT * FROM push_subs WHERE enabled = 1").fetchall()
+    finally:
+        con.close()
+    for row in rows:
+        uid = row["uid"]
+        local = _push_local_now(row["tz_offset_min"])
+        local_minutes = local.hour * 60 + local.minute
+        local_date = local.date().isoformat()
+        gentle = bool(row["gentle"])
+        ab = row["ab_bucket"] or _nudge_ab_bucket(uid)
+        if not row["ab_bucket"]:
+            con2 = get_db()
+            try:
+                con2.execute("UPDATE push_subs SET ab_bucket = ? WHERE uid = ?", (ab, uid))
+                con2.commit()
+            finally:
+                con2.close()
+        if ab != "nudges_on":
+            skipped += 1
+            continue  # CONTROL bucket — never nudged, so the retention comparison stays clean
+        if _nudge_in_quiet_hours(local_minutes):
+            skipped += 1
+            continue
+        if _nudge_count_today(uid, local_date) >= NUDGE_MAX_PER_DAY:
+            skipped += 1
+            continue
+        sent_types = _nudge_sent_types_today(uid, local_date)
+        candidate = None
+        for fn in (_nudge_meal_gap_candidate, _nudge_water_candidate, _nudge_workout_candidate):
+            c = fn(uid, local_minutes, gentle)
+            if c and c[0] not in sent_types:
+                candidate = c
+                break
+        if not candidate:
+            skipped += 1
+            continue
+        kind, title, body = candidate
+        try:
+            sub = json.loads(row["sub_json"])
+        except Exception:  # noqa: BLE001
+            skipped += 1
+            continue
+        result = _push_send(sub, {"title": title, "body": body, "url": _NUDGE_DEEP_LINK.get(kind, "/")})
+        con3 = get_db()
+        try:
+            if result == "ok":
+                sent += 1
+                con3.execute("INSERT INTO nudge_log(uid, type, date, ts, ab_bucket) VALUES (?,?,?,?,?)",
+                            (uid, kind, local_date, datetime.utcnow().isoformat(), ab))
+                con3.commit()
+            elif result == "dead":
+                dead += 1
+                con3.execute("DELETE FROM push_subs WHERE uid = ?", (uid,))
+                con3.commit()
+            else:
+                failed += 1
+        finally:
+            con3.close()
+    return jsonify({"sent": sent, "skipped": skipped, "dead": dead, "failed": failed, "total": len(rows)})
 
 
 # ---------------------------------------------------------------- HEALTH SYNC (Apple Health / Google Fit hub)
@@ -3757,6 +4094,13 @@ def set_water():
             """INSERT INTO water(date, glasses) VALUES (?, ?)
                ON CONFLICT(date) DO UPDATE SET glasses = excluded.glasses""",
             (str(d.get("date")), g),
+        )
+        # Per-user mirror (additive-only — the shared `water` row above is unchanged/untouched): gives the
+        # nudge engine an accurate per-uid water history without altering the existing shared-counter behavior.
+        con.execute(
+            """INSERT INTO water_log(uid, date, glasses) VALUES (?, ?, ?)
+               ON CONFLICT(uid, date) DO UPDATE SET glasses = excluded.glasses""",
+            (_uid(), str(d.get("date")), g),
         )
         con.commit()
     finally:
