@@ -313,6 +313,135 @@ def main():
     except Exception as e:  # noqa: BLE001
         check("nudge tick endpoint auth (HTTP)", False, "exception: " + str(e)[:160])
 
+    # ---- Coach Cal VOICE: daily TTS budget guard + dual-model fallback + rationing kill-switch
+    #      (2026-07-16, built after a live 429 RESOURCE_EXHAUSTED on the primary TTS model's 100-req/day cap).
+    #      Pure-function unit checks (no I/O) + an in-process Flask test-client run with _tts_generate
+    #      monkeypatched to SIMULATE the 429 -> no real Gemini calls, no live quota burned by the gate. ----
+    try:
+        _tm = _m  # the app.py module already imported above for the allergy/nudge checks
+
+        # -- 1. _tts_pick_order: pure decision function, unit-tested directly across the count matrix --
+        check("tts budget: fresh day (0,0) -> try primary first, fallback available as 2nd attempt",
+              _tm._tts_pick_order(0, 0) == ["primary", "fallback"], "order=%s" % _tm._tts_pick_order(0, 0))
+        check("tts budget: just under soft cap (89,0) -> still primary-first",
+              _tm._tts_pick_order(89, 0) == ["primary", "fallback"], "order=%s" % _tm._tts_pick_order(89, 0))
+        check("tts budget: AT soft cap (90,0) -> preemptively switches to fallback FIRST",
+              _tm._tts_pick_order(90, 0) == ["fallback", "primary"], "order=%s" % _tm._tts_pick_order(90, 0))
+        check("tts budget: primary hard-capped (100,50) -> primary skipped entirely, only fallback tried",
+              _tm._tts_pick_order(100, 50) == ["fallback"], "order=%s" % _tm._tts_pick_order(100, 50))
+        check("tts budget: fallback hard-capped but primary still has real headroom (95,100) -> falls back to primary",
+              _tm._tts_pick_order(95, 100) == ["primary"], "order=%s" % _tm._tts_pick_order(95, 100))
+        check("tts budget: BOTH hard-capped (100,100) -> empty order -> caller goes straight to graceful 502",
+              _tm._tts_pick_order(100, 100) == [], "order=%s" % _tm._tts_pick_order(100, 100))
+
+        # -- 2. End-to-end via the in-process Flask test client, monkeypatching _tts_generate to SIMULATE
+        #       real Gemini responses/errors without spending live quota. Uses the same sqlite db file as the
+        #       live server subprocess, so counts written here are the real budget-guard counters. --
+        def _wipe_tts_budget():
+            con = _tm.get_db()
+            try:
+                con.execute("DELETE FROM usage WHERE uid = ? AND kind IN ('tts_primary', 'tts_fallback')", ("_global",))
+                con.commit()
+            finally:
+                con.close()
+
+        def _seed_tts_count(model_key, n):
+            con = _tm.get_db()
+            try:
+                today = _tm.date.today().isoformat()
+                con.execute("INSERT INTO usage(uid, date, kind, count) VALUES(?,?,?,?) "
+                           "ON CONFLICT(uid, date, kind) DO UPDATE SET count = ?",
+                           ("_global", today, "tts_" + model_key, n, n))
+                con.commit()
+            finally:
+                con.close()
+
+        import uuid
+        _orig_generate = _tm._tts_generate
+        _orig_rationing = _tm.TTS_RATIONING
+        _calls = []
+
+        def _fake_generate_primary_429(model, voice, text):
+            _calls.append(model)
+            if model == _tm.TTS_MODEL:
+                raise RuntimeError("simulated 429 RESOURCE_EXHAUSTED: generate_requests_per_model_per_day, limit: 100")
+            return b"RIFF____WAVEfake"
+
+        def _fake_generate_ok(model, voice, text):
+            _calls.append(model)
+            return b"RIFF____WAVEfake"
+
+        def _fake_generate_never(model, voice, text):
+            _calls.append(model)
+            raise RuntimeError("should never be called")
+
+        cli = _tm.app.test_client()
+        try:
+            _wipe_tts_budget()
+            _tm._TTS_CACHE.clear()
+
+            # a) real 429 on the primary -> retries the SAME text on the fallback, 200 OK, only fallback billed
+            _calls[:] = []
+            _tm._tts_generate = _fake_generate_primary_429
+            r = cli.get("/api/tts?voice=Charon&text=" + uuid.uuid4().hex)
+            check("tts fallback-order: primary 429s -> falls back to the 2nd model, request still succeeds (200)",
+                  r.status_code == 200 and _calls == [_tm.TTS_MODEL, _tm.TTS_MODEL_FALLBACK],
+                  "status=%s calls=%s" % (r.status_code, _calls))
+            check("tts fallback-order: only the model that actually served the request gets billed",
+                  _tm._tts_count("primary") == 0 and _tm._tts_count("fallback") == 1,
+                  "primary=%s fallback=%s" % (_tm._tts_count("primary"), _tm._tts_count("fallback")))
+
+            # b) primary at/over its SOFT cap -> preemptively tries fallback FIRST (primary never even attempted)
+            _wipe_tts_budget(); _seed_tts_count("primary", _tm.TTS_DAILY_SOFT_CAP)
+            _calls[:] = []
+            _tm._tts_generate = _fake_generate_ok
+            r = cli.get("/api/tts?voice=Charon&text=" + uuid.uuid4().hex)
+            check("tts budget guard: primary at soft cap -> fallback tried FIRST, primary never attempted",
+                  r.status_code == 200 and _calls == [_tm.TTS_MODEL_FALLBACK],
+                  "status=%s calls=%s" % (r.status_code, _calls))
+
+            # c) both models at the HARD cap -> graceful 502, NO Gemini call attempted at all (no wasted round-trip)
+            _wipe_tts_budget(); _seed_tts_count("primary", _tm.TTS_DAILY_HARD_CAP); _seed_tts_count("fallback", _tm.TTS_DAILY_HARD_CAP)
+            _calls[:] = []
+            _tm._tts_generate = _fake_generate_never
+            r = cli.get("/api/tts?voice=Charon&text=" + uuid.uuid4().hex)
+            check("tts budget guard: both models exhausted -> graceful 502, zero Gemini calls attempted",
+                  r.status_code == 502 and _calls == [], "status=%s calls=%s" % (r.status_code, _calls))
+
+            # d) warm prewarm ping is skipped once the primary is in its soft-cap zone (never steals real budget)
+            _wipe_tts_budget(); _seed_tts_count("primary", _tm.TTS_DAILY_SOFT_CAP)
+            _calls[:] = []
+            _tm._tts_generate = _fake_generate_never
+            r = cli.get("/api/tts?voice=Charon&text=" + uuid.uuid4().hex + "&warm=1")
+            check("tts prewarm: skipped (204, no Gemini call) once primary is in its soft-cap zone",
+                  r.status_code == 204 and _calls == [], "status=%s calls=%s" % (r.status_code, _calls))
+
+            # e) a normal-budget warm ping DOES fire (and counts against the budget guard, per spec item 4)
+            _wipe_tts_budget()
+            _calls[:] = []
+            _tm._tts_generate = _fake_generate_ok
+            r = cli.get("/api/tts?voice=Charon&text=" + uuid.uuid4().hex + "&warm=1")
+            check("tts prewarm: fires + counts against the budget guard when the primary has headroom",
+                  r.status_code == 200 and _calls == [_tm.TTS_MODEL] and _tm._tts_count("primary") == 1,
+                  "status=%s calls=%s primary_count=%s" % (r.status_code, _calls, _tm._tts_count("primary")))
+
+            # f) rationing kill-switch OFF -> exact legacy behavior: single primary attempt, no fallback, no guard
+            _wipe_tts_budget(); _seed_tts_count("primary", _tm.TTS_DAILY_HARD_CAP)   # would 502-without-trying under rationing
+            _calls[:] = []
+            _tm.TTS_RATIONING = False
+            _tm._tts_generate = _fake_generate_primary_429   # primary still "429s" in this test
+            r = cli.get("/api/tts?voice=Charon&text=" + uuid.uuid4().hex)
+            check("tts rationing flag OFF: legacy behavior — only the primary is ever attempted, budget guard bypassed",
+                  r.status_code == 502 and _calls == [_tm.TTS_MODEL],
+                  "status=%s calls=%s (rationing flag correctly gates ALL of items 1/3/4)" % (r.status_code, _calls))
+        finally:
+            _tm._tts_generate = _orig_generate
+            _tm.TTS_RATIONING = _orig_rationing
+            _wipe_tts_budget()
+            _tm._TTS_CACHE.clear()
+    except Exception as e:  # noqa: BLE001
+        check("tts budget guard + fallback-order + rationing flag (in-process)", False, "exception: " + str(e)[:200])
+
     from playwright.sync_api import sync_playwright
     errors = []
 

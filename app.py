@@ -2905,10 +2905,95 @@ def health_get():
 
 
 # ---- Coach Cal's VOICE: Gemini TTS, cached by text so common/repeated lines cost nothing after the 1st play ----
-TTS_MODEL = "gemini-2.5-flash-preview-tts"
+TTS_MODEL = "gemini-2.5-flash-preview-tts"           # primary — fast/cheap, but a 100-req/day PER-MODEL account quota
+TTS_MODEL_FALLBACK = "gemini-2.5-pro-preview-tts"    # 2026-07-16: separate quota bucket (different model = different
+# daily counter). Shares the same prebuilt-voice roster as the primary (incl. Charon), so falling back here never
+# flips Coach Cal's voice/persona mid-conversation — see TTS_VOICES_OK below, unchanged for both models.
 TTS_VOICE_DEFAULT = "Charon"
 TTS_VOICES_OK = {"Charon", "Orus", "Puck", "Kore", "Fenrir", "Aoede", "Leda", "Achird", "Iapetus", "Zephyr"}
 _TTS_CACHE = {}
+
+# Server-side daily TTS budget guard (built 2026-07-16 after a live 429 RESOURCE_EXHAUSTED — confirmed
+# "generate_requests_per_model_per_day, limit: 100" on the primary model at Paid-1 tier). Real (non-cached) call
+# counts are PERSISTED in the existing `usage` cost-cap table (uid="_global", kind="tts_<primary|fallback>") so
+# both gunicorn workers and any restart agree on today's count — an in-memory counter would undercount by half.
+# SOFT cap: once a model is NEARING its real daily limit, prefer the other model first (avoid burning latency on
+# a near-certain 429). HARD cap: our best estimate of the account's actual per-model ceiling — a model at/over
+# this is skipped outright (a guaranteed-429 attempt is a wasted round-trip on Coach Cal's reply).
+TTS_DAILY_SOFT_CAP = 90
+TTS_DAILY_HARD_CAP = 100
+# Kill switch for the whole rationing system (dual-model fallback + budget guard). Default ON. Flip OFF
+# (env SNAPCAL_TTS_RATIONING=0) to instantly revert /api/tts to the old single-primary-model behavior if this
+# logic ever misbehaves — never requires a redeploy.
+TTS_RATIONING = (os.environ.get("SNAPCAL_TTS_RATIONING", "1").strip() != "0")
+
+_TTS_MODEL_BY_KEY = {"primary": TTS_MODEL, "fallback": TTS_MODEL_FALLBACK}
+
+
+def _tts_count(model_key):
+    """Real (non-cached) TTS calls made TODAY against `model_key` ("primary"/"fallback"), account-wide."""
+    today = date.today().isoformat()
+    con = get_db()
+    try:
+        row = con.execute("SELECT count FROM usage WHERE uid = ? AND date = ? AND kind = ?",
+                          ("_global", today, "tts_" + model_key)).fetchone()
+    finally:
+        con.close()
+    return row["count"] if row else 0
+
+
+def _tts_bump(model_key):
+    """Count one real (billed, non-cached) TTS call against today's budget for `model_key`."""
+    today = date.today().isoformat()
+    con = get_db()
+    try:
+        con.execute(
+            """INSERT INTO usage(uid, date, kind, count) VALUES(?,?,?,1)
+               ON CONFLICT(uid, date, kind) DO UPDATE SET count = count + 1""",
+            ("_global", today, "tts_" + model_key),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def _tts_pick_order(primary_used, fallback_used):
+    """Pure function (unit-tested in regression_gate.py) deciding which model(s) to try, in order, given today's
+       counts. Once the primary is at/over its SOFT cap, try the fallback FIRST (preemptive rationing) — but
+       still fall back to the other model past that if the preferred one is at its HARD cap while the other
+       still has real headroom. A model at/over the HARD cap is never attempted. An empty list means both
+       models are believed exhausted for today -> the caller goes straight to the graceful 502."""
+    primary_ok = primary_used < TTS_DAILY_HARD_CAP
+    fallback_ok = fallback_used < TTS_DAILY_HARD_CAP
+    order = []
+    if primary_used >= TTS_DAILY_SOFT_CAP:
+        if fallback_ok: order.append("fallback")
+        if primary_ok: order.append("primary")
+    else:
+        if primary_ok: order.append("primary")
+        if fallback_ok: order.append("fallback")
+    return order
+
+
+def _tts_generate(model, voice, text):
+    """One real Gemini TTS call. Raises on any failure (quota 429, transient 5xx, ...) — caller tries the next
+       model in the order, or degrades to the graceful 502 (client then falls to the on-device voice)."""
+    from google import genai  # noqa: F401
+    from google.genai import types
+    client = get_gemini_client()
+    resp = client.models.generate_content(
+        model=model, contents=text,
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice))),
+        ),
+    )
+    data = resp.candidates[0].content.parts[0].inline_data.data
+    if isinstance(data, str):
+        import base64
+        data = base64.b64decode(data)
+    return _pcm16_to_wav(data)
 
 
 def _pcm16_to_wav(pcm, rate=24000):
@@ -2925,38 +3010,55 @@ def _pcm16_to_wav(pcm, rate=24000):
 
 @app.get("/api/tts")
 def tts():
-    """Speak a Coach Cal line (Gemini TTS). Cached by (voice,text) so repeated/common lines are free after the 1st call."""
+    """Speak a Coach Cal line (Gemini TTS). Cached by (voice,text) so repeated/common lines are free after the
+       1st call. Dual-model + daily-budget-guarded (2026-07-16, TTS_RATIONING): tries the primary model, falls
+       back to a 2nd Gemini TTS model on ANY failure (esp. the 100-req/day RESOURCE_EXHAUSTED quota), and
+       preemptively favors whichever model still has headroom so a busy day degrades to the fallback instead of
+       going silent. `warm=1` marks a boot-time prewarm ping (see prewarmTTS in index.html) — it only ever
+       touches the primary connection and is skipped outright once the primary is in its soft-cap zone, so a
+       prewarm never steals a real user's remaining TTS budget."""
     text = (request.args.get("text") or "").strip()
     if not text:
         return jsonify({"error": "text_required"}), 400
     voice = (request.args.get("voice") or TTS_VOICE_DEFAULT).strip()
     if voice not in TTS_VOICES_OK:
         voice = TTS_VOICE_DEFAULT
+    warm = (request.args.get("warm") or "").strip() == "1"
     text = text[:700]
     import hashlib
     ckey = hashlib.sha1((voice + "|" + text).encode("utf-8")).hexdigest()
     cached = _TTS_CACHE.get(ckey)
     if cached is not None:
         return Response(cached, mimetype="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
-    try:
-        from google import genai  # noqa: F401
-        from google.genai import types
-        client = get_gemini_client()
-        resp = client.models.generate_content(
-            model=TTS_MODEL, contents=text,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice))),
-            ),
-        )
-        data = resp.candidates[0].content.parts[0].inline_data.data
-        if isinstance(data, str):
-            import base64
-            data = base64.b64decode(data)
-        wav = _pcm16_to_wav(data)
-    except Exception:  # noqa: BLE001
-        return jsonify({"error": "Coach Cal can't speak right now."}), 502
+
+    if not TTS_RATIONING:
+        # Kill switch OFF -> exact legacy behavior (single primary model, no budget guard).
+        try:
+            wav = _tts_generate(TTS_MODEL, voice, text)
+        except Exception:  # noqa: BLE001
+            return jsonify({"error": "Coach Cal can't speak right now."}), 502
+    else:
+        primary_used = _tts_count("primary")
+        if warm:
+            if primary_used >= TTS_DAILY_SOFT_CAP:
+                return ("", 204)   # budget's tight -> skip the prewarm ping, save the rest for real users
+            order = ["primary"]   # a prewarm only ever needs to touch the primary connection/cold-start
+        else:
+            order = _tts_pick_order(primary_used, _tts_count("fallback"))
+            if not order:
+                return jsonify({"error": "Coach Cal can't speak right now."}), 502
+
+        wav = None
+        for key in order:
+            try:
+                wav = _tts_generate(_TTS_MODEL_BY_KEY[key], voice, text)
+                _tts_bump(key)
+                break
+            except Exception:  # noqa: BLE001 — try the next model in `order`
+                continue
+        if wav is None:
+            return jsonify({"error": "Coach Cal can't speak right now."}), 502
+
     if len(_TTS_CACHE) > 800:
         _TTS_CACHE.clear()
     _TTS_CACHE[ckey] = wav

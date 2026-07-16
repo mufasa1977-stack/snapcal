@@ -4837,8 +4837,10 @@ function _calSpringOut(done){
    real line — plus a client-side one-retry on the actual speak path below (_playChunk/fail()). */
 function prewarmTTS(){
   if (!isPremium()) return;   // TTS is Premium-only; free users' speak() never calls /api/tts anyway
-  try { new Audio("/api/tts?voice=Charon&text=ok").load(); } catch(e){}
-  setTimeout(function(){ try { new Audio("/api/tts?voice=Charon&text=ok.").load(); } catch(e){} }, 900);   // 2nd, distinct cache key -> 2nd connection, better odds of hitting the OTHER gunicorn worker
+  /* &warm=1 (2026-07-16): tags these as prewarm pings so the server's daily TTS budget guard can skip them
+     outright once the primary model is in its soft-cap zone -> a prewarm never steals a real user's TTS call. */
+  try { new Audio("/api/tts?voice=Charon&text=ok&warm=1").load(); } catch(e){}
+  setTimeout(function(){ try { new Audio("/api/tts?voice=Charon&text=ok.&warm=1").load(); } catch(e){} }, 900);   // 2nd, distinct cache key -> 2nd connection, better odds of hitting the OTHER gunicorn worker
 }
 function openVoice(){
   var w = $("#voiceWrap"); if (!w) return;
