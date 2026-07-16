@@ -1,0 +1,105 @@
+  PASS  allergy-safe scan: allergen swap dropped, safe swap kept   -> kept=['Quinoa']
+  PASS  allergy-safe scan: logged allergen (yogurt/dairy) raises a WARNING   -> Heads up — this looks like it contains an allergen you flagg
+  PASS  allergy-safe scan: no allergies set -> behavior unchanged (no warning, swap kept)
+  PASS  allergy-safe meal plan: leaked allergen flagged, safe meal not flagged   -> breakfast flag=fruit
+  PASS  accuracy Rung 4b: AI grams x USDA density blends calories + tightens band, AI-only stays   -> chicken=358cal(hybrid) salad=ai band=0.146
+  PASS  micros: USDA nutrient map covers ~30 vitamins/minerals (Cronometer-level)   -> 35 nutrients in _FDC_NUTRIENTS
+  PASS  eatout: near-me MAP renders
+  PASS  eatout: Healthy<->Treat METER present
+  PASS  eatout: near-me LIST shows distances   -> 6/6 rows
+  PASS  eatout: grid 'Near you' band has distances   -> sections=['Near you', 'Places to explore — a little farther', 'More chains'] near-with-dist=5
+  PASS  eatout: map shows several pins in view (not just the dot)   -> 6 pins in view, z11
+  PASS  eatout: MAP renders even when the food lookup FAILS (map-gone guard)
+  PASS  eatout: METER survives when the food lookup FAILS
+  PASS  eatout: 'Update my location' survives when the food lookup FAILS
+  PASS  stores: METER present
+  PASS  stores: list shows distances   -> 4/4 rows
+  PASS  stores: map shows several pins in view (not just the dot)   -> 4 pins in view, z13
+  PASS  stores: no no-food stores leak in
+  PASS  stores: tap opens COACH SHEET (picks + Get directions)   -> 6 picks, dirBtn=True
+  PASS  stores: sheet fills INSTANTLY (no AI spinner wait)   -> 37ms
+  PASS  stores: empty/fail shows a MAP (not a dead end)
+  PASS  stores: empty/fail shows 'Update my location'
+  PASS  combined: both chips -> interleaved restaurants + stores   -> 6 food + 4 stores in one list
+  PASS  combined: map renders with mixed pins   -> 8 pins, ready=True
+  PASS  coach: 'what should I eat?' fills instantly (no long spinner)   -> 39ms, 3 meals
+  PASS  grocery: list fills instantly (no long spinner)   -> 23ms, 15 items
+  PASS  allergies: filter strips allergen picks (3 -> 1 safe)   -> kept Grilled Chicken
+  PASS  allergies: coach + grocery fallbacks stay allergen-free when set   -> coachNut=False groNut=False
+  PASS  allergies: labels flow to the AI request payload   -> payload allergies=['Tree nuts']
+  PASS  diet: vegan strips meat + dairy picks (tofu + garden salad kept)   -> kept Grilled Tofu Bowl, Garden Salad
+  PASS  diet: label flows + pill reflects it   -> pill='Vegan'
+  PASS  chain picks: vegan hides ALL meat picks (meat-only chain -> AI fallback path)   -> meatFits=False meatInSheet=False
+  PASS  chain picks: vegan keeps the salad, drops the chicken in a mixed chain   -> salad=True chicken=False
+  PASS  chain picks: curated vegan picks show INSTANTLY (no AI) when baked into the data   -> curated=True meat=False wentToAI=False
+  PASS  eat-out: 'Take me there' button -> Google Maps directions to the chain   -> btn=True href=https://www.google.com/maps/dir/?api=1&destination=Royal%20Farms
+  PASS  ask coach: input present + free-text restaurant returns picks with calories   -> input=True picks=2 cals=True
+  PASS  talk to coach cal: floating button + conversation (you ask, it replies)   -> fab=True user=1 coachReplies=2
+  PASS  talk to coach cal: sends nearby places + location + route destination   -> payload carries nearby + has_location + route_to: True
+  PASS  talk to coach cal: GREEN home button opens the voice panel to TALK (not the picks sheet)   -> label=Talk to Coach Cal voiceOpen=True sheetOpen=False
+  PASS  coach picks: EVERY food card has a 'Take me there' Maps button   -> btn=True dirs=1/1 href=https://www.google.com/maps/search/?api=1&query=Chicken%20and%20Rice%20Bowl%20near%20me&query_place_id=&center=40.2452,-75.6496
+  PASS  sheets: swipe-down grab handle present (a small X isn't enough on a phone)   -> grip=True
+  PASS  coach directions: naming a place auto-shows tappable 'Take me to' buttons (no 'where is that?')   -> buttons=2 hiPot=True sakura=True allMaps=True
+  PASS  budget mode: opt-in price toggle present, OFF by default, sends budget flag when on   -> toggle=True defaultOff=True sentFlag=True
+  PASS  scan results: each item has a Remove button that drops a wrong item before logging   -> delBtns=2 rowsAfter=1 remaining=1 first=Grilled Chicken
+  PASS  scan results: '+ Add an item the camera missed' searches USDA + appends to the SAME meal, totals recalc   -> rows=2 items=2 total=~623 Cal meal=Scrambled Eggs, Cheddar cheese
+  PASS  scan results: portion +/- and Remove still work on a just-added missed item (add-only, no regression)   -> multAfterPortion=1.25 totalAfterPortion=~724 Cal itemsAfterDel=1
+  PASS  scan results: 'quick add manually' fallback appends a name+calories item when USDA search finds nothing   -> items=2 last=Mystery Sauce/120 total=~340 Cal
+  PASS  Today screen: '+ Add a meal' button renders visibly right under the calorie ring (ring/macros untouched, add-only)   -> {'present': True, 'visible': True, 'betweenRingAndMacros': True, 'ringIntact': True, 'btnText': '＋ Add a meal'}
+  PASS  Today: '+ Add a meal' resolves a comma-separated multi-item entry via USDA search and logs it as ONE meal   -> rows=2 total=806 Cal posted={'date': '2026-07-15', 'time': '13:26', 'name': 'Cheddar cheese, Cheddar cheese', 'calories': 806, 'protein_g': 50, 'carbs_g': 2, 'fat_g': 66, 'items_json': '[{"name":"Cheddar cheese","calories":403,"protein_g":25,"carbs_g":1,"fat_g":33,"fiber_g":0,"sugar_g":1,"sat_fat_g":21,"sodium_mg":621},{"name":"Cheddar cheese","calories":403,"protein_g":25,"carbs_g":1,"fat_g":33,"fiber_g":0,"sugar_g":1,"sat_fat_g":21,"sodium_mg":621}]', 'source': 'Manual entry', 'accuracy_tier': 'estimate'}
+  PASS  Today: '+ Add a meal' Small/Medium/Large portion picker changes the shown total live (0.7x / 1.0x / 1.5x)   -> {'totalM': '403 Cal', 'totalS': '282 Cal', 'totalL': '605 Cal', 'sOn': True}
+  PASS  accessibility: Large Text scales the whole app + persists   -> applied=1.15 reset=1
+  PASS  route: destination input present (set work -> healthy food along your drive)   -> destInput present=True
+  PASS  nutrition: USDA facts card renders (food + calories + USDA source)   -> rows=4 source=True
+  PASS  location: one-time primer (privacy + 'asked once') -> Allow sets flag, then never re-asks   -> visible=True privacy=True primed:None->1 hidden=True reshown=False
+  PASS  scan: close (X) on preview + result cards clears the scan -> back to home (no trap)   -> btns=True resultHidden=True previewHidden=True
+  PASS  profile persists on device (calories + macros + weight survive reopen / redeploy)   -> cal=1850 pro=140 weight=165
+  PASS  home: Coach Cal / Grocery / Meal Plan are top quick-tabs (above the ring, single IDs)   -> bar=True inBar=True noDup=True aboveRing=True
+  PASS  food photos: picks use the real per-dish image endpoint (not the generic category jpg)   -> src=/api/foodimg?dish=Filet%20Mignon
+  PASS  food photos: /api/foodimg resolves to an image (real or fallback)   -> ok=True type=image/jpeg
+  PASS  provenance: /api/menu returns chain-EXACT items with macros   -> count=1 chains=35 tier=EXACT Quarter Pounder with Cheese=520cal
+  PASS  provenance: logged meals carry tier (EXACT stored, photo defaults ESTIMATE)   -> exact=EXACT photo=ESTIMATE conf=60
+  PASS  recents: card renders deduped rows + one-tap re-log posts a meal   -> shown=True rows=2 posted=1
+  PASS  negative test: a BROKEN recents feature is caught (empty -> card hidden)   -> card hidden when feed empty=True
+  PASS  fasting: start shows the live timer + eating window; end returns to idle   -> running=True idle=True
+  PASS  net-carbs: ON renders 'Net carbs' = carbs-fiber; OFF hides it   -> on='<div class="nf-row nf-net"><span>Net carbs</span><span>15 g<' off=''
+  PASS  gentle mode: hides the calorie ring + shows the balance banner; chat sends gentle:true   -> ringVisOff=True ringHidden=True banner=True chatGentle=True
+  PASS  micros: 'Vitamins & minerals (N)' panel renders grouped; empty -> hidden   -> count=17 grouped=True emptyHidden=True
+  PASS  barcode: label_sanity fixes bad kcal (Atwater), drops typo sodium both ways, keeps clean data   -> funyuns=(100, None, ['calories_recomputed', 'sodium_implausible']) nutella=(200.0, 15, []) coke=(0.0, None, ['sodium_implausible'])
+  PASS  export: /api/export.csv returns text/csv with a header row   -> ct=text/csv; charset=utf-8 header='Date,Time,Food,Calories,Protein (g),Carb'
+  PASS  health: POST then GET /api/health round-trips steps/active-cal/weight   -> steps=8200 cal=320 weight=181.5
+  PASS  push: /api/push/key has a key; /api/push/test with no sub -> 404 not_subscribed   -> hasKey=True status=404 err=not_subscribed
+  PASS  workout: POST/GET/DELETE /api/exercise round-trips; burned cals add back into the budget   -> burned=250->del 0, ring +300
+  PASS  recipes: POST/GET/DELETE /api/myrecipes round-trips; builder sums ingredient macros   -> name=Test bowl cal=255 items=2 gone=True sum=255/6
+  PASS  measurements: POST/GET round-trips; same-date partial keeps prior fields; latest/earliest set   -> d1=40/44/42 latest=38 earliest=40 n=2
+  PASS  lesson: daily CBT micro-lesson renders (title+tip); 'Got it' marks read + shows done state   -> count=16 title=True tip=True done=True flag=True
+  PASS  onboarding: first run shows the welcome/permissions card; 'Maybe later' sets the flag + hides   -> visible=True flag:None->1 hidden=True
+  PASS  onboarding: 'Enable & get started' closes IMMEDIATELY + sets flag (never hangs on permission prompts)   -> hiddenSync=True flag=1
+  PASS  quiz onboarding: fresh device shows the confessional quiz + reaches the plan reveal with a real computed calorie target   -> intro=True sawWeightGoal=True revealHasCal=True dailyCal=1860
+  PASS  quiz onboarding: coaching-intensity answer persists to localStorage for /api/chat to pick up   -> intensitySaved=soft
+  PASS  quiz onboarding: paywall step REUSES the real plan-selector (2 plans) + a closed-testing dev bypass   -> hasPlans=True hasDevSkip=True
+  PASS  quiz onboarding: dev bypass completes onboarding (sets the flag, hides the overlay) without a purchase   -> before=None after=1 hidden=True
+  PASS  quiz onboarding: 'Maintain' goal skips the goal-weight page   -> landedOnActivity=True
+  PASS  quiz onboarding: an already-onboarded device is NEVER shown the quiz (or the old card) again — add-only law   -> qzShown=False obShown=False
+  PASS  P0-1 tab bar: inactive label renders >= 14.5px (was ~13.33px/11px base x .92 scale)   -> renderedFont=15.04px (base x scale=0.97)
+  PASS  P0-1 tab bar: inactive icon renders >= 24px (was ~22px)   -> svg=25.2x25.2px
+  PASS  P0-1 tab bar: inactive icon stroke-width >= 2.1 (was 1.8)   -> strokeW=2.1
+  PASS  P0-1 tab bar: inactive ink >= 8.5:1 contrast on a white backdrop (was ~6.7:1 rendered)   -> ink=rgb(51, 59, 52) contrastOnWhite=11.56:1
+  PASS  P0-1 tab bar: nav glass raised to ~.80 opacity (was .62) so the backdrop never washes labels   -> navBg=rgba(255, 255, 255, 0.8) alpha=0.80
+  PASS  P0-2 scan result: Coach Cal grade+tip render into the TOP slot, BEFORE the item list   -> {'topHasVerdict': True, 'topHasTip': True, 'itemsFollowsTop': True, 'detailHasVerdict': False, 'detailHasTip': False, 'nutxPresent': True, 'nutxCollapsed': True, 'nutxHasMicro': True, 'topTop': 1123.828125}
+  PASS  P0-2 scan result: grade+tip do NOT also duplicate further down in #resultDetail   -> {'topHasVerdict': True, 'topHasTip': True, 'itemsFollowsTop': True, 'detailHasVerdict': False, 'detailHasTip': False, 'nutxPresent': True, 'nutxCollapsed': True, 'nutxHasMicro': True, 'topTop': 1123.828125}
+  PASS  P0-2 scan result: Micronutrients + Smart metrics collapsed behind a closed-by-default expander   -> {'topHasVerdict': True, 'topHasTip': True, 'itemsFollowsTop': True, 'detailHasVerdict': False, 'detailHasTip': False, 'nutxPresent': True, 'nutxCollapsed': True, 'nutxHasMicro': True, 'topTop': 1123.828125}
+  PASS  P0-2 add-only: History's buildDetailHTML(r) (no opts) is UNCHANGED — verdict/tip stay inline, no collapse   -> {'hasVerdictInline': True, 'hasTipInline': True, 'hasCollapsedExpander': False}
+  PASS  P1-3 mic FAB: <main> bottom padding clears the FAB's full extent (88+58=146px) + buffer   -> paddingBottom=166px
+  PASS  P1-4 location prompt: 'Not now' also primes the shared flag (explainer truly shows once, not once-per-Allow)   -> flagAfterDismiss=1
+  PASS  P1-4 location prompt: requestAllPerms() primes the flag SYNCHRONOUSLY (closes the onboarding/Coach-Cal race)   -> flagImmediatelyAfterCall=1
+  PASS  P1-4 location prompt: 2 consecutive location features (Coach Cal then Eat Out) show the explainer only ONCE   -> showCount=1 steps=['dismiss', 'geo1', 'timeout:geo2']
+  PASS  P1-5 NEDA helpline: has its own visible card (icon + readable text) in Gentle mode   -> {'visible': True, 'hasNumber': True, 'hasIcon': True}
+  PASS  P1-6 history empty state: friendly skeleton + '+ Add a meal' present   -> {'hasSkel': True, 'hasCta': True}
+  PASS  P1-6 history empty state: '+ Add a meal' shortcut jumps to Today   -> today tab active=True
+  PASS  no JS console / page errors
+
+============================================================
+REGRESSION GATE: 100 checks  |  100 passed  |  0 FAILED
+All locked-in flows intact. Safe to ship.
+============================================================

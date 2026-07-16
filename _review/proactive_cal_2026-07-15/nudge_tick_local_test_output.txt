@@ -1,0 +1,27 @@
+C:\Users\somme\apps\snapcal\_review\proactive_cal_2026-07-15\nudge_tick_local_test.py:67: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  real = _real_utcnow()
+=== 1) no key -> should be rejected ===
+403 {'error': 'forbidden'}
+
+=== 2) wrong key -> should be 403 ===
+403 {'error': 'forbidden'}
+
+=== 3) correct key -> real tick run against the seeded user ===
+200 {'dead': 0, 'failed': 0, 'sent': 1, 'skipped': 1, 'total': 2}
+
+=== SENT-PAYLOAD LOG (what would have gone out over web push) ===
+{
+  "sub_endpoint": "https://example.invalid/fake-endpoint",
+  "payload": {
+    "title": "Coach Cal",
+    "body": "Did you skip breakfast, or just forget to log it? You can tell me or add it by hand whenever you're ready.",
+    "url": "/?nudge=meal"
+  }
+}
+
+=== 4) run again immediately -> must be deduped (same type not repeated same day) ===
+200 {'dead': 0, 'failed': 0, 'sent': 0, 'skipped': 2, 'total': 2}
+second-run sent payloads: 0
+total captured after 2nd run: 1
+
+cleaned up test uid: _local_verify_nudge_uid
