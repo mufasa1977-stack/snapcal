@@ -3558,17 +3558,36 @@ def _toks(s):
     return out
 
 
+def _fdc_search(q, page_size):
+    """One USDA FoodData Central search call. Raises on network failure — callers decide the fallback."""
+    params = urllib.parse.urlencode({"query": q, "pageSize": page_size,
+                                     "dataType": "Foundation,SR Legacy", "api_key": _usda_key()})
+    req = urllib.request.Request("https://api.nal.usda.gov/fdc/v1/foods/search?" + params,
+                                 headers={"User-Agent": "SnapCal/1.0"})
+    with urllib.request.urlopen(req, timeout=12) as r:
+        return json.loads(r.read().decode("utf-8")).get("foods") or []
+
+
 def _pick_food(foods, q):
     """USDA's relevance is noisy for bare terms ('apple' can rank 'Croissants, apple' or juice #1). Prefer
     entries whose name LEADS the description (the food itself — 'Apples, raw' not 'Croissants, apple'),
-    demote processed/derivative forms the user didn't ask for, use USDA's own rank only as a tiebreaker."""
+    demote processed/derivative forms the user didn't ask for, use USDA's own rank only as a tiebreaker.
+
+    TYPEAHEAD LAW (2026-07-19, Mom's 'Extra butt' -> 'Pork, shoulder (Boston butt)' catch): users — seniors
+    especially — search mid-word. A query word of 4+ chars also matches as a PREFIX of a food word
+    ('butt' -> 'butter'), weighted BELOW an exact match so 'boston butt'/'pork butt' still win pork.
+    Threshold 4 on purpose: at 3, 'egg' would prefix-match 'eggplant'."""
     ql = q.lower()
     qwords = _toks(ql)
+
+    def _prefix(qw, hw):
+        return len(qw) >= 4 and len(hw) > len(qw) and hw.startswith(qw)
 
     def head_match(desc):
         for hw in _toks(desc.split(",")[0]):   # words before the first comma = the food's own name
             for qw in qwords:
                 if hw == qw or hw == qw + "s" or hw == qw + "es" or qw == hw + "s" \
+                        or _prefix(qw, hw) \
                         or (len(qw) > 4 and len(hw) > 4 and (hw.startswith(qw[:5]) or qw.startswith(hw[:5]))):
                     return True
         return False
@@ -3580,9 +3599,18 @@ def _pick_food(foods, q):
         s = float(idx) * 0.5                  # USDA rank = weak tiebreaker
         if not head_match(desc):
             s += 100                          # the food's own name should lead its description
-        covered = sum(1 for qw in qwords if qw in dtoks or (qw + "s") in dtoks
-                      or any(len(qw) > 4 and dt.startswith(qw[:5]) for dt in dtoks))
-        s -= covered * 3                      # reward matching the user's own words ('grilled', 'white')
+        first = (_toks(desc.split(",")[0]) or [""])[0]
+        if first and any(first == qw or first == qw + "s" or first == qw + "es"
+                         or _prefix(qw, first) for qw in qwords):
+            s -= 10                           # the food ITSELF is the queried word ('Butter, ...' over
+                                              # 'Almond butter, ...' when she typed 'butt'). Must outweigh
+                                              # the idx tiebreak across a 26-deep merged wildcard pool.
+        for qw in qwords:                     # reward matching the user's own words ('grilled', 'white')
+            if qw in dtoks or (qw + "s") in dtoks:
+                s -= 3                        # exact word: full credit
+            elif any(_prefix(qw, dt) for dt in dtoks) \
+                    or any(len(qw) > 4 and dt.startswith(qw[:5]) for dt in dtoks):
+                s -= 2                        # typeahead prefix: real but weaker credit
         for p in _FDC_PROCESSED:              # word-boundary match — 'oil' must not hit 'br-OIL-er'
             if p in ql:
                 continue
@@ -3693,17 +3721,32 @@ def nutrition():
     ck = q.lower()[:80]
     if ck in _NUTRITION_CACHE:
         return jsonify(_NUTRITION_CACHE[ck])
-    params = urllib.parse.urlencode({"query": q, "pageSize": 10, "dataType": "Foundation,SR Legacy", "api_key": _usda_key()})
     try:
-        req = urllib.request.Request("https://api.nal.usda.gov/fdc/v1/foods/search?" + params, headers={"User-Agent": "SnapCal/1.0"})
-        with urllib.request.urlopen(req, timeout=12) as r:
-            d = json.loads(r.read().decode("utf-8"))
+        foods = _fdc_search(q, 10)
     except Exception:  # noqa: BLE001
         return jsonify({"error": "lookup_failed"}), 502
-    foods = d.get("foods") or []
-    if not foods:
+    # TYPEAHEAD RETRY (2026-07-19, Mom's 'Extra butt' -> Boston-butt pork catch): people — seniors
+    # especially — hit Search mid-word. If the best pick can't cover EVERY query word exactly, the last
+    # word may be truncated: also pull '<lastword>*' (USDA honors trailing wildcards) and re-pick across
+    # the merged pool. Full-coverage picks ('boston butt', 'pork butt') never trigger this, so real cuts
+    # of meat keep winning; truncated ones ('extra butt') recover the food the user was still typing.
+    qwords = _toks(q)
+    f = _pick_food(foods, q) if foods else None
+    covered_all = False
+    if f is not None:
+        dtoks = set(_toks(f.get("description") or ""))
+        covered_all = all(w in dtoks or (w + "s") in dtoks for w in qwords)
+    if not covered_all and qwords and len(qwords[-1]) >= 4:
+        try:
+            extra = _fdc_search(qwords[-1] + "*", 26)
+        except Exception:  # noqa: BLE001
+            extra = []
+        seen = {x.get("fdcId") for x in foods}
+        merged = foods + [x for x in extra if x.get("fdcId") not in seen]
+        if merged:
+            foods, f = merged, _pick_food(merged, q)
+    if f is None:
         return jsonify({"error": "not_found", "query": q}), 404
-    f = _pick_food(foods, q)
     nutrients = {}
     for n in f.get("foodNutrients", []):
         nm = n.get("nutrientName")

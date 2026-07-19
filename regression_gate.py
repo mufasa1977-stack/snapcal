@@ -1707,6 +1707,25 @@ def main():
                             _bad_magic.append(_f)
         check("failure-class lock: every shipped image's magic bytes match its extension (JPEG-in-.png guard)",
               not _bad_magic, "mismatched=%s" % (_bad_magic or "none"))
+        # (c) TYPEAHEAD FOOD SEARCH (Mom's 'Extra butt' -> Boston-butt pork catch, 2026-07-19): a
+        # partially-typed word must resolve to the food being typed, and full exact queries must keep
+        # winning. Deterministic — recorded USDA pools, no network. Locks _pick_food's prefix scoring
+        # AND the merged-pool ordering that made 'Almond butter' beat plain 'Butter,' on idx tiebreak.
+        _PORK = {"description": "Pork, fresh, shoulder, (Boston butt), blade (steaks), separable lean and fat, raw", "fdcId": 1}
+        _POOL_MERGED = ([_PORK] * 8                                            # raw 'extra butt' pool
+                        + [{"description": "Oil, olive, extra light", "fdcId": 9},
+                           {"description": "Almond butter, creamy", "fdcId": 10},   # wildcard pool, alphabetical
+                           {"description": "Biscuits, plain or buttermilk, dry mix", "fdcId": 11},
+                           {"description": "Butter, Clarified butter (ghee)", "fdcId": 12}])
+        import app as _appmod
+        _t1 = _appmod._pick_food(_POOL_MERGED, "extra butt")["description"]
+        check("failure-class lock: typeahead 'extra butt' picks Butter over Boston-butt pork / almond butter",
+              _t1.lower().startswith("butter,"), "picked=%r" % _t1)
+        _t2 = _appmod._pick_food(_POOL_MERGED, "boston butt")["description"]
+        check("failure-class lock: exact 'boston butt' still picks the pork cut (typeahead must not steal it)",
+              _t2.lower().startswith("pork"), "picked=%r" % _t2)
+        check("failure-class lock: typeahead wildcard retry present in /api/nutrition",
+              "qwords[-1] + \"*\"" in _app_src and "_fdc_search" in _app_src, "retry code present")
 
         # UI probe: quiz REJECTS a 17-year-old (stays on the age step) and ACCEPTS 30.
         agegate = page.evaluate("""() => {
