@@ -1436,6 +1436,24 @@ def main():
         }""")
         check("feedback: sending from the UI shows the thank-you state + clears the box",
               fbui["thanks"] and fbui["cleared"], "thanks=%s cleared=%s" % (fbui["thanks"], fbui["cleared"]))
+        # discoverability (Tariq 2026-07-19: "make sure it's not hard for them to find"): the report
+        # entry must ALSO live on the scan-result screen and jump to a focused report box.
+        fbdisc = page.evaluate("""async () => {
+            renderAddMissedRow();
+            var btn = document.getElementById('scanReportBtn');
+            if (!btn) return { present: false };
+            btn.click();
+            await new Promise(r => setTimeout(r, 700));
+            var ta = document.getElementById('fbText');
+            return { present: true,
+                     jumped: document.querySelector('.tabbtn[data-tab="profile"]').classList.contains('active'),
+                     focused: document.activeElement === ta,
+                     prefilled: !!(ta && /scan got something wrong/i.test(ta.value)) };
+        }""")
+        check("feedback discoverability: scan-result screen carries 'Something wrong with this scan?' + jumps to a focused, prefilled report box",
+              fbdisc["present"] and fbdisc["jumped"] and fbdisc["focused"] and fbdisc["prefilled"],
+              json.dumps(fbdisc))
+        page.evaluate("() => { var ta = document.getElementById('fbText'); if (ta) ta.value = ''; switchTab('today'); }")
 
         # push: GET /api/push/key exposes a VAPID key; POST /api/push/test with no sub -> 404 not_subscribed
         psh = page.evaluate("""async () => {

@@ -1526,8 +1526,8 @@
       <div class="coach-grid" id="coachGrid"></div>
     </div>
     <div class="card">
-      <div class="goal-title">💬 Report a problem</div>
-      <div class="goal-desc" style="margin:5px 2px 0">Something broken, confusing, or wrong? Tell us in your own words — we read every report and fixes reach your app automatically.</div>
+      <div class="goal-title" id="fbCardTitle">💬 Something wrong? Tell us</div>
+      <div class="goal-desc" style="margin:5px 2px 0">If the app missed a food, logged something incorrectly, or anything looks off — tell us here in your own words. We read every report, and fixes reach your app automatically.</div>
       <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap" id="fbCats">
         <button type="button" class="fb-cat" data-cat="bug" style="border:1.5px solid var(--brand);background:var(--soft);color:var(--brand);font-weight:800;border-radius:999px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:13.5px">Something's wrong</button>
         <button type="button" class="fb-cat" data-cat="confusing" style="border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:800;border-radius:999px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:13.5px">Confusing</button>
@@ -2447,6 +2447,21 @@ function switchTab(name){
   if (name === "today"){ renderFast(); loadLesson(); }
   if (name === "history") loadHistory();
   if (name === "profile") loadProfile();
+}
+
+/* Jump straight to the "Something wrong? Tell us" card from anywhere in the app (the report
+   entry must live at the moment of frustration — scan result, meal list — not only in Profile). */
+function openReportProblem(prefill){
+  switchTab("profile");
+  setTimeout(function(){
+    var card = $("#fbCardTitle") && $("#fbCardTitle").closest(".card");
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+    var ta = $("#fbText");
+    if (ta){
+      if (prefill && !ta.value) ta.value = prefill;
+      ta.focus();
+    }
+  }, 350);
 }
 document.querySelectorAll(".tabbtn").forEach(function(b){
   b.addEventListener("click", function(){ switchTab(b.dataset.tab); });
@@ -4115,9 +4130,14 @@ function renderAddMissedRow(){
   wrap.innerHTML =
     '<button type="button" id="addMissedBtn" style="width:100%;margin-top:10px;border:1.5px solid var(--brand);' +
     'background:var(--soft);color:var(--brand);font-weight:800;border-radius:11px;padding:11px 12px;' +
-    'cursor:pointer;font-family:inherit;font-size:13.5px">＋ Add an item the camera missed</button>';
+    'cursor:pointer;font-family:inherit;font-size:13.5px">＋ Add an item the camera missed</button>' +
+    '<button type="button" id="scanReportBtn" style="width:100%;margin-top:8px;border:none;background:none;' +
+    'color:var(--ink2);font-size:12.5px;font-weight:700;cursor:pointer;padding:4px 0;font-family:inherit;' +
+    'text-decoration:underline">Something wrong with this scan? Tell us so we can fix it</button>';
   var b = $("#addMissedBtn");
   if (b) b.addEventListener("click", openMissedSearch);
+  var rb = $("#scanReportBtn");
+  if (rb) rb.addEventListener("click", function(){ openReportProblem("The food scan got something wrong: "); });
 }
 
 function quickAddToggleHTML(){
