@@ -1793,19 +1793,27 @@ def main():
               "showCount=%s steps=%s" % (locfix["showCount"], locfix["steps"]))
         page.evaluate("() => { try { localStorage.setItem('snapcal_c_snapcal_loc_primed', '1'); } catch(e){} }")   # restore gate's primed state for any later checks
 
-        # P1-5: NEDA HELPLINE — its own visible, dignified card (not a buried 11.5px line).
+        # P1-5: ED-SUPPORT HELPLINE — its own visible, dignified card (not a buried 11.5px line).
+        # 2026-07-19 RD-review fix: NEDA's helpline was DISCONTINUED in June 2023 (verified NPR/CBS) — the
+        # card now carries the National Alliance for Eating Disorders line 1-866-662-1235 (licensed
+        # clinicians, verified live) + crisis 988. The gate MUST lock the live number and MUST FAIL if the
+        # dead NEDA number ever reappears anywhere in the page.
         neda = page.evaluate("""() => {
             var was = document.body.classList.contains('gentle');
             document.body.classList.add('gentle');
             var card = document.getElementById('nedaCard');
             var visible = !!card && getComputedStyle(card).display !== 'none';
-            var hasNumber = visible && /1-800-931-2237/.test(card.textContent);
+            var hasNumber = visible && /1-866-662-1235/.test(card.textContent);
+            var has988 = visible && /988/.test(card.textContent);
             var hasIcon = visible && !!card.querySelector('.neda-ic');
+            var deadNumberAnywhere = /1-800-931-2237/.test(document.documentElement.innerHTML);
             if (!was) document.body.classList.remove('gentle');
-            return { visible: visible, hasNumber: hasNumber, hasIcon: hasIcon };
+            return { visible: visible, hasNumber: hasNumber, has988: has988, hasIcon: hasIcon,
+                     deadNumberAnywhere: deadNumberAnywhere };
         }""")
-        check("P1-5 NEDA helpline: has its own visible card (icon + readable text) in Gentle mode",
-              neda["visible"] and neda["hasNumber"] and neda["hasIcon"], str(neda))
+        check("P1-5 ED-support helpline card: visible in Gentle mode w/ LIVE Alliance number 1-866-662-1235 + 988; dead NEDA number absent",
+              neda["visible"] and neda["hasNumber"] and neda["has988"] and neda["hasIcon"] and not neda["deadNumberAnywhere"],
+              str(neda))
 
         # P1-6: HISTORY EMPTY STATE — friendly skeleton + a working "+ Add a meal" shortcut to Today.
         hist = page.evaluate("""async () => {

@@ -155,7 +155,10 @@ GOAL_LABELS = {
     "glp1": "on a GLP-1 medication (Ozempic/Wegovy/Zepbound) — appetite is suppressed so every bite must "
             "count: prioritise high protein to defend muscle during rapid weight loss, adequate fiber and "
             "hydration to ease constipation, and flag greasy/high-fat or very large portions that commonly "
-            "trigger nausea; coach toward small nutrient-dense portions",
+            "trigger nausea; coach toward small nutrient-dense portions. NEVER comment on medication dose, "
+            "schedule, brand choice, or stopping — that is their prescriber's alone. If they report persistent "
+            "vomiting, signs of dehydration, or severe abdominal pain, tell them to contact their prescriber "
+            "promptly",
 }
 
 ANALYZE_PROMPT_TMPL = """You are an expert nutrition-analysis engine for a food-tracking app.
@@ -174,8 +177,10 @@ METHOD — estimate like a registered dietitian, because consumer apps systemati
 3. COUNT THE HIDDEN CALORIES — this is the #1 source of error: cooking oil/butter, dressings, sauces,
    gravy, melted cheese, spreads, and sugary drinks are usually present even when not obvious. INCLUDE
    them. Restaurant and home-cooked dishes typically carry 100-400 kcal of added fats/oils people forget.
-4. WHEN PORTION OR HIDDEN INGREDIENTS ARE UNCERTAIN, lean slightly HIGHER, never lower, and say why in
-   "note". Under-counting breaks the user's results; an honest, slightly-high estimate protects them.
+4. WHEN PORTION OR HIDDEN INGREDIENTS ARE UNCERTAIN: if the user's goal is fat loss, recomposition, or
+   GLP-1 support, lean slightly HIGHER, never lower, and say why in "note" — under-counting breaks the
+   user's results; an honest, slightly-high estimate protects them. If the goal is building muscle or
+   maintaining, estimate neutrally — do not bias high or low — and still note the uncertainty in "note".
 5. IDENTIFY BY WHAT YOU SEE, NOT BY ASSUMPTION — misnaming a food is as damaging as miscounting it, and
    look-alike variants have very different macros/fiber. Judge each item from its VISIBLE color and texture,
    and when two variants look similar, choose the MORE COMMON one unless the photo clearly shows otherwise:
@@ -243,13 +248,13 @@ Rules:
 
 # ---- Food-allergy filtering: one avoid-list flows into EVERY Gemini food prompt + a server-side safety net ----
 _ALLERGEN_KW = {
-    "peanuts": ["peanut"],
-    "tree nuts": ["tree nut", "almond", "walnut", "pecan", "cashew", "pistachio", "hazelnut", "macadamia", "mixed nut", " nuts", "nut ", "pesto", "marzipan"],
-    "dairy": ["milk", "cheese", "yogurt", "yoghurt", "cream", "butter", "dairy", "whey", "queso", "parmesan", "feta", "mozzarella", "ranch", "alfredo", "latte"],
-    "eggs": ["egg", "omelet", "omelette", "mayo", "frittata", "quiche"],
-    "gluten / wheat": ["wheat", "bread", "bun", "roll", "pasta", "flour", "tortilla", "wrap", "bagel", "cracker", "gluten", "breaded", "crouton", "hoagie", "sub ", "pita", "noodle", "oat", "cereal", "pretzel", "biscuit"],
+    "peanuts": ["peanut", "satay", "pad thai"],
+    "tree nuts": ["tree nut", "almond", "walnut", "pecan", "cashew", "pistachio", "hazelnut", "macadamia", "mixed nut", " nuts", "nut ", "pesto", "marzipan", "coconut"],
+    "dairy": ["milk", "cheese", "yogurt", "yoghurt", "cream", "butter", "dairy", "whey", "queso", "parmesan", "feta", "mozzarella", "ranch", "alfredo", "latte", "ghee", "ganache"],
+    "eggs": ["egg", "omelet", "omelette", "mayo", "frittata", "quiche", "meringue", "aioli", "custard", "carbonara"],
+    "gluten / wheat": ["wheat", "bread", "bun", "roll", "pasta", "flour", "tortilla", "wrap", "bagel", "cracker", "gluten", "breaded", "crouton", "hoagie", "sub ", "pita", "noodle", "oat", "cereal", "pretzel", "biscuit", "barley", "rye", "malt"],
     "soy": ["soy", "tofu", "edamame", "tempeh", "miso"],
-    "fish": ["fish", "salmon", "tuna", "cod", "tilapia", "anchovy", "sardine"],
+    "fish": ["fish", "salmon", "tuna", "cod", "tilapia", "anchovy", "sardine", "worcestershire"],
     "shellfish": ["shrimp", "crab", "lobster", "shellfish", "clam", "oyster", "scallop", "prawn", "crawfish", "mussel"],
     "sesame": ["sesame", "tahini", "hummus"],
     "fruit": ["fruit", "berry", "berries", "strawberr", "blueberr", "apple", "banana", "orange", "melon", "grape", "mango", "peach", "pineapple", "cherry", "kiwi", "apricot"],
@@ -271,7 +276,10 @@ def _allergy_clause(allergies):
     return ("\n\nCRITICAL — FOOD ALLERGIES. The user is allergic to: " + ", ".join(al) + ". EVERY item you suggest "
             "MUST be free of these allergens and their hidden/derivative sources. NEVER suggest anything that contains "
             "or is commonly cross-contaminated with them. If a usual recommendation is unsafe, replace it with a safe "
-            "alternative — do not simply drop it. This must be correct.")
+            "alternative — do not simply drop it. This must be correct. Hidden sources to treat as CONTAINING the "
+            "allergen: coconut and nut oils/flours (tree nut), satay/pad thai/many Asian sauces (peanut), "
+            "meringue/aioli/mayo/custard/carbonara (egg), malt/barley/rye/soy sauce (gluten), ghee/ganache (dairy), "
+            "Worcestershire (fish).")
 
 
 def _allergy_unsafe(text, al):
@@ -1850,6 +1858,16 @@ CHAT_SYSTEM = (
     "phrase like 'just say take me there', and never make them ask 'where is that' — you already know the spot, so offer it "
     "yourself. If you named TWO places at different distances, end by asking which they'd like directions to and note the "
     "closer one (e.g. 'Want me to take you to the closer one, 1.2 mi away?')."
+    "\n\nSAFETY RULES — these apply REGARDLESS of any mode or setting:"
+    "\n- REGARDLESS of any mode or setting: if the user sounds in real distress about food, weight, or body "
+    "image — or mentions purging, laxatives, or feeling they don't deserve food — respond with warmth, do NOT "
+    "coach numbers in that reply, and share the National Alliance for Eating Disorders helpline 1-866-662-1235 "
+    "(in crisis: call or text 988)."
+    "\n- If the user mentions being pregnant or breastfeeding: do not coach a calorie deficit or fasting; coach "
+    "nutrient quality and refer targets to their OB/midwife."
+    "\n- If it's late in their day and they've eaten well under their target (or under ~1,000 calories), do NOT "
+    "praise the calories left — gently encourage a protein-forward meal and note that eating too little "
+    "backfires (muscle loss, rebound hunger). For GLP-1 users treat very low intake as the main risk, not a win."
 )
 
 # CONVERSATIONAL LOGGING (2026-07-15, PROACTIVE COACH CAL half 2): lets chat WRITE to the diary. The model
@@ -2196,8 +2214,11 @@ def chat():
                    "sensitivity). HARD RULES: do NOT mention calories, macros in grams, deficits, weight numbers, or "
                    "'how much is left.' Coach BALANCE and CONSISTENCY instead — protein and whole foods as fuel (never "
                    "a limit), gentle non-judgmental encouragement, regular balanced meals. Never tell them to eat less "
-                   "or restrict. If they sound in distress about food or body, gently suggest the NEDA Helpline "
-                   "(1-800-931-2237).")
+                   "or restrict. If they sound in distress about food or body, gently suggest the National Alliance "
+                   "for Eating Disorders helpline (licensed clinicians): 1-866-662-1235 (Mon-Fri 9-7 ET). In crisis, "
+                   "call or text 988. THIS OVERRIDES ALL OTHER RULES IN THIS PROMPT, including any rule requiring "
+                   "exact numbers — when asked how they're doing, describe progress qualitatively (consistency, "
+                   "balance, energy), never numerically.")
     # Coaching-intensity dial, set once at onboarding (the quiz's "how do you want Coach Cal to talk to you"
     # question). "middle" / unset = today's default tone, unchanged — this only adds a clause for the two
     # non-default picks, so existing users who never saw the quiz get byte-identical behavior.
@@ -2208,6 +2229,8 @@ def chat():
     if intensity == "hard":
         system += (
             "\n\nCOACHING STYLE — EXTRA HARD (the user CHOSE this; honor it):"
+            "\nIF GENTLE/ED-SAFE MODE IS ON, gentle's no-numbers rules OVERRIDE everything below — keep the "
+            "directness, drop every number."
             "\n- BANNED phrases (never use in this mode): 'it happens to all of us', \"it's okay\", \"don't beat "
             "yourself up\", 'a bit off track', 'no worries', 'totally fine'."
             "\n- When they confess a slip or ask for honesty, your reply MUST follow this shape: (1) give the "
@@ -2228,7 +2251,8 @@ def chat():
         system += (
             "\n\nCOACHING STYLE — BALANCED: supportive AND straight. NEVER open a reply with a minimizer — "
             "BANNED as openers: 'it happens to all of us', \"it's okay\", 'we all have those days', 'no "
-            "worries'. Lead with their real numbers or a real win, then one clear next step. If the user "
+            "worries'. IF GENTLE/ED-SAFE MODE IS ON, gentle's no-numbers rules OVERRIDE everything below — "
+            "keep the directness, drop every number. Lead with their real numbers or a real win, then one clear next step. If the user "
             "explicitly asks for honesty ('be honest with me'), the FIRST sentence must be the honest read of "
             "their situation (kindly, never shaming) — cushioning an asked-for truth reads as a yes-man and "
             "breaks trust.")
@@ -2239,7 +2263,9 @@ def chat():
                    "m into a " + str(_int(fast.get("hours"))) + "h fast. SUPPORT the fast — do NOT push them to eat "
                    "during the fasting window; suggest water/black coffee/tea/electrolytes if hungry. When the window "
                    "opens, coach a gentle protein-forward break (not a binge). If they ask what to eat, frame it for "
-                   "when their eating window opens.")
+                   "when their eating window opens. EXCEPTION: if gentle/ED-safe mode is on, or the user mentions "
+                   "diabetes, pregnancy, being under 18, or an eating-disorder history, do NOT encourage extending "
+                   "the fast — support ending it gently and suggest they clear fasting with their doctor.")
     lt = str(d.get("local_time") or "").strip()[:24]
     if lt:
         system += ("\n\nThe user's current local time is " + lt + ". Make every food or meal suggestion "
@@ -2374,6 +2400,22 @@ def _brief_fallback(block, name, daily, remaining, pe, pt, gd):
     nm = (" " + name) if name else ""
     rem = max(0, remaining)
     left_p = max(0, pt - pe)
+    if pt <= 0:
+        # No protein target synced — omit protein coaching entirely rather than telling the user "0g".
+        if block == "morning":
+            return ("Morning" + nm + "! Let's make today count - aim for about " + str(daily) + " cal for " + gd +
+                    ". Easy win: get protein in at breakfast and a glass of water. I've got you.")
+        if block == "midday":
+            return ("Midday check" + nm + " - you've got about " + str(rem) + " cal left today. Make lunch a lean "
+                    "protein with veggies and you're right on track.")
+        if block == "evening":
+            if remaining > 0:
+                return ("Evening" + nm + " - nice work today. You've still got ~" + str(rem) + " cal of room, so a "
+                        "solid protein dinner fits perfectly.")
+            return ("Evening" + nm + " - you're at your calorie goal for today, that's discipline. Keep dinner light "
+                    "and protein-forward, and we'll tighten tomorrow. Proud of you.")
+        return ("Winding down" + nm + " - log dinner if you haven't, and keep it protein-forward. Tomorrow's a fresh "
+                "start - rest up.")
     if block == "morning":
         return ("Morning" + nm + "! Let's make today count - aim for about " + str(daily) + " cal and " + str(pt) +
                 "g protein for " + gd + ". Easy win: get protein in at breakfast and a glass of water. I've got you.")
@@ -4219,12 +4261,19 @@ you about what it can and can&rsquo;t do.</p>
 substitute for a doctor or a registered dietitian. Talk to a qualified professional before making changes to
 your diet, exercise, or health &mdash; especially if you have a medical condition, are pregnant, or take
 medication.</p>
+<p>SnapCal never gives advice about medication &mdash; if you take a GLP-1 or manage any condition, your
+prescriber&rsquo;s guidance always comes first.</p>
 <h2>How accurate are the numbers?</h2>
 <p>The calorie and macro figures from a food <strong>photo are estimates</strong>. A photo can&rsquo;t show
 portion size, hidden oils, or exactly how a dish was prepared, so we show a <strong>confidence range</strong>
 rather than pretending a single number is exact. Treat them as a helpful guide, not a lab measurement.</p>
-<p>When you want an exact number for a packaged food, <strong>scan its barcode</strong> &mdash; that reads the
-manufacturer&rsquo;s published label instead of guessing from a picture.</p>
+<p>When you want an exact number for a packaged food, <strong>scan its barcode</strong> &mdash; that pulls the
+food&rsquo;s published nutrition label from the Open Food Facts database instead of guessing from a picture.
+Label data can occasionally be out of date, so double-check the package when it really matters.</p>
+<p>When we&rsquo;re unsure, we round up, not down &mdash; an honest, slightly-high estimate protects your
+progress better than a flattering low one.</p>
+<p>Every logged food shows where its number came from &mdash; USDA FoodData Central for food search, the Open
+Food Facts label database for barcodes, or an AI photo estimate with its confidence range.</p>
 <h2>Your privacy, in one line</h2>
 <p>There&rsquo;s no account and no login; your data lives on your device and is mirrored to our server only so
 it survives a reinstall &mdash; we never sell it or use it for ads. See the full
@@ -4248,6 +4297,56 @@ def trust_page():
     """Public, honest Trust & Safety page: not-medical-advice, estimate accuracy + barcode-for-exact, a
     one-line privacy summary, and an eating-disorder safety note (helpline + Gentle mode)."""
     return app.response_class(TRUST_PAGE_HTML, mimetype="text/html")
+
+
+# Plain-English Terms of Use — honest, no legalese overreach. Mirrors the /privacy inline-HTML style and
+# links to /privacy and /delete-my-data. Linked from the paywall's subscription disclosure.
+TERMS_PAGE_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SnapCal Terms of Use</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,system-ui,sans-serif;max-width:680px;margin:0 auto;
+padding:32px 22px;line-height:1.6;color:#18181b;background:#fafaf9}h1{font-size:24px}h2{font-size:17px;margin-top:26px}
+.muted{color:#6b7280;font-size:14px}a{color:#059669}ul{padding-left:20px}</style>
+</head><body>
+<h1>SnapCal Terms of Use</h1>
+<p class="muted">Xionprotech LLC &middot; Last updated July 2026</p>
+<p>By using SnapCal you agree to these terms. We&rsquo;ve kept them in plain English.</p>
+<h2>What SnapCal is</h2>
+<p>SnapCal is a wellness app that helps you notice what you eat and how you move &mdash; photo-based food
+logging, barcode scanning, and general nutrition coaching. It provides general wellness information only.
+It is <strong>not medical, nutritional, or clinical advice</strong> and is not a substitute for a doctor or
+a registered dietitian. SnapCal is for adults 18 and older.</p>
+<h2>Subscriptions</h2>
+<ul>
+<li>Premium costs <strong>$7.99/month or $39.99/year</strong> (prices shown in the app at purchase).</li>
+<li>Subscriptions <strong>auto-renew</strong> until cancelled. Cancel anytime in your App Store or Google
+Play subscription settings &mdash; cancelling stops future charges; already-paid periods run to their end.</li>
+<li>Billing, refunds, and cancellation are handled by Apple or Google under their store policies.</li>
+</ul>
+<h2>Your data</h2>
+<p>What we collect and how we use it is described in the <a href="/privacy">Privacy Policy</a>. You can
+<a href="/delete-my-data">delete everything</a> at any time.</p>
+<h2>Acceptable use</h2>
+<p>Don&rsquo;t abuse the service: no attempting to break, overload, or reverse-engineer it, no using it for
+anything unlawful, and no scraping or reselling its output as your own service.</p>
+<h2>No warranties</h2>
+<p>SnapCal is provided &ldquo;as is.&rdquo; Calorie and nutrition figures are estimates and can be wrong. We
+don&rsquo;t promise the service will always be available, error-free, or fit for any particular purpose.</p>
+<h2>Limitation of liability</h2>
+<p>To the fullest extent the law allows, Xionprotech LLC is not liable for indirect or consequential damages
+from your use of SnapCal, and our total liability is limited to what you paid us in the past 12 months.</p>
+<h2>Governing law</h2>
+<p>These terms are governed by the laws of the Commonwealth of Pennsylvania, USA.</p>
+<h2>Contact</h2>
+<p>Questions: <a href="mailto:tariq@xionprotech.com">tariq@xionprotech.com</a>.</p>
+</body></html>"""
+
+
+@app.get("/terms")
+def terms_page():
+    """Public plain-English Terms of Use (service description, subscription terms, data, acceptable use,
+    warranty disclaimer, liability limit, PA governing law). Linked from the paywall disclosure."""
+    return app.response_class(TERMS_PAGE_HTML, mimetype="text/html")
 
 
 @app.get("/methods")

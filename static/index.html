@@ -1162,7 +1162,7 @@
       <span class="neda-ic" aria-hidden="true">💬</span>
       <div>
         <div class="neda-t">You don’t have to navigate this alone</div>
-        <div class="neda-s">If food or your body feels overwhelming, the NEDA Helpline is free and confidential — <b>1-800-931-2237</b>.</div>
+        <div class="neda-s">If food or your body feels overwhelming, the National Alliance for Eating Disorders helpline (licensed clinicians) is free and confidential — <b>1-866-662-1235</b> (Mon–Fri 9–7 ET). In crisis, call or text <b>988</b>.</div>
       </div>
     </div>
 
@@ -1291,7 +1291,7 @@
       </div>
       <button id="barcodeBtn" type="button" style="width:100%;margin-top:9px;border:1.5px solid var(--brand);background:var(--soft);color:var(--brand);font-weight:800;border-radius:11px;padding:11px 12px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 5v14M7 5v14M11 5v14M14.5 5v14M18 5v14M21 5v14"></path></svg>
-        Scan a barcode for exact numbers
+        Scan a barcode for the label's numbers
       </button>
       <div id="barcodePanel" style="display:none;margin-top:10px">
         <button id="bcCamera" type="button" style="display:none;width:100%;border:none;background:var(--brand);color:#fff;font-weight:800;border-radius:15px;padding:16px;cursor:pointer;font-family:inherit;font-size:16.5px;align-items:center;justify-content:center;gap:11px;box-shadow:0 5px 16px rgba(46,139,87,.30);-webkit-tap-highlight-color:transparent">
@@ -1450,7 +1450,7 @@
         <button type="button" data-sex="female"><span>Female</span></button>
       </div>
       <div class="p-grid" style="margin-top:12px">
-        <div class="p-cell"><label class="field-lbl" for="pAge">Age</label><input class="txt" id="pAge" type="number" inputmode="numeric" min="13" max="100" placeholder="years"></div>
+        <div class="p-cell"><label class="field-lbl" for="pAge">Age</label><input class="txt" id="pAge" type="number" inputmode="numeric" min="18" max="100" placeholder="years"></div>
         <div class="p-cell"><label class="field-lbl" for="pActivity">Activity</label>
           <select class="txt sel" id="pActivity">
             <option value="sedentary">Sedentary (desk job)</option>
@@ -1584,7 +1584,8 @@
         ✓ Unlimited photo scans<br>
         ✓ Talk to your coach out loud — 4 voices<br>
         ✓ Proactive daily check-ins<br>
-        ✓ You're getting <b>ALL of it free</b> as a tester
+        ✓ You're getting <b>ALL of it free</b> as a tester<br>
+        ✓ When testing ends nothing happens automatically — you'll only ever pay if you choose to subscribe
       </div>
       <div id="wouldPayWrap" style="margin-top:12px">
         <div class="goal-desc" style="margin:0 2px 8px">Would you pay $7.99/mo for this after testing?</div>
@@ -1851,7 +1852,7 @@ var GOAL_INFO = {
   maintain:     { emoji: "⚖️", label: "Maintain",     desc: "Coaching for balance — even macros and overall food quality." },
   build_muscle: { emoji: "💪", label: "Build muscle", desc: "Coaching for a lean bulk — enough fuel, high protein, and good protein density." },
   recomp:       { emoji: "🔁", label: "Lose + tone",  desc: "Coaching for body recomposition — a moderate deficit with high protein and strength work, so you lose fat and stay solid, not skinny." },
-  glp1:         { emoji: "💉", label: "GLP-1",        desc: "Coaching for GLP-1 meds (Ozempic/Wegovy/Zepbound) — protein to protect muscle, fiber + water for digestion, and warnings on greasy or oversized portions that trigger nausea." }
+  glp1:         { emoji: "💉", label: "GLP-1",        desc: "Coaching for GLP-1 meds (Ozempic/Wegovy/Zepbound) — protein to protect muscle, fiber + water for digestion, and warnings on greasy or oversized portions that trigger nausea. Food coaching only — SnapCal gives no advice about your medication. Your prescriber's guidance always comes first." }
 };
 var goal = localStorage.getItem("snapcal_goal") || "maintain";
 if (!GOAL_INFO[goal]) goal = "maintain";
@@ -2914,6 +2915,7 @@ function renderFast(){
     var chips = FAST_PROTOCOLS.map(function(p){ return '<button type="button" class="fast-chip'+(p.h===proto?' on':'')+'" data-fh="'+p.h+'">'+p.label+'</button>'; }).join("");
     body.innerHTML =
       '<div class="goal-desc" style="margin:4px 2px 10px">Intermittent fasting — pick your window, start the clock, and track your eating window.</div>'+
+      '<div class="goal-desc" style="margin:0 2px 10px;font-size:11.5px">Fasting isn\'t for everyone — skip it if you\'re pregnant, under 18, have diabetes, or a history of disordered eating.</div>'+
       '<div class="fast-chips">'+chips+'</div>'+
       '<button class="btn btn-dark" id="fastStartBtn" type="button" style="margin-top:12px">Start fast</button>';
     return;
@@ -3160,10 +3162,12 @@ function calcTargets(){
   else if (_pGoalDir === "gain") cal = tdee + Math.min(0.12 * tdee, 350);
   else { var pct = (_pGoalDir === "recomp") ? 0.18 : 0.20; cal = tdee * (1 - pct); var fl = (_pSex === "female") ? 1200 : 1500; if (cal < fl) cal = fl; }
   cal = Math.round(cal / 10) * 10;
-  var proLb = goalLb > 0 ? goalLb : wlb * 0.7;                     /* heavy-user-safe: goal weight, not 344 */
+  var proLb = _pGoalDir === "gain" ? wlb : (goalLb > 0 ? goalLb : wlb * 0.7);   /* gain: CURRENT weight (1 g/lb ≈ 2.2 g/kg); loss/recomp: heavy-user-safe goal weight, not 344 */
   var protein = Math.round(proLb * (_pGoalDir === "maintain" ? 0.8 : 1.0));
   var goalKg = (goalLb > 0 ? goalLb : wlb) * 0.45359;
   var fat = Math.round(Math.max(0.25 * cal / 9, 0.8 * goalKg));   /* hormonal-health floor */
+  var pfCal = protein * 4 + fat * 9;                              /* keep the plan internally consistent: macros must fit inside cal */
+  if (pfCal > cal){ var sc = cal / pfCal; protein = Math.round(protein * sc); fat = Math.round(fat * sc); }
   var carb = Math.round((cal - protein * 4 - fat * 9) / 4); if (carb < 0) carb = 0;
   $("#pCal").value = cal; $("#pPro").value = protein; $("#pCarb").value = carb; $("#pFat").value = fat;
   var diff = tdee - cal, rate = Math.abs(diff) * 7 / 3500;
@@ -3342,12 +3346,12 @@ async function loadStreak(){
 function provBadge(m){
   var tier = (m && m.accuracy_tier ? String(m.accuracy_tier) : "").toUpperCase();
   var spec = {
-    EXACT:    { t: "Exact",    c: "#15803D", bg: "rgba(34,197,94,.14)",  d: "M20 6 9 17l-5-5" },
+    EXACT:    { t: "Label",    c: "#15803D", bg: "rgba(34,197,94,.14)",  d: "M20 6 9 17l-5-5" },
     VERIFIED: { t: "Verified", c: "#1D4ED8", bg: "rgba(59,130,246,.14)", d: "M9 12l2 2 4-4 M12 3l7 4v5c0 4.4-3 7-7 9-4-2-7-4.6-7-9V7z" },
     ESTIMATE: { t: "Estimate", c: "#B45309", bg: "rgba(245,158,11,.16)", d: "M12 8v5 M12 16h.01 M12 3l9 16H3z" }
   }[tier];
   if (!spec) return "";
-  var title = tier === "EXACT" ? "Exact number from " + esc(m.source || "a verified label")
+  var title = tier === "EXACT" ? "Label number from " + esc(m.source || "a verified label")
             : tier === "VERIFIED" ? "USDA federal data — " + esc(m.source || "")
             : "AI photo estimate — tap to correct anytime";
   return '<span class="prov" title="' + title + '" style="display:inline-flex;align-items:center;gap:3px;'
@@ -3747,7 +3751,8 @@ function buildCoachTopHTML(r){
       '<div class="grade ' + g + '">' + esc(g) + '</div>' +
       '<div><div class="verdict-t">' + esc(r.verdict || "Nutrition breakdown") + '</div>' +
       '<div class="verdict-s">Health score ' + int(r.health_score) + '/100' +
-        (r.satiety ? ' &middot; ' + cap(r.satiety) + ' satiety' : '') + '</div></div></div>';
+        (r.satiety ? ' &middot; ' + cap(r.satiety) + ' satiety' : '') + '</div>' +
+      '<div style="font-size:12px;color:var(--ink3);margin-top:2px">Coach Cal\'s food-quality rating for your goal — not a clinical measure.</div></div></div>';
   }
   if (r.coach_tip) {
     html += '<div class="tip">💡<div><b>Coach Cal:</b> ' + esc(r.coach_tip) + '</div></div>';
@@ -3768,7 +3773,8 @@ function buildDetailHTML(r, opts){
       '<div class="grade ' + g + '">' + esc(g) + '</div>' +
       '<div><div class="verdict-t">' + esc(r.verdict || "Nutrition breakdown") + '</div>' +
       '<div class="verdict-s">Health score ' + int(r.health_score) + '/100' +
-        (r.satiety ? ' &middot; ' + cap(r.satiety) + ' satiety' : '') + '</div></div></div>';
+        (r.satiety ? ' &middot; ' + cap(r.satiety) + ' satiety' : '') + '</div>' +
+      '<div style="font-size:12px;color:var(--ink3);margin-top:2px">Coach Cal\'s food-quality rating for your goal — not a clinical measure.</div></div></div>';
   }
 
   /* good / bad flags */
@@ -4001,8 +4007,9 @@ function renderScanCard(){
     conf.innerHTML =
       '<div class="conf-wrap"><span class="conf-chip ' + cls + '">' + cf.level + ' confidence</span>' +
       '<span class="conf-range">likely ' + fmtNum(cf.lo) + '&ndash;' + fmtNum(cf.hi) + ' Cal</span></div>' +
-      '<div class="conf-honest">Portion size is the hard part of any photo estimate — tap an item to adjust, or get exact numbers for packaged food.</div>' +
-      '<button class="conf-cta" id="scanExactBtn" type="button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 5v14M7 5v14M11 5v14M14.5 5v14M18 5v14M21 5v14"></path></svg>Scan a barcode for exact numbers</button>';
+      '<div class="conf-honest">Portion size is the hard part of any photo estimate — tap an item to adjust, or get the label\'s numbers for packaged food.</div>' +
+      '<button class="conf-cta" id="scanExactBtn" type="button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 5v14M7 5v14M11 5v14M14.5 5v14M18 5v14M21 5v14"></path></svg>Scan a barcode for the label\'s numbers</button>' +
+      ((typeof allergyLabels === "function" ? allergyLabels() : []).length > 0 ? '<div class="conf-honest">⚠️ Estimates can miss allergens — always verify yourself.</div>' : '');
     var ex = $("#scanExactBtn"); if (ex) ex.addEventListener("click", goExactNumbers);
   }
 
@@ -4565,7 +4572,8 @@ function _qzOnNext(){
   if (id === "intro"){ _qzAdvance(); return; }
   if (id === "age"){
     var age = int($("#qzAge").value);
-    if (!age || age < 13 || age > 100){ toast("Enter a valid age", true); return; }
+    if (!age || age > 100){ toast("Enter a valid age", true); return; }
+    if (age < 18){ toast("SnapCal is built for adults 18+.", true); return; }
     _qz.a.age = age; _qzAdvance(); return;
   }
   if (id === "height"){
@@ -4581,6 +4589,13 @@ function _qzOnNext(){
   if (id === "weight_goal"){
     var wg = parseFloat($("#qzWGoal").value);
     if (!wg || wg < 50){ toast("Enter your goal weight", true); return; }
+    /* Goal-weight sanity: reject a target below BMI 18.5 for the height already collected (ft/in → meters). */
+    var m = (int(_qz.a.ft) * 12 + (int(_qz.a.inch) || 0)) * 0.0254;
+    if (m > 0 && (wg / 2.2046) / (m * m) < 18.5){
+      var minLb = Math.round(18.5 * m * m * 2.2046);
+      toast("That target is below the healthy range for your height. The lowest healthy weight for you is about " + minLb + " lb — let's aim there first.", true);
+      return;
+    }
     _qz.a.wgoal = wg; _qzAdvance(); return;
   }
   if (id === "textsize"){ _qzAdvance(); return; }   /* 2026-07-19 additive: size already applied on tap */
@@ -4653,7 +4668,8 @@ function _qzRender(){
       break;
     case "age":
       body = '<div class="qz-h2">How old are you?</div>' +
-        '<input class="txt qz-input" id="qzAge" type="number" inputmode="numeric" min="13" max="100" placeholder="Age" value="' + (_qz.a.age || "") + '">' +
+        '<input class="txt qz-input" id="qzAge" type="number" inputmode="numeric" min="18" max="100" placeholder="Age" value="' + (_qz.a.age || "") + '">' +
+        '<div class="qz-sub" style="margin-top:6px">SnapCal is designed for adults 18+.</div>' +
         '<button class="btn btn-dark" id="qzNext" type="button">Next</button>';
       break;
     case "height":
@@ -5845,7 +5861,7 @@ function loadTrend(){
     var dir = rate < -0.05 ? ("losing " + Math.abs(rate).toFixed(1) + " lb/week") : (rate > 0.05 ? ("gaining " + rate.toFixed(1) + " lb/week") : "holding steady");
     el.innerHTML =
       '<div class="mv-note" style="margin:0 0 10px"><b>Your real burn: ~' + fmtNum(d.est_tdee) + ' cal/day.</b><br>' +
-      '<span style="color:var(--ink3)">Trend weight ' + d.trend_weight + ' lb &middot; ' + dir + ' &middot; you\'re averaging ' + fmtNum(d.avg_intake) + ' cal logged. Measured from how your weight is actually moving — more accurate than any formula.</span></div>' +
+      '<span style="color:var(--ink3)">Trend weight ' + d.trend_weight + ' lb &middot; ' + dir + ' &middot; you\'re averaging ' + fmtNum(d.avg_intake) + ' cal logged. Measured from how your weight is actually moving — usually closer to your real burn than a formula, as long as you log consistently.</span></div>' +
       '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
       '<div style="font-size:13.5px"><b>Suggested target: ' + fmtNum(d.suggested_target) + ' cal/day</b></div>' +
       '<button class="btn btn-dark" id="trendApply" type="button" style="margin:0;width:auto;padding:9px 16px">Use this target</button></div>';
@@ -6110,8 +6126,9 @@ function paywallHtml(opts){
         '<li>All goal modes, including GLP-1 &amp; recomp</li>' +
         '<li>Full history, weight &amp; streak tracking</li>' +
       '</ul>' +
-      '<div class="pw-honest">No hidden fees. Cancel in one tap. Your logged data stays yours — free, even if you cancel.</div>' +
+      '<div class="pw-honest">No hidden fees. Cancel anytime in your App Store / Play settings. Your logged data stays yours — free, even if you cancel.</div>' +
       '<button class="btn btn-dark" id="pwBuy" type="button">Start Annual — $39.99/yr</button>' +
+      '<div class="goal-desc" style="font-size:11.5px">Auto-renews until cancelled — manage or cancel anytime in your App Store / Google Play settings. <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></div>' +
       '<button id="pwRestore" type="button" style="border:none;background:none;color:var(--ink2);font-family:inherit;font-size:13px;font-weight:650;width:100%;margin-top:8px;cursor:pointer">Restore purchases</button>' +
       (showLater ? '<button id="pwLater" type="button" style="border:none;background:none;color:var(--ink2);font-family:inherit;font-size:14px;font-weight:650;width:100%;margin-top:6px;cursor:pointer">Maybe later</button>' : '') +
       ((window.Billing && window.Billing.isNative) ? '' : '<div class="pw-note">Preview build: payments aren\'t connected on the web — “Unlock” enables Premium locally for testing.</div>') +
