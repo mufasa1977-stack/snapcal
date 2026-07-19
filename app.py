@@ -584,6 +584,20 @@ def init_db():
                    PRIMARY KEY (uid, date)
                )"""
         )
+        # Tester feedback loop (Tariq 2026-07-19: unknown testers won't email — the report lives IN the
+        # app, one tap from the moment of frustration; context auto-attached so repro needs no follow-up).
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS feedback(
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   uid TEXT,
+                   ts TEXT NOT NULL,
+                   category TEXT,
+                   text TEXT NOT NULL,
+                   app_commit TEXT,
+                   ua TEXT,
+                   status TEXT NOT NULL DEFAULT 'new'
+               )"""
+        )
         # Migration: store the full rich breakdown per meal so History can show it.
         cols = [r[1] for r in con.execute("PRAGMA table_info(meals)").fetchall()]
         if "detail_json" not in cols:
@@ -4448,6 +4462,69 @@ def version():
        app_mtime = mtime of the app.py THIS PROCESS loaded (zombie-process detection for the gate)."""
     return jsonify({"commit": (os.environ.get("RENDER_GIT_COMMIT") or "dev")[:7],
                     "app_mtime": _APP_CODE_MTIME})
+
+
+def _notify_feedback_telegram(fb_id, category, text):
+    """Real-time tester-feedback ping to Tariq's Telegram. Best-effort: missing env or network
+    failure NEVER breaks the user's submit (the report is already safely in the DB)."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat:
+        return
+    try:
+        msg = "SnapCal tester feedback #%s [%s]\n%s" % (fb_id, category or "general", text[:800])
+        data = urllib.parse.urlencode({"chat_id": chat, "text": msg}).encode()
+        req = urllib.request.Request("https://api.telegram.org/bot%s/sendMessage" % token, data=data)
+        urllib.request.urlopen(req, timeout=6)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@app.post("/api/feedback")
+def post_feedback():
+    """Tester bug/feedback report from the in-app card. Stores context (build, device UA) so the fix
+    needs no follow-up questions from a stranger."""
+    d = request.get_json(silent=True)
+    text = (d or {}).get("text", "")
+    text = str(text).strip()[:2000] if text else ""
+    if not text:
+        return jsonify({"error": "text_required"}), 400
+    category = str((d or {}).get("category") or "general").strip()[:30]
+    con = get_db()
+    try:
+        # light per-uid flood guard: max 20 reports a day
+        n = con.execute("SELECT COUNT(*) FROM feedback WHERE uid = ? AND ts >= ?",
+                        (_uid(), datetime.utcnow().strftime("%Y-%m-%dT00:00:00"))).fetchone()[0]
+        if n >= 20:
+            return jsonify({"error": "too_many_today"}), 429
+        cur = con.execute(
+            "INSERT INTO feedback(uid, ts, category, text, app_commit, ua) VALUES (?, ?, ?, ?, ?, ?)",
+            (_uid(), datetime.utcnow().isoformat(timespec="seconds"), category, text,
+             (os.environ.get("RENDER_GIT_COMMIT") or "dev")[:7],
+             (request.headers.get("User-Agent") or "")[:200]))
+        con.commit()
+        fb_id = cur.lastrowid
+    finally:
+        con.close()
+    _notify_feedback_telegram(fb_id, category, text)
+    return jsonify({"ok": True, "id": fb_id})
+
+
+@app.get("/api/feedback/admin")
+def feedback_admin():
+    """Read the tester feedback queue (me/Tariq only — X-Admin-Key header must match PUSH_RUN_SECRET).
+    Never linked from the UI; secrets travel in headers, never query strings."""
+    secret = os.environ.get("PUSH_RUN_SECRET", "").strip()
+    if not secret or request.headers.get("X-Admin-Key", "") != secret:
+        return jsonify({"error": "forbidden"}), 403
+    con = get_db()
+    try:
+        rows = con.execute(
+            "SELECT id, uid, ts, category, text, app_commit, ua, status FROM feedback "
+            "ORDER BY id DESC LIMIT 200").fetchall()
+        return jsonify({"feedback": [dict(r) for r in rows]})
+    finally:
+        con.close()
 
 
 @app.get("/privacy")

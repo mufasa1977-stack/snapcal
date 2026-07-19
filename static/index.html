@@ -1526,6 +1526,18 @@
       <div class="coach-grid" id="coachGrid"></div>
     </div>
     <div class="card">
+      <div class="goal-title">💬 Report a problem</div>
+      <div class="goal-desc" style="margin:5px 2px 0">Something broken, confusing, or wrong? Tell us in your own words — we read every report and fixes reach your app automatically.</div>
+      <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap" id="fbCats">
+        <button type="button" class="fb-cat" data-cat="bug" style="border:1.5px solid var(--brand);background:var(--soft);color:var(--brand);font-weight:800;border-radius:999px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:13.5px">Something's wrong</button>
+        <button type="button" class="fb-cat" data-cat="confusing" style="border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:800;border-radius:999px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:13.5px">Confusing</button>
+        <button type="button" class="fb-cat" data-cat="idea" style="border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:800;border-radius:999px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:13.5px">Idea</button>
+      </div>
+      <textarea id="fbText" rows="3" placeholder="e.g. I searched for butter and it showed me pork" style="width:100%;margin-top:10px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:11px;padding:11px 12px;font-size:14.5px;font-family:inherit;resize:vertical"></textarea>
+      <button id="fbSend" type="button" style="width:100%;margin-top:9px;border:none;background:var(--brand);color:#fff;font-weight:800;border-radius:11px;padding:12px;cursor:pointer;font-family:inherit;font-size:15px">Send report</button>
+      <div id="fbStatus" style="font-size:13px;color:var(--ink2);margin-top:8px;line-height:1.4"></div>
+    </div>
+    <div class="card">
       <div class="goal-title">🚗 Your usual drive</div>
       <div class="goal-desc" style="margin:5px 2px 0">Set where you head most days (work, gym, school) and Coach Cal finds healthy food right along your route — not just near home.</div>
       <div style="display:flex;gap:8px;margin-top:11px">
@@ -2011,6 +2023,42 @@ if ($("#destSave")) $("#destSave").addEventListener("click", function(){
   }).catch(function(){ if (st) st.textContent = "Couldn’t reach the map service — try again in a moment."; });
 });
 loadDest();
+
+/* ---------------- Tester feedback card ("Report a problem" — Tariq 2026-07-19: unknown testers
+   won't email; the report lives one tap from the moment of frustration; server auto-attaches
+   build + device context and pings Telegram so fixes can land the same day). */
+var _fbCategory = "bug";
+if ($("#fbCats")) $("#fbCats").addEventListener("click", function(ev){
+  var b = ev.target.closest(".fb-cat"); if (!b) return;
+  _fbCategory = b.getAttribute("data-cat") || "general";
+  $("#fbCats").querySelectorAll(".fb-cat").forEach(function(x){
+    var on = x === b;
+    x.style.border = "1.5px solid " + (on ? "var(--brand)" : "var(--line)");
+    x.style.background = on ? "var(--soft)" : "var(--card)";
+    x.style.color = on ? "var(--brand)" : "var(--ink)";
+  });
+});
+if ($("#fbSend")) $("#fbSend").addEventListener("click", function(){
+  var ta = $("#fbText"), st = $("#fbStatus"), btn = $("#fbSend");
+  var text = (ta && ta.value || "").trim();
+  if (!text){ if (st) st.textContent = "Tell us what happened first — a sentence is plenty."; if (ta) ta.focus(); return; }
+  btn.disabled = true; btn.textContent = "Sending…";
+  fetch(API_BASE + "/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Device-Id": DEVICE_ID },
+    body: JSON.stringify({ text: text, category: _fbCategory })
+  }).then(function(r){ return r.json().catch(function(){ return null; }).then(function(d){ return { ok: r.ok, data: d }; }); })
+    .then(function(out){
+      btn.disabled = false; btn.textContent = "Send report";
+      if (out.ok && out.data && out.data.ok){
+        if (ta) ta.value = "";
+        if (st) st.innerHTML = "✓ <b>Got it — thank you.</b> We read every report; fixes reach your app automatically.";
+      } else {
+        if (st) st.textContent = "Couldn't send just now — please try again in a minute.";
+      }
+    })
+    .catch(function(){ btn.disabled = false; btn.textContent = "Send report"; if (st) st.textContent = "Couldn't send just now — please try again in a minute."; });
+});
 
 /* ---------------- USDA nutrition lookup (real federal, science-backed data) ---------------- */
 function nfRow(label, val, unit){ return (val == null) ? "" : '<div class="nf-row"><span>' + esc(label) + '</span><span>' + fmtNum(val) + ' ' + esc(unit) + '</span></div>'; }

@@ -1408,6 +1408,35 @@ def main():
               hl["steps"] == 8200 and hl["cal"] == 320 and abs((hl["weight"] or 0) - 181.5) < 0.01,
               "steps=%s cal=%s weight=%s" % (hl["steps"], hl["cal"], hl["weight"]))
 
+        # tester feedback loop (2026-07-19): in-app report card + API round-trip + fail-closed admin
+        fb = page.evaluate("""async () => {
+            var H = { 'Content-Type':'application/json', 'X-Device-Id':'gate_feedback' };
+            var ok = await (await fetch('/api/feedback', { method:'POST', headers:H,
+                        body: JSON.stringify({ text:'gate test report', category:'bug' }) })).json();
+            var empty = (await fetch('/api/feedback', { method:'POST', headers:H,
+                        body: JSON.stringify({ text:'' }) })).status;
+            var admin = (await fetch('/api/feedback/admin', { headers:H })).status;
+            return { posted: !!(ok && ok.ok && ok.id), emptyStatus: empty, adminStatus: admin,
+                     uiCard: !!(document.getElementById('fbSend') && document.getElementById('fbText')
+                                && document.getElementById('fbCats')) };
+        }""")
+        check("feedback: POST /api/feedback stores a report; empty text -> 400",
+              fb["posted"] and fb["emptyStatus"] == 400, "posted=%s empty=%s" % (fb["posted"], fb["emptyStatus"]))
+        check("feedback: /api/feedback/admin is FAIL-CLOSED without the admin key (403)",
+              fb["adminStatus"] == 403, "status=%s" % fb["adminStatus"])
+        check("feedback: 'Report a problem' card present in Profile (cats + text + send)",
+              fb["uiCard"], "uiCard=%s" % fb["uiCard"])
+        fbui = page.evaluate("""async () => {
+            var ta = document.getElementById('fbText'), btn = document.getElementById('fbSend');
+            ta.value = 'gate ui test: the search gave me pork';
+            btn.click();
+            await new Promise(r => setTimeout(r, 1500));
+            var st = document.getElementById('fbStatus');
+            return { thanks: !!(st && /got it/i.test(st.textContent || '')), cleared: ta.value === '' };
+        }""")
+        check("feedback: sending from the UI shows the thank-you state + clears the box",
+              fbui["thanks"] and fbui["cleared"], "thanks=%s cleared=%s" % (fbui["thanks"], fbui["cleared"]))
+
         # push: GET /api/push/key exposes a VAPID key; POST /api/push/test with no sub -> 404 not_subscribed
         psh = page.evaluate("""async () => {
             var k = await (await fetch('/api/push/key')).json();
