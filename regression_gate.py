@@ -49,6 +49,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Tariq to set NUDGE_TICK_KEY in Render's dashboard — this is gate-only, never a real secret.
 os.environ.setdefault("NUDGE_TICK_KEY", "gate-test-nudge-key-not-real")
 os.environ.setdefault("NUDGES_ENABLED", "1")
+# TESTER FEEDBACK (2026-07-19): same pattern — arm a gate-only admin key before the app.py subprocess
+# spawns so the gate can read /api/feedback back. A real deploy sets SNAPCAL_ADMIN_KEY in Render's dashboard.
+os.environ.setdefault("SNAPCAL_ADMIN_KEY", "gate-test-admin-key-not-real")
 
 # Deterministic fixtures: /api/nearby is backed by Overpass, which is slow + flaky (18s+). The gate must
 # test OUR rendering, not Overpass's mood — so we intercept /api/nearby and return known data.
@@ -1981,6 +1984,41 @@ def main():
         check("P1-6 history empty state: '+ Add a meal' shortcut jumps to Today",
               histNav, "today tab active=%s" % histNav)
         page.evaluate("() => { var a = document.getElementById('addMealCancelBtn'); if (a) a.click(); }")   # close the sheet it opened
+
+        # TESTER FEEDBACK (2026-07-19): during closed testing the Profile tab must carry the
+        # "Testing feedback" card, a send must confirm to the tester + clear the box, the report must
+        # actually LAND server-side (admin read-back), and the admin endpoint must stay locked keyless.
+        page.evaluate("() => switchTab('profile')")
+        fb = page.evaluate("""async () => {
+            var card = document.getElementById('feedbackCard');
+            var visible = !!card && getComputedStyle(card).display !== 'none';
+            if (!visible) return { visible: false };
+            document.getElementById('fbCat').value = 'problem';
+            document.getElementById('fbMsg').value = 'gate: feedback probe';
+            document.getElementById('fbContact').value = 'gate';
+            document.getElementById('fbSend').click();
+            await new Promise(function(r){ var t = 0; var iv = setInterval(function(){ t += 250;
+                var s = document.getElementById('fbStatus').textContent;
+                if (/Sent/.test(s) || t > 8000){ clearInterval(iv); r(); } }, 250); });
+            return { visible: true, status: document.getElementById('fbStatus').textContent,
+                     cleared: document.getElementById('fbMsg').value === '' };
+        }""")
+        check("feedback: closed-testing card visible on Profile, send confirms + clears the box",
+              fb.get("visible") and "Sent" in (fb.get("status") or "") and fb.get("cleared"), str(fb))
+        try:
+            _fbrows = json.loads(urllib.request.urlopen(
+                BASE + "/api/feedback?key=" + os.environ["SNAPCAL_ADMIN_KEY"], timeout=5).read())["feedback"]
+        except Exception:
+            _fbrows = []
+        check("feedback: the report LANDED server-side (admin read-back finds the probe)",
+              any("gate: feedback probe" in (r.get("message") or "") for r in _fbrows),
+              "rows=%d" % len(_fbrows))
+        _fb_locked = False
+        try:
+            urllib.request.urlopen(BASE + "/api/feedback", timeout=5)
+        except urllib.error.HTTPError as _e:
+            _fb_locked = (_e.code == 403)
+        check("feedback: admin endpoint stays locked without the key (403)", _fb_locked)
 
         # 10. no JS errors
         check("no JS console / page errors", len(errors) == 0,

@@ -15,7 +15,7 @@ import sqlite3
 import time
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, request, redirect, Response
@@ -582,6 +582,19 @@ def init_db():
                    date TEXT,
                    glasses INTEGER NOT NULL DEFAULT 0,
                    PRIMARY KEY (uid, date)
+               )"""
+        )
+        # TESTER FEEDBACK (closed testing): free-text problem reports / ideas from the Profile tab's
+        # "Testing feedback" card. Lives on the persistent disk; each report is also echoed to the
+        # server log so nothing is lost even if the DB is replaced.
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS feedback(
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   uid TEXT,
+                   ts TEXT,
+                   category TEXT,
+                   message TEXT,
+                   contact TEXT
                )"""
         )
         # Migration: store the full rich breakdown per meal so History can show it.
@@ -4448,6 +4461,52 @@ def version():
        app_mtime = mtime of the app.py THIS PROCESS loaded (zombie-process detection for the gate)."""
     return jsonify({"commit": (os.environ.get("RENDER_GIT_COMMIT") or "dev")[:7],
                     "app_mtime": _APP_CODE_MTIME})
+
+
+@app.post("/api/feedback")
+def add_feedback():
+    """Tester feedback (closed testing): free-text problem reports / ideas from the Profile tab's
+       'Testing feedback' card. Stored on the persistent disk AND echoed to the server log so a
+       report can't be lost. No auth (testers aren't logged in) — a small per-device daily cap
+       keeps it from being used to flood the DB."""
+    d = request.get_json(silent=True) or {}
+    msg = str(d.get("message") or "").strip()[:4000]
+    if not msg:
+        return jsonify({"error": "empty"}), 400
+    category = str(d.get("category") or "other").strip()[:24]
+    contact = str(d.get("contact") or "").strip()[:200]
+    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    con = get_db()
+    try:
+        # ISO timestamps compare lexically, so ts >= 'YYYY-MM-DD' = "sent today (UTC)".
+        n = con.execute("SELECT COUNT(*) FROM feedback WHERE uid = ? AND ts >= ?",
+                        (_uid(), ts[:10])).fetchone()[0]
+        if n >= 20:
+            return jsonify({"error": "too_many_today"}), 429
+        con.execute("INSERT INTO feedback(uid, ts, category, message, contact) VALUES(?,?,?,?,?)",
+                    (_uid(), ts, category, msg, contact))
+        con.commit()
+    finally:
+        con.close()
+    print("[FEEDBACK] %s uid=%s cat=%s contact=%s :: %s"
+          % (ts, _uid(), category, contact or "-", msg.replace("\n", " | ")), flush=True)
+    return jsonify({"ok": True})
+
+
+@app.get("/api/feedback")
+def list_feedback():
+    """Owner-only feedback reader: /api/feedback?key=<SNAPCAL_ADMIN_KEY env>. While the env var is
+       unset the endpoint stays disabled — reports still land in the DB and the server log."""
+    admin_key = os.environ.get("SNAPCAL_ADMIN_KEY", "").strip()
+    if not admin_key or (request.args.get("key") or "") != admin_key:
+        return jsonify({"error": "forbidden"}), 403
+    con = get_db()
+    try:
+        rows = con.execute("SELECT id, uid, ts, category, message, contact FROM feedback "
+                           "ORDER BY id DESC LIMIT 500").fetchall()
+    finally:
+        con.close()
+    return jsonify({"feedback": [dict(r) for r in rows]})
 
 
 @app.get("/privacy")

@@ -1441,6 +1441,24 @@
       <h1>Profile</h1>
       <div class="sub">You, your goals &amp; settings</div>
     </div>
+    <!-- Tester feedback (closed testing only — JS hides this card once CLOSED_TESTING is off) -->
+    <div class="card" id="feedbackCard">
+      <div class="goal-title">🧪 Testing feedback</div>
+      <div class="goal-desc" style="margin:4px 2px 12px">You're one of our early testers — if anything looks wrong, confusing, or broken, tell us here. It goes straight to Tariq and helps make SnapCal better.</div>
+      <label class="field-lbl" for="fbCat" style="margin-top:0">What kind?</label>
+      <select class="txt sel" id="fbCat">
+        <option value="problem">🐞 Something's broken</option>
+        <option value="confusing">🤔 Something's confusing</option>
+        <option value="idea">💡 An idea or wish</option>
+        <option value="praise">💚 Something I love</option>
+      </select>
+      <label class="field-lbl" for="fbMsg">Tell us what happened</label>
+      <textarea class="txt" id="fbMsg" rows="4" placeholder="e.g. I took a photo of my lunch and nothing happened…" style="resize:vertical;min-height:90px"></textarea>
+      <label class="field-lbl" for="fbContact">Your name or email (optional)</label>
+      <input class="txt" id="fbContact" type="text" placeholder="so we can follow up" autocomplete="off">
+      <button class="btn btn-dark" id="fbSend" type="button" style="margin-top:14px">Send feedback</button>
+      <div class="goal-desc" id="fbStatus" style="margin:10px 2px 0" role="status"></div>
+    </div>
     <div class="card">
       <div class="goal-title">🧍 About you</div>
       <div class="goal-desc" style="margin:4px 2px 12px">Tell me a few things and I'll calculate your daily calorie + macro targets — no guessing.</div>
@@ -8023,6 +8041,31 @@ function renderWeightChart(w){
       }, 700);
     } catch(e){}
   })();
+})();
+
+/* --- Tester feedback card (closed testing) — additive 2026-07-19. Sends to POST /api/feedback;
+       the whole card disappears once CLOSED_TESTING is flipped off at launch. --- */
+(function(){
+  var card = document.getElementById("feedbackCard");
+  if (!card) return;
+  if (typeof CLOSED_TESTING === "undefined" || !CLOSED_TESTING){ card.style.display = "none"; return; }
+  var btn = document.getElementById("fbSend");
+  btn.addEventListener("click", async function(){
+    var msgEl = document.getElementById("fbMsg");
+    var status = document.getElementById("fbStatus");
+    var msg = (msgEl.value || "").trim();
+    if (!msg){ status.textContent = "Tell us a little about what happened first 🙂"; return; }
+    btn.disabled = true; btn.textContent = "Sending…"; status.textContent = "";
+    try {
+      var d = await api("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: document.getElementById("fbCat").value,
+                               message: msg,
+                               contact: (document.getElementById("fbContact").value || "").trim() }) });
+      if (d && d.ok){ msgEl.value = ""; status.textContent = "Sent — thank you! 💚 Every report makes SnapCal better."; }
+      else { status.textContent = "Hmm, that didn't go through — please try again in a minute."; }
+    } catch(e){ status.textContent = "No connection — please try again when you're back online."; }
+    btn.disabled = false; btn.textContent = "Send feedback";
+  });
 })();
 </script>
 </body>
