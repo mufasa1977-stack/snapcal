@@ -3029,7 +3029,14 @@ TTS_MODEL_FALLBACK = "gemini-2.5-pro-preview-tts"    # 2026-07-16: separate quot
 # daily counter). Shares the same prebuilt-voice roster as the primary (incl. Charon), so falling back here never
 # flips Coach Cal's voice/persona mid-conversation — see TTS_VOICES_OK below, unchanged for both models.
 TTS_VOICE_DEFAULT = "Charon"
-TTS_VOICES_OK = {"Charon", "Orus", "Puck", "Kore", "Fenrir", "Aoede", "Leda", "Achird", "Iapetus", "Zephyr"}
+# 2026-07-19: expanded to Gemini TTS's full prebuilt roster so the coach-persona voices can be auditioned
+# and reassigned by Tariq's ear (was a 10-voice subset; the female options were too thin to cast from).
+TTS_VOICES_OK = {
+    "Charon", "Orus", "Puck", "Kore", "Fenrir", "Aoede", "Leda", "Achird", "Iapetus", "Zephyr",
+    "Callirrhoe", "Autonoe", "Enceladus", "Umbriel", "Algieba", "Despina", "Erinome", "Algenib",
+    "Rasalgethi", "Laomedeia", "Achernar", "Alnilam", "Schedar", "Gacrux", "Pulcherrima",
+    "Zubenelgenubi", "Vindemiatrix", "Sadachbia", "Sadaltager", "Sulafat",
+}
 _TTS_CACHE = {}
 
 # Server-side daily TTS budget guard (built 2026-07-16 after a live 429 RESOURCE_EXHAUSTED — confirmed
