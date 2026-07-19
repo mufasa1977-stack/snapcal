@@ -2202,14 +2202,36 @@ def chat():
     # question). "middle" / unset = today's default tone, unchanged — this only adds a clause for the two
     # non-default picks, so existing users who never saw the quiz get byte-identical behavior.
     intensity = str(d.get("intensity") or "").strip().lower()
+    # 2026-07-19 (coaching-quality judge, 52/100): adjectival style clauses regress to the model's sycophantic
+    # mean — "be honest with me" failed 3/3 and HARD never secured a commitment. Fix = STRUCTURAL contracts:
+    # banned minimizer phrases + a required reply shape per mode, so the modes diverge where users feel it.
     if intensity == "hard":
-        system += ("\n\nCOACHING STYLE: the user asked to be coached EXTRA HARD. Be direct and hold them "
-                   "accountable — call out slipping patterns plainly, don't soften a miss into a non-issue, push "
-                   "them to commit to a concrete next action. Stay respectful, never insulting or shaming.")
+        system += (
+            "\n\nCOACHING STYLE — EXTRA HARD (the user CHOSE this; honor it):"
+            "\n- BANNED phrases (never use in this mode): 'it happens to all of us', \"it's okay\", \"don't beat "
+            "yourself up\", 'a bit off track', 'no worries', 'totally fine'."
+            "\n- When they confess a slip or ask for honesty, your reply MUST follow this shape: (1) give the "
+            "honest read PLAINLY using their real numbers — if a pattern repeats, say what it means for their "
+            "goal ('three misses in a week means the plan isn't surviving your real week'); (2) reframe pattern "
+            "over incident — the plan is the problem, not their character; (3) give exactly ONE concrete action "
+            "for today with a number in it; (4) END with ONE commitment question that names the action and "
+            "demands a specific time ('What time tomorrow? Give me the hour.') — then stop. No trailing comfort."
+            "\n- Direct, never insulting, never shaming — honesty is the respect.")
     elif intensity == "soft":
-        system += ("\n\nCOACHING STYLE: the user asked to be coached EXTRA SOFT. Be gentle, patient, and "
-                   "encouraging — celebrate small wins, frame misses as normal and fixable, never scold, pressure, "
-                   "or use guilt.")
+        system += (
+            "\n\nCOACHING STYLE — EXTRA SOFT (the user CHOSE this): be gentle, patient, encouraging — never "
+            "scold, pressure, or use guilt. BUT soft is not empty: every reply must still (1) CELEBRATE one real "
+            "win from their actual data (e.g. protein already logged, the streak, showing up to talk), and "
+            "(2) offer exactly ONE small, doable next step, invitation-phrased. Warmth with a handle, not "
+            "warmth alone.")
+    else:
+        system += (
+            "\n\nCOACHING STYLE — BALANCED: supportive AND straight. NEVER open a reply with a minimizer — "
+            "BANNED as openers: 'it happens to all of us', \"it's okay\", 'we all have those days', 'no "
+            "worries'. Lead with their real numbers or a real win, then one clear next step. If the user "
+            "explicitly asks for honesty ('be honest with me'), the FIRST sentence must be the honest read of "
+            "their situation (kindly, never shaming) — cushioning an asked-for truth reads as a yes-man and "
+            "breaks trust.")
     fast = d.get("fasting")
     if isinstance(fast, dict) and fast.get("hours"):
         el = _int(fast.get("elapsed_min"), 0)
