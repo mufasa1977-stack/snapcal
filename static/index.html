@@ -1917,11 +1917,13 @@ applyTextSize();
    4 photoreal coaches, each mapped to a Gemini TTS voice. Default 'cal' = the original Charon voice,
    so existing users hear zero change. Selection lives in localStorage snapcal_coach; _ttsUrl() and
    prewarmTTS() read it via coachVoice() so speech + warm cache always match the chosen coach. */
+/* Voices cast by Tariq's ear, audition rounds 1-3, 2026-07-19: Cal=Charon (kept), Maya=Vindemiatrix
+   (gentle), Jake=Schedar (even/steady), Sarah=Erinome (clear). Do not swap without his ear. */
 var COACHES = {
-  cal:   { img: "/static/coaches/coach_black_male.png",   voice: "Charon", label: "Cal"   },
-  maya:  { img: "/static/coaches/coach_black_female.png", voice: "Aoede",  label: "Maya"  },
-  jake:  { img: "/static/coaches/coach_white_male.png",   voice: "Orus",   label: "Jake"  },
-  sarah: { img: "/static/coaches/coach_white_female.png", voice: "Leda",   label: "Sarah" }
+  cal:   { img: "/static/coaches/coach_black_male.png",   voice: "Charon",       label: "Cal"   },
+  maya:  { img: "/static/coaches/coach_black_female.png", voice: "Vindemiatrix", label: "Maya"  },
+  jake:  { img: "/static/coaches/coach_white_male.png",   voice: "Schedar",      label: "Jake"  },
+  sarah: { img: "/static/coaches/coach_white_female.png", voice: "Erinome",      label: "Sarah" }
 };
 /* NOTE 2026-07-19: named coachPersonaKey — a plain coachKey() collided with the EXISTING coach-suggestion
    cache-key function of the same name (later function declaration wins the hoist), which made
