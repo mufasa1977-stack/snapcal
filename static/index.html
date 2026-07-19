@@ -7882,7 +7882,7 @@ $("#eatoutBody").addEventListener("click", function(e){
   if (mt){ toggleChip(mt.dataset.chip); return; }   /* multi-select: tap to add/remove Restaurants or Stores */
   if (e.target.closest("#coachUnlock")) { openPaywall(); return; }
   if (e.target.closest("#nearMeBtn")) { if (_findMode === "both") loadCombined(); else doNearMe(); return; }
-  if (e.target.closest("#storeUpdateBtn")) { try { localStorage.removeItem("stores_last"); } catch(e){} loadStoresNearMe(); return; }
+  if (e.target.closest("#storeUpdateBtn")) { try { localStorage.removeItem("snapcal_c_stores_last"); } catch(e){} loadStoresNearMe(); return; }
   var tg = e.target.closest(".nm-toggle button");
   if (tg){
     var v = tg.dataset.v;

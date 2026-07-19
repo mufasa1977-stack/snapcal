@@ -567,9 +567,9 @@ def init_db():
                    ab_bucket TEXT
                )"""
         )
-        # Per-USER water history mirror. The original `water` table (above) is a single shared-date counter
-        # (no uid) — a pre-existing simplification left byte-identical here (add-only law). This parallel table
-        # is written alongside it (see /api/water) purely so the nudge engine can tell whether THIS user has a
+        # Per-USER water history mirror. The original `water` table (above) began as a single shared-date
+        # counter (no uid) — it is uid-scoped by the privacy migration below. This parallel table is still
+        # written alongside it (see /api/water) purely so the nudge engine can tell whether THIS user has a
         # real water-logging habit before ever nudging about it.
         con.execute(
             """CREATE TABLE IF NOT EXISTS water_log(
@@ -605,6 +605,28 @@ def init_db():
             con.execute("ALTER TABLE push_subs ADD COLUMN intensity TEXT DEFAULT ''")
         if "ab_bucket" not in pcols:
             con.execute("ALTER TABLE push_subs ADD COLUMN ab_bucket TEXT")
+        # PRIVACY migration (2026-07-19 coherence audit F1): profile/weights/water were GLOBAL (no uid) —
+        # every tester shared one profile, one weight history, and one water counter. Each table gains a uid
+        # column with a per-uid primary key. A plain ADD COLUMN can't fix this (the legacy single-column
+        # PRIMARY KEY on key/date would still block a second user's row for the same key/date, and SQLite
+        # can't widen a PK in place), so a table still on the legacy shape is rebuilt ONCE:
+        # rename -> recreate with PRIMARY KEY (uid, ...) -> copy legacy rows in as uid='_shared'.
+        # Idempotent (mirrors the pcols pattern): a table whose PRAGMA already shows uid is left alone.
+        # Legacy '_shared' rows stay on disk but are never served again — every endpoint now reads/writes
+        # only its own _uid(), so each device starts these three tables clean (shared data is corrupt by
+        # definition).
+        for tbl, shape, copy_cols in (
+            ("profile", "uid TEXT NOT NULL DEFAULT '_shared', key TEXT, value INT, PRIMARY KEY (uid, key)", "key, value"),
+            ("weights", "uid TEXT NOT NULL DEFAULT '_shared', date TEXT, weight REAL, PRIMARY KEY (uid, date)", "date, weight"),
+            ("water", "uid TEXT NOT NULL DEFAULT '_shared', date TEXT, glasses INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (uid, date)", "date, glasses"),
+        ):
+            tcols = [r[1] for r in con.execute("PRAGMA table_info(" + tbl + ")").fetchall()]
+            if "uid" not in tcols:
+                con.execute("DROP TABLE IF EXISTS " + tbl + "_legacy")
+                con.execute("ALTER TABLE " + tbl + " RENAME TO " + tbl + "_legacy")
+                con.execute("CREATE TABLE " + tbl + "(" + shape + ")")
+                con.execute("INSERT INTO " + tbl + "(uid, " + copy_cols + ") "
+                            "SELECT '_shared', " + copy_cols + " FROM " + tbl + "_legacy")
         con.commit()
     finally:
         con.close()
@@ -1005,11 +1027,11 @@ def _coach_memory(uid, gentle=False):
                 (uid, cutoff30)).fetchall()
             target_row = con.execute(
                 "SELECT daily_calories FROM push_subs WHERE uid = ? LIMIT 1", (uid,)).fetchone()
-            # NOTE: `weights` is a pre-existing GLOBAL (un-scoped) table — /api/weights serves it the same
-            # way to every device, so memory mirrors exactly what the user's own History screen shows.
+            # `weights` is uid-scoped (privacy migration 2026-07-19) — memory reads only THIS user's
+            # weigh-ins, mirroring exactly what their own History screen shows.
             weight_rows = con.execute(
-                "SELECT date, weight FROM weights WHERE date >= ? ORDER BY date LIMIT 60",
-                (cutoff30,)).fetchall()
+                "SELECT date, weight FROM weights WHERE uid = ? AND date >= ? ORDER BY date LIMIT 60",
+                (uid, cutoff30)).fetchall()
             water_row = con.execute(
                 "SELECT COUNT(*) n FROM water_log WHERE uid = ? AND date >= ? AND glasses > 0",
                 (uid, cutoff7)).fetchone()
@@ -2759,7 +2781,7 @@ def push_run():
        Guarded by PUSH_RUN_SECRET so only our scheduler can trigger a fan-out."""
     if not PUSH_RUN_SECRET:
         return jsonify({"error": "push_run_not_configured"}), 503
-    secret = (request.headers.get("X-Push-Secret") or request.args.get("secret") or "").strip()
+    secret = (request.headers.get("X-Push-Secret") or "").strip()
     if secret != PUSH_RUN_SECRET:
         return jsonify({"error": "forbidden"}), 403
     sent = skipped = dead = failed = 0
@@ -3054,7 +3076,7 @@ def nudge_tick():
        owner's step) AND the caller presents it — a bare curl from anywhere can never trigger a fan-out."""
     if not NUDGE_TICK_KEY or not NUDGES_ENABLED:
         return jsonify({"error": "nudges_not_configured"}), 503
-    secret = (request.headers.get("X-Nudge-Key") or request.args.get("key") or "").strip()
+    secret = (request.headers.get("X-Nudge-Key") or "").strip()
     if secret != NUDGE_TICK_KEY:
         return jsonify({"error": "forbidden"}), 403
     sent = skipped = dead = failed = 0
@@ -3167,8 +3189,8 @@ def health_sync():
         )
         # If Health sent a fresh body weight, mirror it into the weight-trend table too (one source of truth).
         if weight is not None:
-            con.execute("INSERT INTO weights(date, weight) VALUES(?,?) ON CONFLICT(date) DO UPDATE SET weight=excluded.weight",
-                        (day, weight))
+            con.execute("INSERT INTO weights(uid, date, weight) VALUES(?,?,?) ON CONFLICT(uid, date) DO UPDATE SET weight=excluded.weight",
+                        (_uid(), day, weight))
         con.commit()
     finally:
         con.close()
@@ -4279,17 +4301,23 @@ def delete_meal(meal_id):
 
 @app.post("/api/account/delete")
 def delete_account():
-    """Account/data deletion (Play + Apple 5.1.1v). Wipes this device's server-side food diary
-       (uid-scoped); the client clears its local profile/weights/water/preferences on success so
-       NONE of the user's personal data remains. Multi-tester-safe: only the caller's uid is touched."""
+    """Account/data deletion (Play + Apple 5.1.1v). Wipes EVERY server-side row for this device's uid —
+       meals, exercise, measurements, recipes, health metrics, water history, push subscription, nudge log,
+       usage counters, profile, weights, and water — matching what /delete-my-data promises; the client also
+       clears its local copies on success so NONE of the user's personal data remains. Multi-tester-safe:
+       only the caller's uid is touched."""
+    tables = ("meals", "exercise", "measurements", "my_recipes", "health_metrics", "water_log",
+              "push_subs", "nudge_log", "usage", "profile", "weights", "water")
+    deleted = {}
     con = get_db()
     try:
-        cur = con.execute("DELETE FROM meals WHERE uid = ?", (_uid(),))
+        for tbl in tables:
+            cur = con.execute("DELETE FROM " + tbl + " WHERE uid = ?", (_uid(),))
+            deleted[tbl] = cur.rowcount if cur.rowcount is not None else 0
         con.commit()
-        deleted = cur.rowcount if cur.rowcount is not None else 0
     finally:
         con.close()
-    return jsonify({"ok": True, "deleted_meals": deleted})
+    return jsonify({"ok": True, "deleted_meals": deleted.get("meals", 0), "deleted": deleted})
 
 
 DELETE_PAGE_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -4360,10 +4388,18 @@ registered dietitian before making changes to your diet, exercise, or health.</p
 </body></html>"""
 
 
+# Captured at IMPORT — a running process carries the mtime of the code it actually loaded, so a zombie
+# process on the port is detectable by comparing this to the file's current mtime on disk (2026-07-19:
+# the frontend-bytes freshness probe missed zombies because Flask serves static from disk).
+_APP_CODE_MTIME = int(os.path.getmtime(os.path.abspath(__file__)))
+
+
 @app.get("/api/version")
 def version():
-    """Which build is live — so Tariq can confirm his phone loaded the latest (Render injects RENDER_GIT_COMMIT)."""
-    return jsonify({"commit": (os.environ.get("RENDER_GIT_COMMIT") or "dev")[:7]})
+    """Which build is live — so Tariq can confirm his phone loaded the latest (Render injects RENDER_GIT_COMMIT).
+       app_mtime = mtime of the app.py THIS PROCESS loaded (zombie-process detection for the gate)."""
+    return jsonify({"commit": (os.environ.get("RENDER_GIT_COMMIT") or "dev")[:7],
+                    "app_mtime": _APP_CODE_MTIME})
 
 
 @app.get("/privacy")
@@ -4562,7 +4598,7 @@ def history():
 def get_profile():
     con = get_db()
     try:
-        rows = con.execute("SELECT key, value FROM profile").fetchall()
+        rows = con.execute("SELECT key, value FROM profile WHERE uid = ?", (_uid(),)).fetchall()
     finally:
         con.close()
     stored = {r["key"]: r["value"] for r in rows}
@@ -4583,17 +4619,17 @@ def set_profile():
         return jsonify({"error": "JSON body required."}), 400
     con = get_db()
     try:
-        upsert = ("""INSERT INTO profile(key, value) VALUES (?, ?)
-                     ON CONFLICT(key) DO UPDATE SET value = excluded.value""")
+        upsert = ("""INSERT INTO profile(uid, key, value) VALUES (?, ?, ?)
+                     ON CONFLICT(uid, key) DO UPDATE SET value = excluded.value""")
         for key, default in PROFILE_DEFAULTS.items():
             if key in d:
-                con.execute(upsert, (key, _int(d[key], default)))
+                con.execute(upsert, (_uid(), key, _int(d[key], default)))
         for key in PROFILE_NUM_KEYS:
             if key in d and d[key] not in (None, "", 0):
-                con.execute(upsert, (key, _int(d[key])))
+                con.execute(upsert, (_uid(), key, _int(d[key])))
         for key in PROFILE_TEXT_KEYS:
             if key in d and isinstance(d[key], str) and d[key].strip():
-                con.execute(upsert, (key, d[key].strip()[:32]))
+                con.execute(upsert, (_uid(), key, d[key].strip()[:32]))
         con.commit()
     finally:
         con.close()
@@ -4611,8 +4647,8 @@ def list_weights():
     con = get_db()
     try:
         rows = con.execute(
-            "SELECT date, weight FROM weights WHERE date >= ? ORDER BY date",
-            (cutoff,),
+            "SELECT date, weight FROM weights WHERE uid = ? AND date >= ? ORDER BY date",
+            (_uid(), cutoff),
         ).fetchall()
     finally:
         con.close()
@@ -4646,7 +4682,8 @@ def trend():
     cutoff = (today - timedelta(days=35)).isoformat()
     con = get_db()
     try:
-        wr = con.execute("SELECT date, weight FROM weights WHERE date >= ? ORDER BY date", (cutoff,)).fetchall()
+        wr = con.execute("SELECT date, weight FROM weights WHERE uid = ? AND date >= ? ORDER BY date",
+                         (_uid(), cutoff)).fetchall()
         mr = con.execute("SELECT date, SUM(calories) c FROM meals WHERE date >= ? AND uid = ? GROUP BY date",
                          (cutoff, _uid())).fetchall()
     finally:
@@ -4677,7 +4714,7 @@ def trend():
     gd = ""
     con = get_db()
     try:
-        row = con.execute("SELECT value FROM profile WHERE key = 'goal_dir'").fetchone()
+        row = con.execute("SELECT value FROM profile WHERE uid = ? AND key = 'goal_dir'", (_uid(),)).fetchone()
         gd = (row["value"] if row else "") or ""
     finally:
         con.close()
@@ -4709,9 +4746,9 @@ def set_weight():
     con = get_db()
     try:
         con.execute(
-            """INSERT INTO weights(date, weight) VALUES (?, ?)
-               ON CONFLICT(date) DO UPDATE SET weight = excluded.weight""",
-            (str(d.get("date")), round(w, 1)),
+            """INSERT INTO weights(uid, date, weight) VALUES (?, ?, ?)
+               ON CONFLICT(uid, date) DO UPDATE SET weight = excluded.weight""",
+            (_uid(), str(d.get("date")), round(w, 1)),
         )
         con.commit()
     finally:
@@ -4728,7 +4765,7 @@ def get_water():
     today = date.today().isoformat()
     con = get_db()
     try:
-        row = con.execute("SELECT glasses FROM water WHERE date = ?", (today,)).fetchone()
+        row = con.execute("SELECT glasses FROM water WHERE uid = ? AND date = ?", (_uid(), today)).fetchone()
     finally:
         con.close()
     return jsonify({"date": today, "glasses": (int(row["glasses"]) if row else 0), "goal": WATER_GOAL})
@@ -4747,12 +4784,12 @@ def set_water():
     con = get_db()
     try:
         con.execute(
-            """INSERT INTO water(date, glasses) VALUES (?, ?)
-               ON CONFLICT(date) DO UPDATE SET glasses = excluded.glasses""",
-            (str(d.get("date")), g),
+            """INSERT INTO water(uid, date, glasses) VALUES (?, ?, ?)
+               ON CONFLICT(uid, date) DO UPDATE SET glasses = excluded.glasses""",
+            (_uid(), str(d.get("date")), g),
         )
-        # Per-user mirror (additive-only — the shared `water` row above is unchanged/untouched): gives the
-        # nudge engine an accurate per-uid water history without altering the existing shared-counter behavior.
+        # Per-user mirror (kept alongside the now-uid-scoped `water` row above): gives the
+        # nudge engine an accurate per-uid water history from the same write.
         con.execute(
             """INSERT INTO water_log(uid, date, glasses) VALUES (?, ?, ?)
                ON CONFLICT(uid, date) DO UPDATE SET glasses = excluded.glasses""",

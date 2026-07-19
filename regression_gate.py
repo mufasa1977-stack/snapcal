@@ -110,12 +110,21 @@ def server_up():
 
 def server_is_fresh():
     """STALE-SERVER GUARD (2026-07-19 failure class: zombie processes squatted the port and the gate
-       'verified' OLD code twice). The served index.html must be byte-identical to the file on disk —
-       a squatter running an older process serves stale bytes and MUST be killed, not trusted."""
+       'verified' OLD code twice). Two probes: (1) served index.html byte-identical to disk (frontend);
+       (2) /api/version app_mtime matches app.py's disk mtime (BACKEND — v2 2026-07-19: the frontend
+       probe alone passed zombies because Flask serves static from disk; a zombie's PYTHON code is what's
+       stale, detectable only by the mtime the process captured at import)."""
     try:
         served = urllib.request.urlopen(BASE + "/", timeout=5).read()
         disk = open(os.path.join(HERE, "static", "index.html"), "rb").read()
-        return served == disk
+        if served != disk:
+            return False
+        import json as _json
+        v = _json.loads(urllib.request.urlopen(BASE + "/api/version", timeout=5).read())
+        proc_mtime = v.get("app_mtime")
+        disk_mtime = int(os.path.getmtime(os.path.join(HERE, "app.py")))
+        # old processes predate the app_mtime field entirely -> None -> stale.
+        return proc_mtime == disk_mtime
     except Exception:
         return False
 
