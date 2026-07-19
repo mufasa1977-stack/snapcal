@@ -1082,6 +1082,20 @@
   }
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   #toast.err{background:var(--bad)}
+  /* ---- 2026-07-19 additive: 44px tap-target floor (senior/accessibility). Same borders, colors and
+     shapes — only the touch area grows via min sizes, so the look stays essentially identical. ---- */
+  .pbtn{min-width:44px;min-height:44px}
+  .cal-step{min-width:44px;min-height:44px}
+  .water-drop{min-width:44px;min-height:44px}
+  /* ---- 2026-07-19 additive: Gentle-mode soft word in the ring center. Hidden entirely outside
+     body.gentle, so default rendering is untouched. Sits below the existing 🌿 leaf (ring-box:after). ---- */
+  .gentle-word{display:none}
+  body.gentle .gentle-word{display:block;font-size:15px;font-weight:800;color:var(--brand);letter-spacing:.01em;margin-top:56px}
+  /* ---- 2026-07-19 additive: onboarding text-size sample buttons (each label rendered at its own scale) ---- */
+  .qz-ts{display:flex;flex-direction:column;gap:10px;margin:14px 0 18px}
+  .qz-ts button{min-height:56px;border:1.5px solid var(--line);background:var(--soft);color:var(--ink);
+    border-radius:13px;font-family:inherit;font-weight:750;cursor:pointer;padding:10px 14px;text-align:center}
+  .qz-ts button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -1165,6 +1179,8 @@
             <button class="cal-step" id="calMinus" type="button" aria-label="Lower daily goal">&minus;</button>
             <button class="cal-step" id="calPlus" type="button" aria-label="Raise daily goal">+</button>
           </div>
+          <!-- 2026-07-19 additive: only visible in Gentle mode (.gentle-word is display:none otherwise) -->
+          <div class="gentle-word" id="gentleWord">On track</div>
         </div>
       </div>
       <div class="ring-meta">
@@ -1585,6 +1601,8 @@
         <button class="btn btn-dark" id="gentleToggle" type="button" style="margin-top:0;width:auto;padding:12px 18px">Turn on</button>
       </div>
       <div class="goal-desc" style="margin:10px 2px 0;font-size:11.5px">For anyone who finds number-tracking stressful. Coach Cal stops mentioning calories &amp; deficits and focuses on balanced, consistent eating.</div>
+      <!-- 2026-07-19 additive -->
+      <div class="goal-desc" id="gentleSupportLine" style="margin:7px 2px 0;font-size:11.5px">Hides calorie numbers; Coach Cal coaches balance instead. Support: <b>1-866-662-1235</b></div>
     </div>
 
     <div class="card" id="budgetCard">
@@ -3168,7 +3186,25 @@ function loadDayPlan(){
 if ($("#dpBuildBtn")) $("#dpBuildBtn").addEventListener("click", buildDayPlan);
 loadDayPlan();
 
+/* 2026-07-19 additive: pill renderer for the server-streak path — same markup as the legacy pill below,
+   plus a subtle "best: M" when the longest streak beats the current one. */
+function _streakPill(streak, best){
+  return '<div class="streak"><svg viewBox="0 0 24 24" width="14" height="14" fill="#F97316" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg> <span class="n">' + streak + '-day</span> streak'
+    + (best > streak ? ' <span style="font-weight:600;color:var(--ink3);font-size:11px">&middot; best: ' + best + '</span>' : '')
+    + '</div>';
+}
 async function loadStreak(){
+  /* 2026-07-19 additive: prefer the server's /api/streak ({current,longest,logged_today}) — it adds
+     "best". Older servers 404 (api() throws) and we fall through SILENTLY to the original
+     client-side computation below, so Today never breaks on error. */
+  try {
+    var s = await api("/api/streak");
+    if (s && s.current != null){
+      var cur = int(s.current), best = int(s.longest);
+      $("#streakWrap").innerHTML = cur > 0 ? _streakPill(cur, best) : '';
+      return;
+    }
+  } catch (e) { /* old server or network blip — use the legacy computation */ }
   try {
     var data = await api("/api/history?days=120");
     var days = (data && data.days) || [];
@@ -4334,7 +4370,7 @@ function showOnboarding(){
    without touching any logic — a one-line kill switch if something's wrong post-ship.
    ============================================================================================ */
 var QUIZ_ONBOARDING_ENABLED = true;
-var QZ_STEPS = ["intro","goal","sex","age","height","weight_cur","weight_goal","activity","habits","derail","intensity","perms","reveal","paywall"];
+var QZ_STEPS = ["intro","goal","sex","age","height","weight_cur","weight_goal","activity","habits","derail","intensity","textsize","perms","reveal","paywall"];
 var QZ_COACH_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" fill="#fff" aria-hidden="true"><rect x="2.5" y="9" width="8.6" height="5" rx="2.2"/><path fill-rule="evenodd" clip-rule="evenodd" d="M14 7a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm0 4.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg>';
 var QZ_GOAL = [
   { v: "lose", t: "🔥 Lose fat", d: "Drop weight, stay full on protein" },
@@ -4432,6 +4468,7 @@ function _qzOnNext(){
     if (!wg || wg < 50){ toast("Enter your goal weight", true); return; }
     _qz.a.wgoal = wg; _qzAdvance(); return;
   }
+  if (id === "textsize"){ _qzAdvance(); return; }   /* 2026-07-19 additive: size already applied on tap */
   if (id === "perms"){
     try { Promise.resolve(requestAllPerms()).catch(function(){}); } catch(e){}   // fire in the background, never block (same lesson as showOnboarding)
     _qzAdvance(); return;
@@ -4534,6 +4571,19 @@ function _qzRender(){
       body = '<div class="qz-h2">How do you want Coach Cal to talk to you?</div><div class="qz-sub">Extra hard, extra soft, or right down the middle — your call.</div>' +
         QZ_INTENSITY.map(function(o){ return _qzOpt(o, _qz.a.intensity); }).join("");
       break;
+    case "textsize":
+      /* 2026-07-19 additive: text-size discoverability at onboarding. Same mechanism as the Settings
+         card (localStorage snapcal_textsize + applyTextSize) — tapping a sample applies it INSTANTLY. */
+      var _qzTs = "1"; try { _qzTs = localStorage.getItem("snapcal_textsize") || "1"; } catch(e){}
+      body = '<div class="qz-h2">How\'s this text size?</div>' +
+        '<div class="qz-sub">Tap one and the whole screen changes right away — pick whatever feels easiest on your eyes. You can change this anytime in Settings.</div>' +
+        '<div class="qz-ts" id="qzTsRow">' +
+          '<button type="button" data-ts="1"' + (_qzTs === "1" ? ' class="active"' : '') + ' style="font-size:16px">Normal</button>' +
+          '<button type="button" data-ts="1.15"' + (_qzTs === "1.15" ? ' class="active"' : '') + ' style="font-size:1.15em">Large</button>' +
+          '<button type="button" data-ts="1.3"' + (_qzTs === "1.3" ? ' class="active"' : '') + ' style="font-size:1.3em">Larger</button>' +
+        '</div>' +
+        '<button class="btn btn-dark" id="qzNext" type="button">Looks good</button>';
+      break;
     case "perms":
       body = '<div class="qz-hero">👋</div><div class="qz-h1">One more thing</div>' +
         '<div class="qz-sub" style="text-align:left">SnapCal uses:' +
@@ -4564,6 +4614,14 @@ function _qzFinish(completed){
 }
 function _qzClick(e){
   if (e.target.closest("#qzBack")){ _qzGoto(_qzPrevIndex()); return; }
+  /* 2026-07-19 additive: text-size sample tapped — apply instantly via the SAME mechanism as Settings */
+  var tsb = e.target.closest("#qzTsRow button");
+  if (tsb){
+    try { localStorage.setItem("snapcal_textsize", tsb.dataset.ts); } catch(e2){}
+    applyTextSize();
+    document.querySelectorAll("#qzTsRow button").forEach(function(b){ b.classList.toggle("active", b === tsb); });
+    return;
+  }
   var opt = e.target.closest(".qz-opt");
   if (opt){ _qzPickChoice(opt.getAttribute("data-qv")); return; }
   if (e.target.closest("#qzNext")){ _qzOnNext(); return; }
@@ -4919,7 +4977,10 @@ function _briefName(){
 function loadBriefing(){
   var host = $("#todayCoach"); if (!host || typeof todayData === "undefined") return;
   var block = _briefBlock();
-  var key = "brief_" + todayStr() + "_" + block;
+  /* 2026-07-19 additive: gentle-aware cache suffix so a cached numeric briefing never shows in Gentle
+     mode (and vice-versa). Default (gentle off) key is unchanged. */
+  var _brGentle = !!(typeof _gentle !== "undefined" && _gentle);
+  var key = "brief_" + todayStr() + "_" + block + (_brGentle ? "_g" : "");
   var cached = null; try { cached = localStorage.getItem(key); } catch(e){}
   if (cached){ _renderBriefing(cached, block); return; }
   var dgoal = Math.max(int(profile.daily_calories), 1);
@@ -4928,7 +4989,9 @@ function loadBriefing(){
     name: _briefName(), goal: goal, diet: dietLabel(_diet), allergies: allergyLabels(),
     daily_calories: dgoal, remaining_calories: dgoal - eaten, eaten_calories: eaten,
     protein_eaten_g: int(todayData.totals.protein_g), protein_target_g: int(profile.protein_g),
-    local_time: (function(){ try { return new Date().toLocaleTimeString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch(e){ return ""; } })()
+    local_time: (function(){ try { return new Date().toLocaleTimeString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch(e){ return ""; } })(),
+    /* 2026-07-19 additive: Gentle (ED-safe) mode — server coaches balance, not numbers */
+    gentle: !!(typeof _gentle !== "undefined" && _gentle)
   };
   api("/api/briefing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
     .then(function(r){ var t = (r && r.text) || ""; if (t){ try { localStorage.setItem(key, t); } catch(e){} _renderBriefing(t, block); } })
@@ -6410,7 +6473,9 @@ function buildCoachBody(){
     eaten_today: (todayData.meals || []).map(function(m){ return m.name; }).filter(Boolean),
     count: 3,
     allergies: allergyLabels(),
-    diet: dietLabel(_diet)
+    diet: dietLabel(_diet),
+    /* 2026-07-19 additive: Gentle (ED-safe) mode — server coaches balance, not numbers */
+    gentle: !!(typeof _gentle !== "undefined" && _gentle)
   };
 }
 function fetchCoach(){

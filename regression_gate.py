@@ -1527,7 +1527,17 @@ def main():
             pick('moderate');              // activity -> habits
             pick('consistent');            // habits -> derail
             pick('late_night');            // derail -> intensity
-            pick('soft');                  // intensity -> perms
+            pick('soft');                  // intensity -> textsize (2026-07-19: senior-a11y step)
+            // TEXT-SIZE STEP (new): assert it renders, tap "Larger" -> zoom applies instantly, reset, advance
+            var tsRow = ov.querySelector('#qzTsRow');
+            var tsStepShown = !!tsRow;
+            var tsLarger = tsRow ? tsRow.querySelector('button[data-ts="1.3"]') : null;
+            if (tsLarger) tsLarger.click();
+            var tsZoomApplied = String(document.documentElement.style.zoom) === '1.3';
+            var tsNormal = tsRow ? tsRow.querySelector('button[data-ts="1"]') : null;
+            if (tsNormal) tsNormal.click();                       // reset so the rest of the run is unscaled
+            var tsZoomReset = String(document.documentElement.style.zoom || '1') === '1';
+            next();                        // textsize -> perms
             next();                        // perms -> reveal
             var calEl = ov.querySelector('.qz-plan-cal');
             var revealHasCal = !!calEl && /\\d/.test(calEl.textContent) && calEl.textContent.indexOf('Cal') >= 0;
@@ -1542,13 +1552,17 @@ def main():
             return { introVisible: introVisible, sawWeightGoal: sawWeightGoal, revealHasCal: revealHasCal,
                      hasPlans: hasPlans, hasDevSkip: hasDevSkip, flagBefore: flagBefore, flagAfter: flagAfter,
                      hiddenAfter: hiddenAfter, dailyCal: (typeof profile !== 'undefined' ? profile.daily_calories : 0),
-                     intensitySaved: localStorage.getItem('snapcal_coach_intensity') };
+                     intensitySaved: localStorage.getItem('snapcal_coach_intensity'),
+                     tsStepShown: tsStepShown, tsZoomApplied: tsZoomApplied, tsZoomReset: tsZoomReset };
         }""")
         check("quiz onboarding: fresh device shows the confessional quiz + reaches the plan reveal with a real computed calorie target",
               qz["introVisible"] and qz["sawWeightGoal"] and qz["revealHasCal"] and qz["dailyCal"] and int(qz["dailyCal"]) > 0,
               "intro=%s sawWeightGoal=%s revealHasCal=%s dailyCal=%s" % (qz["introVisible"], qz["sawWeightGoal"], qz["revealHasCal"], qz["dailyCal"]))
         check("quiz onboarding: coaching-intensity answer persists to localStorage for /api/chat to pick up",
               qz["intensitySaved"] == "soft", "intensitySaved=%s" % qz["intensitySaved"])
+        check("quiz onboarding: TEXT-SIZE step shows (senior a11y discoverability); tapping 'Larger' zooms the app instantly, 'Normal' resets",
+              qz["tsStepShown"] and qz["tsZoomApplied"] and qz["tsZoomReset"],
+              "shown=%s zoomApplied=%s reset=%s" % (qz["tsStepShown"], qz["tsZoomApplied"], qz["tsZoomReset"]))
         check("quiz onboarding: paywall step REUSES the real plan-selector (2 plans) + a closed-testing dev bypass",
               qz["hasPlans"] and qz["hasDevSkip"], "hasPlans=%s hasDevSkip=%s" % (qz["hasPlans"], qz["hasDevSkip"]))
         check("quiz onboarding: dev bypass completes onboarding (sets the flag, hides the overlay) without a purchase",

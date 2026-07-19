@@ -393,6 +393,24 @@ Rules:
 - All numeric values must be integers. Output JSON only.
 """
 
+# GENTLE / EATING-DISORDER-SAFE MODE (clinical safety). When the user turns on Gentle mode, this directive is
+# PREPENDED to the coach/briefing prompt so Coach Cal never surfaces numbers that can fuel disordered eating.
+# Strong + unambiguous on purpose — it must override the numeric framing baked into the other templates.
+GENTLE_DIRECTIVE = (
+    "GENTLE / EATING-DISORDER-SAFE MODE: Do NOT mention calorie numbers, deficits, 'over budget', or weight. "
+    "Coach balance, protein as fuel (never a cap), consistency, variety, and how food makes them feel. Warm, "
+    "never shaming, never numeric.\n\n"
+)
+
+
+def _gentle(d):
+    """True when the request body opts into Gentle / ED-safe mode (accepts bool or truthy 'gentle' key)."""
+    v = d.get("gentle")
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "yes", "on")
+    return bool(v)
+
+
 app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15MB upload cap
 if CORS is not None:  # allow the hosted native app (capacitor://, https://localhost) to call /api/*
@@ -988,6 +1006,8 @@ def coach_meals():
             n=n,
         )
     prompt += _allergy_clause(d.get("allergies")) + _diet_clause(d.get("diet"))
+    if _gentle(d):  # Gentle / ED-safe mode: prepend the numbers-hidden directive (schema unchanged)
+        prompt = GENTLE_DIRECTIVE + prompt
     try:
         from google import genai
         client = get_gemini_client()
@@ -2375,6 +2395,8 @@ def briefing():
         " RULES: 2-3 sentences, under 320 characters, plain text (NO markdown, NO bullets), specific to their actual "
         "numbers, encouraging and NEVER judgmental, end with ONE concrete next action. Never suggest a food they're allergic to."
     )
+    if _gentle(d):  # Gentle / ED-safe mode: prepend the numbers-hidden directive (schema unchanged)
+        prompt = GENTLE_DIRECTIVE + prompt
     try:
         from google.genai import types
         client = get_gemini_client()
@@ -3718,6 +3740,55 @@ def recent_foods():
     return jsonify({"recents": out})
 
 
+@app.get("/api/streak")
+def logging_streak():
+    """Logging-streak engine (retention). Consecutive calendar days with >=1 logged meal for THIS device,
+    counted back from today. Grace rule: if nothing is logged yet TODAY, the current streak counts back from
+    YESTERDAY, so it doesn't drop to 0 until a day is actually missed. uid-scoped. Empty history -> all zeros.
+    Returns {"current": int, "longest": int, "logged_today": bool}."""
+    con = get_db()
+    try:
+        rows = con.execute(
+            "SELECT DISTINCT date FROM meals WHERE uid = ? AND date IS NOT NULL AND TRIM(date) <> ''",
+            (_uid(),),
+        ).fetchall()
+    finally:
+        con.close()
+    days = set()
+    for r in rows:
+        try:
+            days.add(date.fromisoformat(str(r["date"]).strip()))  # meals.date is 'YYYY-MM-DD' text
+        except (TypeError, ValueError):
+            continue
+    if not days:
+        return jsonify({"current": 0, "longest": 0, "logged_today": False})
+
+    today = date.today()
+    logged_today = today in days
+    # Current streak: anchor at today if logged today, else yesterday (grace day), then walk backwards.
+    anchor = today if logged_today else today - timedelta(days=1)
+    current = 0
+    cursor = anchor
+    while cursor in days:
+        current += 1
+        cursor -= timedelta(days=1)
+
+    # Longest streak ever: for each day that STARTS a run (no prior day), measure the run forward.
+    longest = 0
+    for d0 in days:
+        if (d0 - timedelta(days=1)) in days:
+            continue  # not a run start
+        length = 1
+        nxt = d0 + timedelta(days=1)
+        while nxt in days:
+            length += 1
+            nxt += timedelta(days=1)
+        if length > longest:
+            longest = length
+
+    return jsonify({"current": current, "longest": longest, "logged_today": logged_today})
+
+
 _MEASURE_KEYS = ("waist", "hip", "chest", "arm", "thigh", "neck")
 
 
@@ -4059,6 +4130,107 @@ def version():
 def privacy_page():
     """Public privacy-policy URL (required by both stores + the Play Data Safety form)."""
     return app.response_class(PRIVACY_PAGE_HTML, mimetype="text/html")
+
+
+# Honest, defensible "Trust & Safety" page — no fabricated RD credentials, no "clinically proven", no
+# accuracy percentages. Mirrors the /privacy inline-HTML style. Links back to /privacy and /delete-my-data.
+TRUST_PAGE_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SnapCal Trust &amp; Safety</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,system-ui,sans-serif;max-width:680px;margin:0 auto;
+padding:32px 22px;line-height:1.6;color:#18181b;background:#fafaf9}h1{font-size:24px}h2{font-size:17px;margin-top:26px}
+.muted{color:#6b7280;font-size:14px}a{color:#059669}ul{padding-left:20px}
+.note{background:#f1f5f4;border-left:3px solid #059669;padding:12px 16px;border-radius:8px;margin-top:12px}</style>
+</head><body>
+<h1>Trust &amp; Safety</h1>
+<p class="muted">Xionprotech LLC &middot; Last updated July 2026</p>
+<p>SnapCal is a wellness tool that helps you notice what you eat and how you move. We want to be straight with
+you about what it can and can&rsquo;t do.</p>
+<h2>Not medical advice</h2>
+<p>SnapCal provides general wellness information, not medical, nutritional, or clinical advice. It is not a
+substitute for a doctor or a registered dietitian. Talk to a qualified professional before making changes to
+your diet, exercise, or health &mdash; especially if you have a medical condition, are pregnant, or take
+medication.</p>
+<h2>How accurate are the numbers?</h2>
+<p>The calorie and macro figures from a food <strong>photo are estimates</strong>. A photo can&rsquo;t show
+portion size, hidden oils, or exactly how a dish was prepared, so we show a <strong>confidence range</strong>
+rather than pretending a single number is exact. Treat them as a helpful guide, not a lab measurement.</p>
+<p>When you want an exact number for a packaged food, <strong>scan its barcode</strong> &mdash; that reads the
+manufacturer&rsquo;s published label instead of guessing from a picture.</p>
+<h2>Your privacy, in one line</h2>
+<p>There&rsquo;s no account and no login; your data lives on your device and is mirrored to our server only so
+it survives a reinstall &mdash; we never sell it or use it for ads. See the full
+<a href="/privacy">Privacy Policy</a>, or <a href="/delete-my-data">delete everything</a> at any time.</p>
+<h2>Eating-disorder safety</h2>
+<p>Calorie tracking isn&rsquo;t right for everyone, and for some people focusing on numbers can be harmful.
+SnapCal offers a <strong>Gentle mode</strong> in Settings that hides calorie numbers and coaches balance,
+variety, and how food makes you feel instead.</p>
+<div class="note">
+<p style="margin:0">If food, weight, or body image feels overwhelming, you deserve support. In the U.S. you can
+reach the National Alliance for Eating Disorders helpline, staffed by licensed clinicians, at
+<strong><a href="tel:1-866-662-1235">1-866-662-1235</a></strong>. If you are in crisis, call or text 988.</p>
+</div>
+<h2>Contact</h2>
+<p>Questions: <a href="mailto:tariq@xionprotech.com">tariq@xionprotech.com</a>.</p>
+</body></html>"""
+
+
+@app.get("/trust")
+def trust_page():
+    """Public, honest Trust & Safety page: not-medical-advice, estimate accuracy + barcode-for-exact, a
+    one-line privacy summary, and an eating-disorder safety note (helpline + Gentle mode)."""
+    return app.response_class(TRUST_PAGE_HTML, mimetype="text/html")
+
+
+@app.get("/methods")
+def methods_page():
+    """Published accuracy study (Study A). Renders ONLY real measured results from
+    data/accuracy_study_results.json — the reproducible photo-pipeline benchmark (fixed-seed dish
+    sample -> real photo -> LIVE Gemini estimate vs USDA-derived reference). If the results file
+    isn't present yet, says so honestly instead of showing invented numbers."""
+    style = ("<style>body{font-family:-apple-system,Segoe UI,Roboto,system-ui,sans-serif;max-width:680px;"
+             "margin:0 auto;padding:32px 22px;line-height:1.6;color:#18181b;background:#fafaf9}h1{font-size:24px}"
+             "h2{font-size:17px;margin-top:26px}.muted{color:#6b7280;font-size:14px}a{color:#059669}"
+             "table{border-collapse:collapse;font-size:13px;margin-top:10px}td,th{border:1px solid #e5e7eb;"
+             "padding:5px 9px;text-align:right}th:first-child,td:first-child{text-align:left}"
+             ".big{font-size:20px;font-weight:800}</style>")
+    head = ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            "<title>SnapCal Accuracy Methods</title>" + style + "</head><body><h1>How accurate is the photo scan?</h1>"
+            "<p class=\"muted\">Xionprotech LLC &middot; Study A &middot; reproducible (fixed random seed)</p>")
+    try:
+        res = json.loads((APP_DIR / "data" / "accuracy_study_results.json").read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — no results yet: be honest, never invent
+        return app.response_class(
+            head + "<p>We are running our first published accuracy benchmark now. Results will appear here — "
+                   "real measured numbers, not marketing claims. Until then: photo numbers are estimates with a "
+                   "confidence range; <a href=\"/trust\">read how we handle accuracy honestly</a>.</p></body></html>",
+            mimetype="text/html")
+    rows = "".join(
+        "<tr><td>%s</td><td>%d</td><td>%d</td><td>%+.1f%%</td></tr>"
+        % (r["dish"][:40], r["ref_cal"], r["est_cal"], r["signed_err_pct"]) for r in res.get("rows", []))
+    body = (
+        "<p>We benchmarked SnapCal's live photo estimator against <b>%d</b> reference dishes with known, "
+        "USDA-derived nutrition (our curated recipe library), using a real photo of each dish. Every number below "
+        "is a real measurement from that run — nothing is simulated.</p>"
+        "<h2>Results (%s)</h2>"
+        "<p><span class=\"big\">%.0f%%</span> of estimates landed within &plusmn;30%% of the reference "
+        "(%.0f%% within &plusmn;20%%). Median error: <b>%.1f%%</b>. Mean error (MAPE): <b>%.1f%%</b>. "
+        "Average bias: %+.1f%% (%s).</p>"
+        "<h2>Why we publish this</h2><p>Every photo-calorie app has error — research puts typical photo estimates "
+        "15&ndash;50%% off on mixed dishes. We'd rather show you our real measured error and a confidence range "
+        "than pretend a single number is exact. For exact packaged-food numbers, scan the barcode.</p>"
+        "<h2>Method &amp; limitation</h2><p class=\"muted\">%s<br><br>Limitation: %s</p>"
+        "<h2>Per-dish results</h2><table><tr><th>Dish</th><th>Reference cal</th><th>Estimated cal</th>"
+        "<th>Error</th></tr>%s</table>"
+        "<p class=\"muted\">Reproduce it: <code>python data/accuracy_study.py</code> in the SnapCal repo.</p>"
+        "</body></html>"
+    ) % (res["n_analyzed"], res["date"], res["within_30pct"], res["within_20pct"], res["median_ape_pct"],
+         res["mape_pct"], res["mean_signed_error_pct"],
+         ("estimates tend to run high" if res["mean_signed_error_pct"] > 3 else
+          "estimates tend to run low" if res["mean_signed_error_pct"] < -3 else "no strong direction"),
+         res.get("method", ""), res.get("limitation", ""), rows)
+    return app.response_class(head + body, mimetype="text/html")
 
 
 @app.get("/api/history")
