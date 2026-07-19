@@ -5260,6 +5260,7 @@ async function openDaySheet(date){
 }
 
 function openMealSheet(m){
+  _mealEdit = null;                               /* leaving any prior edit session */
   var r = mealToResult(m);
   var html = '<button class="sheet-back" id="sheetBack" type="button">&lsaquo; Back to day</button>' +
     '<div class="sheet-h">' + esc(m.name) + '</div>' +
@@ -5267,11 +5268,285 @@ function openMealSheet(m){
     '<div class="card">' +
       (m.thumb ? '<img class="sheet-thumb" src="' + m.thumb + '" alt="">' : '') +
       buildItemsHTML(r) + buildTotalRowHTML(r) +
+      /* Add-a-missed-item / fix-this-meal — the camera misses things (e.g. the cheese in the eggs);
+         let the user add it AFTER logging and have it stick. Opens the same USDA search the scan uses. */
+      '<button type="button" id="mealEditBtn" data-id="' + int(m.id) + '" style="width:100%;margin-top:12px;' +
+        'border:1.5px solid var(--brand);background:var(--soft);color:var(--brand);font-weight:800;' +
+        'border-radius:11px;padding:11px 12px;cursor:pointer;font-family:inherit;font-size:13.5px">' +
+        '&#65291; Add or fix an item</button>' +
       (r.note ? '<div class="note">' + esc(r.note) + '</div>' : '') +
       buildDetailHTML(r) + '</div>';
   $("#sheetBody").innerHTML = html;
+  var eb = $("#mealEditBtn");
+  if (eb) eb.addEventListener("click", function(){ openMealEditor(m); });
   $(".sheet-card").scrollTop = 0;
   openSheet();
+}
+
+/* ---------------- EDIT A LOGGED MEAL (add the item the camera missed, after it's already logged) --------
+   Reconstructs the logged meal into the SAME editable-result shape the scan flow uses, so a missing
+   ingredient (the classic: cheese on the eggs) can be searched, added, portion-tuned or removed, then
+   persisted to the server via PATCH /api/meals/<id>. Add-only to the existing read-only sheet — the scan
+   flow is untouched. */
+var _mealEdit = null;           /* { id, r, name, di } — r is a normalizeResult()-shaped editable copy */
+var _mealEditSearchAbort = null;
+
+function openMealEditor(m){
+  var r = mealToResult(m);
+  if (!r.mults) r.mults = r.items.map(function(){ return 1; });
+  _mealEdit = { id: int(m.id), r: r, name: String(m.name || "Meal") };
+  renderMealEditor();
+}
+
+function renderMealEditor(){
+  if (!_mealEdit) return;
+  var eff = effectiveResult(_mealEdit.r);
+  var html =
+    '<button class="sheet-back" id="mealEditBack" type="button">&lsaquo; Cancel</button>' +
+    '<div class="sheet-h">Fix this meal</div>' +
+    '<div class="sheet-sub">Add anything the camera missed, adjust a portion, or remove what isn&rsquo;t yours.</div>' +
+    '<div class="card" id="mealEditor">' +
+      '<label class="field-lbl" for="mealEditName" style="margin-top:0">Meal name</label>' +
+      '<input class="txt" id="mealEditName" type="text" autocomplete="off" value="' + esc(_mealEdit.name) + '">' +
+      '<div id="mealEditItems" style="margin-top:12px">' + buildEditableItemsHTML(eff) + '</div>' +
+      buildTotalRowHTML(eff) +
+      '<div id="mealEditAddWrap"></div>' +
+      '<button class="btn btn-dark" id="mealEditSave" type="button" style="margin-top:14px">Save changes</button>' +
+    '</div>';
+  $("#sheetBody").innerHTML = html;
+  $(".sheet-card").scrollTop = 0;
+  renderMealEditAddRow();
+
+  var back = $("#mealEditBack");
+  if (back) back.addEventListener("click", function(){ cancelMealEdit(); });
+
+  var nameInp = $("#mealEditName");
+  if (nameInp) nameInp.addEventListener("input", function(){ _mealEdit.name = this.value; });
+
+  var save = $("#mealEditSave");
+  if (save) save.addEventListener("click", saveMealEdit);
+
+  /* portion +/- and remove, mirroring the scan card's #resultItems handler exactly */
+  var items = $("#mealEditItems");
+  if (items) items.addEventListener("click", function(e){
+    var del = e.target.closest(".item-del");
+    if (del){
+      var di = int(del.dataset.del);
+      _mealEdit.r.items.splice(di, 1);
+      if (_mealEdit.r.mults) _mealEdit.r.mults.splice(di, 1);
+      renderMealEditor();
+      return;
+    }
+    var b = e.target.closest(".pbtn");
+    if (!b) return;
+    var i = int(b.dataset.i), d = int(b.dataset.d);
+    if (!_mealEdit.r.mults) _mealEdit.r.mults = _mealEdit.r.items.map(function(){ return 1; });
+    _mealEdit.r.mults[i] = Math.min(5, Math.max(0.25, Math.round((_mealEdit.r.mults[i] + d * 0.25) * 100) / 100));
+    renderMealEditor();
+  });
+}
+
+function renderMealEditAddRow(){
+  var wrap = $("#mealEditAddWrap"); if (!wrap) return;
+  wrap.innerHTML =
+    '<button type="button" id="mealEditAddBtn" style="width:100%;margin-top:12px;border:1.5px solid var(--brand);' +
+    'background:var(--soft);color:var(--brand);font-weight:800;border-radius:11px;padding:11px 12px;' +
+    'cursor:pointer;font-family:inherit;font-size:13.5px">&#65291; Add an item the camera missed</button>';
+  var b = $("#mealEditAddBtn");
+  if (b) b.addEventListener("click", openMealEditSearch);
+}
+
+function openMealEditSearch(){
+  var wrap = $("#mealEditAddWrap"); if (!wrap) return;
+  wrap.innerHTML =
+    '<div class="nf-card" id="mealEditForm" style="margin-top:12px">' +
+      '<label class="field-lbl" for="mealEditQ" style="margin-top:0">What did the camera miss?</label>' +
+      '<div style="display:flex;gap:8px">' +
+        '<input class="txt" id="mealEditQ" type="text" autocomplete="off" placeholder="e.g. cheddar cheese" style="flex:1">' +
+        '<button class="btn btn-dark" id="mealEditSearchBtn" type="button" style="margin-top:0;padding:0 18px;white-space:nowrap">Search</button>' +
+      '</div>' +
+      '<div id="mealEditResults" style="margin-top:10px"></div>' +
+      '<button type="button" id="mealEditCancelBtn" style="margin-top:10px;border:none;background:none;' +
+      'color:var(--ink2);font-size:12.5px;font-weight:700;cursor:pointer;padding:4px 0;font-family:inherit">Cancel</button>' +
+    '</div>';
+  var inp = $("#mealEditQ");
+  if (inp){
+    inp.focus();
+    inp.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); runMealEditSearch(); } });
+  }
+  var sb = $("#mealEditSearchBtn"); if (sb) sb.addEventListener("click", runMealEditSearch);
+  var cb = $("#mealEditCancelBtn");
+  if (cb) cb.addEventListener("click", function(){
+    if (_mealEditSearchAbort){ try { _mealEditSearchAbort.abort(); } catch(e){} }
+    renderMealEditAddRow();
+  });
+}
+
+function mealEditQuickAddToggle(prefill){
+  var res = $("#mealEditResults"); if (!res) return;
+  res.insertAdjacentHTML("beforeend",
+    '<button type="button" id="mealEditQuickBtn" style="margin-top:10px;border:none;background:none;' +
+    'color:var(--brand);font-size:12.5px;font-weight:700;cursor:pointer;padding:4px 0;font-family:inherit">' +
+    'Can&rsquo;t find it? Quick add manually</button>');
+  var qb = $("#mealEditQuickBtn"); if (!qb) return;
+  qb.addEventListener("click", function(){
+    res.innerHTML =
+      '<label class="field-lbl" for="mealEditQaName" style="margin-top:6px">Food name</label>' +
+      '<input class="txt" id="mealEditQaName" type="text" autocomplete="off" value="' + esc(prefill || "") + '">' +
+      '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<div style="flex:1"><label class="field-lbl" for="mealEditQaCal" style="margin-top:0">Calories</label>' +
+          '<input class="txt" id="mealEditQaCal" type="number" inputmode="numeric" min="0" placeholder="required"></div>' +
+        '<div style="flex:1"><label class="field-lbl" for="mealEditQaP" style="margin-top:0">Protein (g)</label>' +
+          '<input class="txt" id="mealEditQaP" type="number" inputmode="numeric" min="0" placeholder="opt"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<div style="flex:1"><label class="field-lbl" for="mealEditQaC" style="margin-top:0">Carbs (g)</label>' +
+          '<input class="txt" id="mealEditQaC" type="number" inputmode="numeric" min="0" placeholder="opt"></div>' +
+        '<div style="flex:1"><label class="field-lbl" for="mealEditQaF" style="margin-top:0">Fat (g)</label>' +
+          '<input class="txt" id="mealEditQaF" type="number" inputmode="numeric" min="0" placeholder="opt"></div>' +
+      '</div>' +
+      '<button class="btn btn-dark" id="mealEditQaAddBtn" type="button" style="margin-top:12px">Add this item</button>';
+    var nm = $("#mealEditQaName"); if (nm) nm.focus();
+    var ab = $("#mealEditQaAddBtn");
+    if (ab) ab.addEventListener("click", function(){
+      var name = ($("#mealEditQaName").value || "").trim();
+      var cal = Number($("#mealEditQaCal").value);
+      if (!name){ toast("Enter a food name", true); return; }
+      if (!cal || cal <= 0){ toast("Enter calories", true); return; }
+      appendMealEditItem({
+        name: name, qty: "", calories: cal,
+        protein_g: Number($("#mealEditQaP").value) || 0,
+        carbs_g: Number($("#mealEditQaC").value) || 0,
+        fat_g: Number($("#mealEditQaF").value) || 0,
+        fiber_g: 0, sugar_g: 0, sat_fat_g: 0, sodium_mg: 0
+      });
+    });
+  });
+}
+
+function runMealEditSearch(){
+  var inp = $("#mealEditQ"), res = $("#mealEditResults");
+  var q = (inp && inp.value || "").trim();
+  if (!q){ if (inp) inp.focus(); return; }
+  var sb = $("#mealEditSearchBtn");
+  if (sb){ sb.disabled = true; sb.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-color:rgba(255,255,255,.35);border-top-color:#fff;vertical-align:-3px"></span>'; }
+  if (res) res.innerHTML = '<div class="nf-empty" style="padding:8px 0">Checking the USDA database&hellip;</div>';
+
+  if (_mealEditSearchAbort){ try { _mealEditSearchAbort.abort(); } catch(e){} }
+  var ac = ("AbortController" in window) ? new AbortController() : null;
+  _mealEditSearchAbort = ac;
+  var timedOut = false;
+  var to = ac ? setTimeout(function(){ timedOut = true; try { ac.abort(); } catch(e){} }, 8000) : null;
+  function stopSpin(){ if (sb){ sb.disabled = false; sb.textContent = "Search"; } }
+
+  fetch(API_BASE + "/api/nutrition?q=" + encodeURIComponent(q), {
+    headers: { "X-Device-Id": DEVICE_ID }, signal: ac ? ac.signal : undefined
+  }).then(function(r){
+    return r.json().catch(function(){ return null; }).then(function(d){ return { ok: r.ok, data: d }; });
+  }).then(function(out){
+    clearTimeout(to); stopSpin();
+    if (!res) return;
+    if (!out.ok || !out.data || out.data.error || !out.data.nutrients || !Object.keys(out.data.nutrients).length){
+      res.innerHTML = '<div class="nf-empty" style="padding:8px 0">No USDA match for &ldquo;' + esc(q) +
+        '&rdquo; — try a simpler name, or use quick add below.</div>';
+      mealEditQuickAddToggle(q);
+      return;
+    }
+    var d = out.data, n = d.nutrients;
+    res.innerHTML =
+      '<div class="item-row" id="mealEditPick" role="button" tabindex="0" style="cursor:pointer;border-bottom:none;padding:8px 0">' +
+        '<div class="item-l"><div class="n">' + esc(d.food) + '</div><div class="q">' + esc(d.serving) + '</div></div>' +
+        '<div class="item-r"><div class="c">' + fmtNum(Math.round(n.calories || 0)) + ' Cal</div>' +
+          '<div class="m">P ' + Math.round(n.protein_g || 0) + 'g &middot; C ' + Math.round(n.carbs_g || 0) +
+          'g &middot; F ' + Math.round(n.fat_g || 0) + 'g</div></div>' +
+      '</div>' +
+      '<div class="goal-desc" style="margin:4px 2px 0">Tap to add this to the meal.</div>';
+    function pickIt(){
+      appendMealEditItem({
+        name: d.food, qty: d.serving,
+        calories: n.calories || 0, protein_g: n.protein_g || 0, carbs_g: n.carbs_g || 0, fat_g: n.fat_g || 0,
+        fiber_g: n.fiber_g || 0, sugar_g: n.sugar_g || 0, sat_fat_g: n.sat_fat_g || 0, sodium_mg: n.sodium_mg || 0
+      });
+    }
+    var pick = $("#mealEditPick");
+    if (pick){
+      pick.addEventListener("click", pickIt);
+      pick.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); pickIt(); } });
+    }
+    mealEditQuickAddToggle(q);
+  }).catch(function(){
+    clearTimeout(to); stopSpin();
+    if (!res) return;
+    res.innerHTML = '<div class="nf-empty" style="padding:8px 0">' +
+      (timedOut ? "That took too long — try again, or use quick add below."
+                : "Couldn&rsquo;t reach the USDA database right now — try again, or use quick add below.") + '</div>';
+    mealEditQuickAddToggle(q);
+  });
+}
+
+function appendMealEditItem(item){
+  if (!_mealEdit) return;
+  if (!_mealEdit.r.mults) _mealEdit.r.mults = _mealEdit.r.items.map(function(){ return 1; });
+  _mealEdit.r.items.push({
+    name: String(item.name || "Food item"), qty: String(item.qty || ""),
+    calories: int(item.calories), protein_g: int(item.protein_g),
+    carbs_g: int(item.carbs_g), fat_g: int(item.fat_g),
+    fiber_g: int(item.fiber_g), sugar_g: int(item.sugar_g),
+    sat_fat_g: int(item.sat_fat_g), sodium_mg: int(item.sodium_mg)
+  });
+  _mealEdit.r.mults.push(1);
+  renderMealEditor();          /* re-derives from the SAME _mealEdit.r.items -> the added item stays */
+  toast("Added " + item.name);
+}
+
+function cancelMealEdit(){
+  var id = _mealEdit ? _mealEdit.id : null;
+  _mealEdit = null;
+  if (_mealEditSearchAbort){ try { _mealEditSearchAbort.abort(); } catch(e){} _mealEditSearchAbort = null; }
+  reopenMealById(id);          /* back to the read-only sheet, unchanged */
+}
+
+async function saveMealEdit(){
+  if (!_mealEdit) return;
+  var save = $("#mealEditSave");
+  if (save) save.disabled = true;
+  try {
+    var eff = effectiveResult(_mealEdit.r);
+    var name = (_mealEdit.name || "").trim() || "Meal";
+    await api("/api/meals/" + _mealEdit.id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name,
+        calories: eff.total.calories, protein_g: eff.total.protein_g,
+        carbs_g: eff.total.carbs_g, fat_g: eff.total.fat_g,
+        items_json: JSON.stringify(eff.items),
+        detail_json: JSON.stringify(eff)
+      })
+    });
+    var id = _mealEdit.id;
+    _mealEdit = null;
+    toast("Saved");
+    if (sheetDayDate === todayStr()) { try { await loadToday(); } catch(e){} }
+    await reopenMealById(id);      /* re-open from FRESH server data — proves it persisted */
+  } catch (e) {
+    toast(e.message || "Couldn't save", true);
+    if (save) save.disabled = false;
+  }
+}
+
+/* Re-fetch the day's meals from the server and re-open the given meal's read-only sheet. */
+async function reopenMealById(id){
+  if (!sheetDayDate){ closeSheet(); return; }
+  try {
+    var data = await api("/api/meals?date=" + encodeURIComponent(sheetDayDate));
+    sheetDayMeals = (data && data.meals) || [];
+    var m = sheetDayMeals.filter(function(x){ return int(x.id) === int(id); })[0];
+    if (m) openMealSheet(m);
+    else openDaySheet(sheetDayDate);
+  } catch (e) {
+    openDaySheet(sheetDayDate);
+  }
 }
 
 /* Tap a menu item -> animated meter: this meal's calories as a % of the daily goal. */

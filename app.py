@@ -3870,6 +3870,55 @@ def export_csv():
                    headers={"Content-Disposition": "attachment; filename=snapcal-diary.csv"})
 
 
+@app.patch("/api/meals/<int:meal_id>")
+def update_meal(meal_id):
+    """Edit an ALREADY-LOGGED meal — the fix for 'the camera missed the cheese and I couldn't add it
+       after logging'. Add/remove items, rename, and re-total an existing diary entry in place.
+       uid-scoped so one tester can never touch another's meal. Only provided fields are updated
+       (additive/partial); items_json/detail_json come pre-recomputed from the client's effectiveResult()
+       pipeline so the stored totals always match the items list."""
+    d = request.get_json(silent=True)
+    if not isinstance(d, dict):
+        return jsonify({"error": "JSON body required."}), 400
+
+    con = get_db()
+    try:
+        # Ownership check first — never 500 or silently no-op on someone else's / a missing meal.
+        row = con.execute("SELECT id FROM meals WHERE id = ? AND uid = ?", (meal_id, _uid())).fetchone()
+        if row is None:
+            return jsonify({"error": "Meal not found."}), 404
+
+        sets, params = [], []
+
+        def _set(col, val):
+            sets.append("%s = ?" % col)
+            params.append(val)
+
+        if "name" in d:
+            _set("name", str(d.get("name") or "Meal"))
+        for k in MACRO_KEYS:
+            if k in d:
+                _set(k, _int(d.get(k)))
+        if "items_json" in d:
+            ij = d.get("items_json")
+            _set("items_json", ij if isinstance(ij, str) else json.dumps(ij if ij is not None else []))
+        if "detail_json" in d:
+            dj = d.get("detail_json")
+            if dj is not None and not isinstance(dj, str):
+                dj = json.dumps(dj)
+            _set("detail_json", dj)
+
+        if not sets:
+            return jsonify({"error": "Nothing to update."}), 400
+
+        params.extend([meal_id, _uid()])
+        con.execute("UPDATE meals SET " + ", ".join(sets) + " WHERE id = ? AND uid = ?", params)
+        con.commit()
+    finally:
+        con.close()
+    return jsonify({"ok": True, "id": meal_id})
+
+
 @app.delete("/api/meals/<int:meal_id>")
 def delete_meal(meal_id):
     con = get_db()
