@@ -1,16 +1,18 @@
 # Cloudflare-style one-click deploy blueprint for Render (render.com).
-# Deploys the SnapCal API. Free tier sleeps (30s cold start) — use "starter" ($7/mo) for a live app.
+# Deploys the SnapCal API. Live service srv-d8smnra8qa3s73bge1cg runs on "starter" (always-warm)
+# with the persistent disk below attached + SNAPCAL_DB_DIR set (done 2026-07-19 via Render API,
+# durability verified: a meal survives a redeploy). Keep this file in sync with the dashboard.
 services:
   - type: web
     name: snapcal-api
     runtime: python
-    plan: free               # $0 for testing (sleeps ~15min idle, 30s cold start). Bump to "starter" ($7/mo) to keep it warm for real users.
+    plan: starter            # always-warm ($7/mo). REQUIRED for the persistent disk below (disks need a paid plan).
     region: ohio             # closest US region to PA
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
     healthCheckPath: /
-    # PERSISTENT DISK — keeps snapcal.db (ALL user history) across every redeploy/update.
-    # Disks need a paid plan (not available on free): flip `plan: free` -> `plan: starter` above to enable.
+    # PERSISTENT DISK — keeps snapcal.db (ALL user history) across every redeploy/update. ATTACHED + LIVE.
+    # Without this, the DB sits on the ephemeral container FS and EVERY deploy wipes all logged meals.
     disk:
       name: snapcal-data
       mountPath: /var/data
