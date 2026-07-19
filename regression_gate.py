@@ -108,9 +108,33 @@ def server_up():
         return False
 
 
+def server_is_fresh():
+    """STALE-SERVER GUARD (2026-07-19 failure class: zombie processes squatted the port and the gate
+       'verified' OLD code twice). The served index.html must be byte-identical to the file on disk —
+       a squatter running an older process serves stale bytes and MUST be killed, not trusted."""
+    try:
+        served = urllib.request.urlopen(BASE + "/", timeout=5).read()
+        disk = open(os.path.join(HERE, "static", "index.html"), "rb").read()
+        return served == disk
+    except Exception:
+        return False
+
+
 def ensure_server():
     if server_up():
-        return None
+        if server_is_fresh():
+            return None
+        # Zombie on our port serving stale code -> kill every listener by PID, then boot fresh.
+        print("  [stale-server guard] port answers but serves STALE bytes — killing squatters")
+        port = BASE.rsplit(":", 1)[-1].rstrip("/")
+        try:
+            out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=15).stdout
+            pids = {line.split()[-1] for line in out.splitlines()
+                    if (":" + port) in line and "LISTENING" in line}
+            for pid in pids:
+                subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=10)
+        except Exception:
+            pass
     proc = subprocess.Popen([sys.executable, "app.py"], cwd=HERE,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(40):
@@ -1628,6 +1652,84 @@ def main():
               not existingUserState["qzShown"] and not existingUserState["obShown"],
               "qzShown=%s obShown=%s" % (existingUserState["qzShown"], existingUserState["obShown"]))
         page.evaluate("() => { window.premiumActive = true; try { goal = 'lose_weight'; } catch(e){} }")   # restore gate state after reload for any later checks
+
+        # ==================== 2026-07-19 SAFETY-GUARD LOCKS (RD-review round 4) ====================
+        # The clinical judge's demand: "only one of eight safety behaviors is regression-locked."
+        # Prompt-directive guards are the most silently-regressable layer — lock each REQUIRED directive
+        # string in the SOURCE (deterministic; no flaky LLM probes), + the two quiz gates as live UI probes.
+        _app_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py"),
+                        encoding="utf-8", errors="replace").read()
+        _GUARDS = [
+            ("distress response UN-GATED (fires in every mode)", "REGARDLESS of any mode or setting"),
+            ("live Alliance crisis line in chat prompt", "1-866-662-1235"),
+            ("pregnancy no-deficit rule", "pregnant or breastfeeding"),
+            ("under-eating guard (no praising <1000 kcal)", "eating too little"),
+            ("GLP-1 never-discuss-medication rule", "NEVER comment on medication dose"),
+            ("fasting contraindications exception", "do NOT encourage extending"),
+            ("gentle mode overrides ALL prompt rules", "OVERRIDES ALL OTHER RULES"),
+            ("hard-mode yields to gentle (no numbers)", "gentle's no-numbers rules OVERRIDE"),
+        ]
+        for _gname, _gstr in _GUARDS:
+            check("safety-lock: %s — directive present in app.py" % _gname, _gstr in _app_src, "needle=%r" % _gstr)
+
+        # ---- 2026-07-19 failure-class locks (prose->gate, same day as the wounds) ----
+        # (a) NAME-COLLISION HOISTING: a duplicate top-level `function name(` in the single-file app lets
+        # the later declaration win the hoist and silently kill every var below (the coachKey incident).
+        _idx_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "index.html"),
+                        encoding="utf-8", errors="replace").read()
+        import re as _re2
+        _toplevel_fns = _re2.findall(r"^function ([A-Za-z_$][\w$]*)\s*\(", _idx_src, _re2.M)
+        _dupes = sorted({n for n in _toplevel_fns if _toplevel_fns.count(n) > 1})
+        check("failure-class lock: no duplicate TOP-LEVEL function declarations in index.html (hoist-collision guard)",
+              not _dupes, "dupes=%s" % (_dupes or "none"))
+        # (b) ARTIFACT-FORMAT MISMATCH: image bytes must match their extension (the JPEG-in-.png incident —
+        # desktop sniffs past it, devices show broken images).
+        _bad_magic = []
+        _magic = {".png": b"\x89PNG", ".jpg": b"\xff\xd8", ".jpeg": b"\xff\xd8", ".webp": b"RIFF", ".gif": b"GIF8"}
+        _img_dirs = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", d) for d in ("coaches", "img")]
+        for _d in _img_dirs:
+            if not os.path.isdir(_d):
+                continue
+            for _f in os.listdir(_d):
+                _ext = os.path.splitext(_f)[1].lower()
+                if _ext in _magic:
+                    with open(os.path.join(_d, _f), "rb") as _fh:
+                        if not _fh.read(8).startswith(_magic[_ext]):
+                            _bad_magic.append(_f)
+        check("failure-class lock: every shipped image's magic bytes match its extension (JPEG-in-.png guard)",
+              not _bad_magic, "mismatched=%s" % (_bad_magic or "none"))
+
+        # UI probe: quiz REJECTS a 17-year-old (stays on the age step) and ACCEPTS 30.
+        agegate = page.evaluate("""() => {
+            try { localStorage.removeItem('snapcal_c_snapcal_onboarded'); } catch(e){}
+            var ex = document.getElementById('qzOnboard'); if (ex) ex.remove();
+            showQuizOnboarding();
+            var ov = document.getElementById('qzOnboard');
+            function pick(v){ var b = ov.querySelector('.qz-opt[data-qv="' + v + '"]'); if (b) b.click(); }
+            function next(){ var b = ov.querySelector('#qzNext'); if (b) b.click(); }
+            next(); pick('recomp'); pick('female');
+            ov.querySelector('#qzAge').value = '17'; next();
+            var rejected17 = !!ov.querySelector('#qzAge');            // still on the age step
+            ov.querySelector('#qzAge').value = '30'; next();
+            var advanced30 = !ov.querySelector('#qzAge');             // moved on to height
+            // continue to weight_goal and probe the BMI floor: 5'6" goal 95 lb (BMI ~15) must be rejected
+            ov.querySelector('#qzFt').value = '5'; ov.querySelector('#qzIn').value = '6'; next();
+            ov.querySelector('#qzWCur').value = '160'; next();
+            ov.querySelector('#qzWGoal').value = '95'; next();
+            var rejectedUnderweight = !!ov.querySelector('#qzWGoal'); // still on the goal-weight step
+            ov.querySelector('#qzWGoal').value = '140'; next();
+            var advancedHealthy = !ov.querySelector('#qzWGoal');
+            var dev = ov.querySelector('#qzDevSkip'); // finish + clean up via the dev skip if reachable
+            try { pick('moderate'); pick('consistent'); pick('late_night'); pick('soft'); next(); next(); next();
+                  dev = ov.querySelector('#qzDevSkip'); if (dev) dev.click(); } catch(e){}
+            if (ov && getComputedStyle(ov).display !== 'none') ov.remove();
+            return { rejected17: rejected17, advanced30: advanced30,
+                     rejectedUnderweight: rejectedUnderweight, advancedHealthy: advancedHealthy };
+        }""")
+        check("safety-lock UI: quiz rejects age 17 + accepts 30 (18+ gate live)",
+              agegate["rejected17"] and agegate["advanced30"], str(agegate))
+        check("safety-lock UI: quiz rejects underweight goal (BMI<18.5 floor) + accepts healthy goal",
+              agegate["rejectedUnderweight"] and agegate["advancedHealthy"], str(agegate))
 
         # ==================== 2026-07-15 AUDIT PUNCH LIST ====================
 

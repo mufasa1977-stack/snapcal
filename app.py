@@ -975,6 +975,127 @@ def analyze():
     return jsonify(result)
 
 
+def _coach_memory(uid, gentle=False):
+    """CROSS-SESSION COACH MEMORY v1 (deterministic — DERIVED from the user's real logged data, zero extra
+       LLM calls). Returns a compact plain-text block of what Coach Cal 'remembers' about THIS uid — streak
+       (mirrors /api/streak's grace-day anchor), last-7-day logging + calories, most-logged meals, weigh-in
+       trend, and water/workout habits (only if actually used). Appended to the coach prompts (/api/chat,
+       /api/briefing, /api/coach) so replies can reference real history like a coach who remembers.
+       Empty history -> "" (brand-new users get byte-identical prompts). gentle=True -> numbers-free variant
+       (no calorie/weight digits; qualitative only) for ED-safe mode. Wrapped in a blanket try/except
+       returning "" — memory must NEVER break a reply."""
+    try:
+        today = date.today()
+        cutoff7 = (today - timedelta(days=6)).isoformat()
+        cutoff30 = (today - timedelta(days=29)).isoformat()
+        con = get_db()
+        try:
+            date_rows = con.execute(
+                "SELECT DISTINCT date FROM meals WHERE uid = ? AND date IS NOT NULL AND TRIM(date) <> '' "
+                "ORDER BY date DESC LIMIT 400", (uid,)).fetchall()
+            if not date_rows:
+                return ""  # brand-new user: no memory block at all (byte-identical prompts)
+            week_rows = con.execute(
+                "SELECT date, SUM(calories) c FROM meals WHERE uid = ? AND date >= ? "
+                "GROUP BY date ORDER BY date DESC LIMIT 7", (uid, cutoff7)).fetchall()
+            top_rows = con.execute(
+                "SELECT TRIM(name) nm, COUNT(*) n FROM meals WHERE uid = ? AND date >= ? "
+                "AND name IS NOT NULL AND TRIM(name) <> '' "
+                "GROUP BY LOWER(TRIM(name)) ORDER BY n DESC, MAX(id) DESC LIMIT 3",
+                (uid, cutoff30)).fetchall()
+            target_row = con.execute(
+                "SELECT daily_calories FROM push_subs WHERE uid = ? LIMIT 1", (uid,)).fetchone()
+            # NOTE: `weights` is a pre-existing GLOBAL (un-scoped) table — /api/weights serves it the same
+            # way to every device, so memory mirrors exactly what the user's own History screen shows.
+            weight_rows = con.execute(
+                "SELECT date, weight FROM weights WHERE date >= ? ORDER BY date LIMIT 60",
+                (cutoff30,)).fetchall()
+            water_row = con.execute(
+                "SELECT COUNT(*) n FROM water_log WHERE uid = ? AND date >= ? AND glasses > 0",
+                (uid, cutoff7)).fetchone()
+            workout_row = con.execute(
+                "SELECT COUNT(*) n FROM (SELECT id FROM exercise WHERE uid = ? AND date >= ? LIMIT 50)",
+                (uid, cutoff7)).fetchone()
+        finally:
+            con.close()
+
+        # Streak — mirrors /api/streak: anchor at today if logged today, else yesterday (grace day).
+        days = set()
+        for r in date_rows:
+            try:
+                days.add(date.fromisoformat(str(r["date"]).strip()))
+            except (TypeError, ValueError):
+                continue
+        if not days:
+            return ""
+        anchor = today if today in days else today - timedelta(days=1)
+        streak = 0
+        cursor = anchor
+        while cursor in days:
+            streak += 1
+            cursor -= timedelta(days=1)
+
+        days7 = len(week_rows)
+        cals = [_int(r["c"]) for r in week_rows if _int(r["c"]) > 0]
+        avg7 = int(round(sum(cals) / len(cals))) if cals else 0
+        y_iso = (today - timedelta(days=1)).isoformat()
+        ycal = next((_int(r["c"]) for r in week_rows if str(r["date"]) == y_iso), 0)
+        target = _int(target_row["daily_calories"], 0) if target_row else 0
+        top = [str(r["nm"])[:40] for r in top_rows]
+        wn = len(weight_rows)
+        wdir = ""
+        if wn >= 2:
+            delta = float(weight_rows[-1]["weight"] or 0) - float(weight_rows[0]["weight"] or 0)
+            wdir = "down" if delta <= -0.5 else ("up" if delta >= 0.5 else "steady")
+        water_days = _int(water_row["n"]) if water_row else 0
+        workouts = _int(workout_row["n"]) if workout_row else 0
+
+        if gentle:
+            # Numbers-free variant: qualitative only — no calorie, streak-count, or weight digits.
+            parts = []
+            if streak >= 2:
+                parts.append("they've been showing up consistently, logging day after day")
+            elif days7 >= 1:
+                parts.append("they've started logging meals recently")
+            if days7 >= 5:
+                parts.append("they logged most days this past week")
+            if top:
+                parts.append("go-to meals lately: " + ", ".join(top))
+            if wn >= 2:
+                parts.append("they're weighing in regularly")
+            if water_days >= 2:
+                parts.append("they log their water most days")
+            if workouts >= 2:
+                parts.append("they've been logging workouts this week")
+            if not parts:
+                return ""
+            return ("COACH MEMORY (reference NATURALLY like a coach who remembers — never recite as a list, "
+                    "and NEVER turn these into numbers): " + "; ".join(parts) + ".")
+
+        parts = []
+        if streak >= 1:
+            parts.append("current logging streak " + str(streak) + (" days" if streak != 1 else " day"))
+        parts.append("logged " + str(days7) + " of the last 7 days")
+        if avg7:
+            parts.append("averaging ~" + str(avg7) + " cal/day" +
+                         ((" vs their " + str(target) + " target") if target else ""))
+        if ycal:
+            parts.append("yesterday ~" + str(ycal) + " cal")
+        if top:
+            parts.append("most-logged meals: " + ", ".join(top))
+        if wn:
+            parts.append(str(wn) + (" weigh-ins" if wn != 1 else " weigh-in") + " in the last month" +
+                         ((", trending " + wdir) if wdir else ""))
+        if water_days >= 2:
+            parts.append("logs water (" + str(water_days) + " of last 7 days)")
+        if workouts:
+            parts.append(str(workouts) + (" workouts" if workouts != 1 else " workout") + " logged this week")
+        return ("COACH MEMORY (reference NATURALLY like a coach who remembers — never recite as a list): "
+                + "; ".join(parts) + ".")
+    except Exception:  # noqa: BLE001 — memory must NEVER break a reply
+        return ""
+
+
 @app.post("/api/coach")
 def coach_meals():
     """Goal- and budget-aware meal suggestions for the user's remaining day (text only)."""
@@ -1016,6 +1137,9 @@ def coach_meals():
     prompt += _allergy_clause(d.get("allergies")) + _diet_clause(d.get("diet"))
     if _gentle(d):  # Gentle / ED-safe mode: prepend the numbers-hidden directive (schema unchanged)
         prompt = GENTLE_DIRECTIVE + prompt
+    _mem = _coach_memory(_uid(), gentle=_gentle(d))  # cross-session memory (both branches; "" for new users)
+    if _mem:
+        prompt += "\n\n" + _mem
     try:
         from google import genai
         client = get_gemini_client()
@@ -2296,6 +2420,9 @@ def chat():
             "[target]g & [cal] goal' — and if the day falls short of the protein target, name a concrete fix (a protein "
             "shake, Greek yogurt, an extra meat portion). Deliver the WHOLE plan, then one short upbeat closing line. If you "
             "used places from general knowledge, add a brief 'verify hours' note.")
+    _mem = _coach_memory(_uid(), gentle=_gentle(d))  # cross-session memory (appended LAST; "" for new users)
+    if _mem:
+        system += "\n\n" + _mem
     max_out = 1600 if is_trip else 750
     reply_cap = 4000 if is_trip else 1200
     convo = system + "\n\n"
@@ -2461,6 +2588,9 @@ def briefing():
     )
     if _gentle(d):  # Gentle / ED-safe mode: prepend the numbers-hidden directive (schema unchanged)
         prompt = GENTLE_DIRECTIVE + prompt
+    _mem = _coach_memory(_uid(), gentle=_gentle(d))  # cross-session memory (appended LAST; "" for new users)
+    if _mem:
+        prompt += "\n\n" + _mem
     try:
         from google.genai import types
         client = get_gemini_client()
