@@ -1711,21 +1711,38 @@ def main():
         # partially-typed word must resolve to the food being typed, and full exact queries must keep
         # winning. Deterministic — recorded USDA pools, no network. Locks _pick_food's prefix scoring
         # AND the merged-pool ordering that made 'Almond butter' beat plain 'Butter,' on idx tiebreak.
-        _PORK = {"description": "Pork, fresh, shoulder, (Boston butt), blade (steaks), separable lean and fat, raw", "fdcId": 1}
-        _POOL_MERGED = ([_PORK] * 8                                            # raw 'extra butt' pool
-                        + [{"description": "Oil, olive, extra light", "fdcId": 9},
-                           {"description": "Almond butter, creamy", "fdcId": 10},   # wildcard pool, alphabetical
-                           {"description": "Biscuits, plain or buttermilk, dry mix", "fdcId": 11},
-                           {"description": "Butter, Clarified butter (ghee)", "fdcId": 12}])
+        # Fixtures mirror the REAL two-stage production flow: raw pool -> full-word-coverage guard ->
+        # (only if uncovered) wildcard merge -> re-pick. Testing the picker alone on a merged pool is a
+        # STRONGER property than production has (the guard is what protects 'boston butt') — the gate's
+        # own maiden run caught that overreach; keep the check flow-shaped.
         import app as _appmod
-        _t1 = _appmod._pick_food(_POOL_MERGED, "extra butt")["description"]
-        check("failure-class lock: typeahead 'extra butt' picks Butter over Boston-butt pork / almond butter",
-              _t1.lower().startswith("butter,"), "picked=%r" % _t1)
-        _t2 = _appmod._pick_food(_POOL_MERGED, "boston butt")["description"]
-        check("failure-class lock: exact 'boston butt' still picks the pork cut (typeahead must not steal it)",
-              _t2.lower().startswith("pork"), "picked=%r" % _t2)
+        _PORK = {"description": "Pork, fresh, shoulder, (Boston butt), blade (steaks), separable lean and fat, raw", "fdcId": 1}
+        _RAW = [_PORK] * 8 + [{"description": "Oil, olive, extra light", "fdcId": 9}]
+        _WILD = [{"description": "Almond butter, creamy", "fdcId": 10},        # wildcard pool, alphabetical
+                 {"description": "Biscuits, plain or buttermilk, dry mix", "fdcId": 11},
+                 {"description": "Butter, Clarified butter (ghee)", "fdcId": 12}]
+
+        def _flow_pick(query):
+            _f = _appmod._pick_food(_RAW, query)
+            _dt = set(_appmod._toks(_f.get("description") or ""))
+            _qw = _appmod._toks(query)
+            if all(w in _dt or (w + "s") in _dt for w in _qw):
+                return _f["description"], False                    # covered: retry must NOT fire
+            return _appmod._pick_food(_RAW + _WILD, query)["description"], True
+
+        _t1, _retried1 = _flow_pick("extra butt")
+        check("failure-class lock: typeahead 'extra butt' retries wildcard + picks Butter (not pork/almond)",
+              _retried1 and _t1.lower().startswith("butter,"), "picked=%r retried=%s" % (_t1, _retried1))
+        _t2, _retried2 = _flow_pick("boston butt")
+        check("failure-class lock: exact 'boston butt' keeps pork and NEVER triggers the wildcard retry",
+              (not _retried2) and _t2.lower().startswith("pork"), "picked=%r retried=%s" % (_t2, _retried2))
         check("failure-class lock: typeahead wildcard retry present in /api/nutrition",
               "qwords[-1] + \"*\"" in _app_src and "_fdc_search" in _app_src, "retry code present")
+        # (d) SCAN OMISSION (Mom's missed-cabbage / missed-cheese class, 2026-07-19): the analyze prompt
+        # must carry the sweep-the-whole-frame enumeration directive — visible low-calorie items are items.
+        check("failure-class lock: analyze prompt orders a full-frame sweep (missed-cabbage guard)",
+              "ENUMERATE EVERY VISIBLE FOOD" in _app_src and "If you can SEE\n   it, LIST it" in _app_src,
+              "enumeration directive present")
 
         # UI probe: quiz REJECTS a 17-year-old (stays on the age step) and ACCEPTS 30.
         agegate = page.evaluate("""() => {

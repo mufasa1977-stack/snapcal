@@ -177,6 +177,11 @@ METHOD — estimate like a registered dietitian, because consumer apps systemati
 3. COUNT THE HIDDEN CALORIES — this is the #1 source of error: cooking oil/butter, dressings, sauces,
    gravy, melted cheese, spreads, and sugary drinks are usually present even when not obvious. INCLUDE
    them. Restaurant and home-cooked dishes typically carry 100-400 kcal of added fats/oils people forget.
+3b. ENUMERATE EVERY VISIBLE FOOD — sweep the WHOLE frame systematically before you answer: center of the
+   plate, edges, partially covered items, food underneath or behind other food, side dishes, and small or
+   plain items (cabbage, greens, slaw, a slice of bread, a pat of butter). Low-calorie vegetables are
+   STILL items — a user who sees their cabbage ignored stops trusting every other number. If you can SEE
+   it, LIST it; when unsure what it is, name your best guess and put the doubt in "note" — never omit.
 4. WHEN PORTION OR HIDDEN INGREDIENTS ARE UNCERTAIN: if the user's goal is fat loss, recomposition, or
    GLP-1 support, lean slightly HIGHER, never lower, and say why in "note" — under-counting breaks the
    user's results; an honest, slightly-high estimate protects them. If the goal is building muscle or
