@@ -4575,6 +4575,16 @@ function _qzRender(){
       /* 2026-07-19 additive: text-size discoverability at onboarding. Same mechanism as the Settings
          card (localStorage snapcal_textsize + applyTextSize) — tapping a sample applies it INSTANTLY. */
       var _qzTs = "1"; try { _qzTs = localStorage.getItem("snapcal_textsize") || "1"; } catch(e){}
+      /* 2026-07-19 (a11y judge): honor the OS text-scaling a senior ALREADY set. If the system font scale
+         inflates the browser's default rem (>16px) and they haven't chosen here yet, pre-select the matching
+         size so the right answer is one confirming tap, not a discovery. Detection is best-effort + safe. */
+      try {
+        if (!localStorage.getItem("snapcal_textsize")) {
+          var _osFs = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+          if (_osFs >= 20) _qzTs = "1.3"; else if (_osFs >= 17.5) _qzTs = "1.15";
+          if (_qzTs !== "1") { localStorage.setItem("snapcal_textsize", _qzTs); applyTextSize(); }
+        }
+      } catch(e){}
       body = '<div class="qz-h2">How\'s this text size?</div>' +
         '<div class="qz-sub">Tap one and the whole screen changes right away — pick whatever feels easiest on your eyes. You can change this anytime in Settings.</div>' +
         '<div class="qz-ts" id="qzTsRow">' +

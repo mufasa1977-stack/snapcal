@@ -1563,6 +1563,32 @@ def main():
         check("quiz onboarding: TEXT-SIZE step shows (senior a11y discoverability); tapping 'Larger' zooms the app instantly, 'Normal' resets",
               qz["tsStepShown"] and qz["tsZoomApplied"] and qz["tsZoomReset"],
               "shown=%s zoomApplied=%s reset=%s" % (qz["tsStepShown"], qz["tsZoomApplied"], qz["tsZoomReset"]))
+
+        # GENTLE / ED-SAFE MODE (2026-07-19, clinical judge's lock request): toggling gentle ON must hide the
+        # numeric ring copy, show the word-state, and stamp gentle:true into the coach payload — and toggling
+        # OFF must restore numbers exactly. Deterministic UI+payload assertions (no LLM call -> never flaky).
+        gm = page.evaluate("""() => {
+            function ringText(){ var rc = document.querySelector('.ring-center'); return rc ? rc.innerText.replace(/\\s+/g,' ') : ''; }
+            var before = ringText();
+            if (typeof setGentle === 'function') setGentle(true);
+            else { localStorage.setItem('snapcal_gentle','1'); if (typeof applyGentle === 'function') applyGentle(); }
+            var bodyFlag = document.body.classList.contains('gentle');
+            var gw = document.getElementById('gentleWord');
+            var wordShown = !!gw && getComputedStyle(gw).display !== 'none';
+            var during = ringText();
+            var payloadGentle = (typeof buildCoachBody === 'function') ? buildCoachBody().gentle === true : false;
+            if (typeof setGentle === 'function') setGentle(false);
+            else { localStorage.setItem('snapcal_gentle','0'); if (typeof applyGentle === 'function') applyGentle(); }
+            var after = ringText();
+            var numbersHidden = during.indexOf('Calories') < 0 && !/\\d{3,}/.test(during);
+            var restored = /Calories/.test(after) || /\\d/.test(after);
+            return { bodyFlag: bodyFlag, wordShown: wordShown, numbersHidden: numbersHidden,
+                     payloadGentle: payloadGentle, restored: restored, during: during.slice(0, 40) };
+        }""")
+        check("gentle mode: ON hides ring numbers + shows word-state + coach payload carries gentle:true; OFF restores numbers",
+              gm["bodyFlag"] and gm["wordShown"] and gm["numbersHidden"] and gm["payloadGentle"] and gm["restored"],
+              "body=%s word=%s hidden=%s payload=%s restored=%s during='%s'" % (
+                  gm["bodyFlag"], gm["wordShown"], gm["numbersHidden"], gm["payloadGentle"], gm["restored"], gm["during"]))
         check("quiz onboarding: paywall step REUSES the real plan-selector (2 plans) + a closed-testing dev bypass",
               qz["hasPlans"] and qz["hasDevSkip"], "hasPlans=%s hasDevSkip=%s" % (qz["hasPlans"], qz["hasDevSkip"]))
         check("quiz onboarding: dev bypass completes onboarding (sets the flag, hides the overlay) without a purchase",

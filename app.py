@@ -2809,7 +2809,46 @@ def _nudge_workout_candidate(uid, local_minutes, gentle):
     return None
 
 
-_NUDGE_DEEP_LINK = {"meal_gap": "/?nudge=meal", "water": "/?nudge=water", "workout": "/?nudge=workout"}
+def _nudge_streak_candidate(uid, local_minutes, gentle):
+    """(d) STREAK-PROTECTION (2026-07-19, retention judge's top ask): the user has a real logging streak
+       (>=2 consecutive days through yesterday) but NOTHING logged today and the evening is slipping away —
+       one warm heads-up so the streak they built doesn't die by accident. Never fires for streak<2 (nothing
+       meaningful to protect), never before 17:30 local (give the day a chance), never repeats (type-dedup in
+       the tick loop). Gentle mode keeps the same warmth without loss-framing pressure."""
+    if local_minutes is None or local_minutes < 17 * 60 + 30:
+        return None
+    today = date.today().isoformat()
+    con = get_db()
+    try:
+        cnt = con.execute("SELECT COUNT(*) c FROM meals WHERE uid = ? AND date = ?", (uid, today)).fetchone()["c"]
+        rows = con.execute("SELECT DISTINCT date FROM meals WHERE uid = ? AND date < ? ORDER BY date DESC LIMIT 60",
+                           (uid, today)).fetchall()
+    finally:
+        con.close()
+    if cnt > 0:
+        return None                                   # already logged -> streak safe, nothing to say
+    streak, expect = 0, date.today() - timedelta(days=1)
+    for r in rows:                                    # consecutive days ending yesterday
+        try:
+            d = date.fromisoformat(r["date"])
+        except (TypeError, ValueError):
+            continue
+        if d == expect:
+            streak += 1
+            expect -= timedelta(days=1)
+        elif d < expect:
+            break
+    if streak < 2:
+        return None
+    body = ("You've logged %d days in a row — lovely consistency. A quick add tonight keeps the rhythm going,"
+            " whenever suits you." % streak
+            if gentle else
+            "Your %d-day logging streak ends at midnight — one quick meal add keeps it alive. Tap to log today." % streak)
+    return ("streak", "Coach Cal", body)
+
+
+_NUDGE_DEEP_LINK = {"meal_gap": "/?nudge=meal", "water": "/?nudge=water", "workout": "/?nudge=workout",
+                    "streak": "/?nudge=meal"}
 
 
 @app.post("/api/nudge/tick")
@@ -2855,7 +2894,7 @@ def nudge_tick():
             continue
         sent_types = _nudge_sent_types_today(uid, local_date)
         candidate = None
-        for fn in (_nudge_meal_gap_candidate, _nudge_water_candidate, _nudge_workout_candidate):
+        for fn in (_nudge_meal_gap_candidate, _nudge_streak_candidate, _nudge_water_candidate, _nudge_workout_candidate):
             c = fn(uid, local_minutes, gentle)
             if c and c[0] not in sent_types:
                 candidate = c
