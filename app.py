@@ -363,6 +363,36 @@ Rules:
 - All numeric values must be integers (round them). Output JSON only.
 """
 
+# Over/at-budget branch: the user has already met or exceeded today's calories. A coach that hands them
+# MORE meals to eat here is a correctness + trust bug (the panel flagged it unanimously). In this mode Coach
+# Cal must NOT push more food — acknowledge the overage without shame and point at tomorrow.
+COACH_OVERBUDGET_PROMPT_TMPL = """You are Coach Cal, a warm, knowledgeable nutrition coach inside SnapCal.
+The user's goal is: {goal_desc}.
+So far today they have {eaten_summary}. They have essentially NO calories left — they have MET OR EXCEEDED
+their calorie budget for today.
+
+CRITICAL: Do NOT encourage them to eat more. Do NOT hand them a list of meals to eat now. One day slightly
+over does not erase their progress — reassure them (never shame) and point them toward tomorrow.
+
+Respond with STRICT JSON only (no markdown, no code fences), exactly this schema:
+{{
+  "intro": "string",
+  "meals": [
+    {{"name": "string", "desc": "string",
+      "calories": int, "protein_g": int, "carbs_g": int, "fat_g": int, "why": "string"}}
+  ]
+}}
+
+Rules:
+- "intro": TWO short, warm sentences: (1) gently acknowledge they're at/over today's budget and that one day
+  doesn't undo the week's average; (2) a forward nudge — a glass of water, a short walk, and a fresh start
+  tomorrow. NEVER shame, NEVER imply they failed.
+- "meals": return AT MOST ONE item, and ONLY a genuinely light, high-volume or high-protein option UNDER 120
+  calories (e.g. herbal tea, cucumber slices, a boiled egg white, broth) framed as "if you're truly still
+  hungry, reach for something like this instead." If nothing is needed, return an empty array [].
+- All numeric values must be integers. Output JSON only.
+"""
+
 app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15MB upload cap
 if CORS is not None:  # allow the hosted native app (capacitor://, https://localhost) to call /api/*
@@ -941,16 +971,22 @@ def coach_meals():
     else:
         eaten_summary = "not logged anything yet"
 
-    # Already over budget? Still coach, toward a lighter high-protein option.
-    budget_cal = remaining_cal if remaining_cal > 0 else 300
-
-    prompt = COACH_PROMPT_TMPL.format(
-        goal_desc=GOAL_LABELS[goal],
-        eaten_summary=eaten_summary,
-        remaining_calories=budget_cal,
-        remaining_protein=remaining_pro,
-        n=n,
-    )
+    # At/over budget (client clamps remaining to >=0, so <50 means essentially nothing left): switch to the
+    # recovery prompt that does NOT push more food. Otherwise, normal goal-fit suggestions within the budget.
+    over_budget = remaining_cal < 50
+    if over_budget:
+        prompt = COACH_OVERBUDGET_PROMPT_TMPL.format(
+            goal_desc=GOAL_LABELS[goal],
+            eaten_summary=eaten_summary,
+        )
+    else:
+        prompt = COACH_PROMPT_TMPL.format(
+            goal_desc=GOAL_LABELS[goal],
+            eaten_summary=eaten_summary,
+            remaining_calories=remaining_cal,
+            remaining_protein=remaining_pro,
+            n=n,
+        )
     prompt += _allergy_clause(d.get("allergies")) + _diet_clause(d.get("diet"))
     try:
         from google import genai
