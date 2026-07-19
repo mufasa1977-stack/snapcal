@@ -1,6 +1,6 @@
 /* SnapCal service worker — network-first (always fresh), cache fallback for offline shell.
    NEVER caches /api/ (live data stays live). Minimal + safe for a deployed app. */
-const CACHE = 'snapcal-v2';
+const CACHE = 'snapcal-v3'; // v3 2026-07-19: purge cached pre-fix coach portraits (JPEG-in-PNG)
 const SHELL = ['/', '/manifest.webmanifest', '/static/icons/icon-192.png'];
 
 self.addEventListener('install', function (e) {

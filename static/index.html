@@ -1920,11 +1920,13 @@ applyTextSize();
    prewarmTTS() read it via coachVoice() so speech + warm cache always match the chosen coach. */
 /* Voices cast by Tariq's ear, audition rounds 1-3, 2026-07-19: Cal=Charon (kept), Maya=Vindemiatrix
    (gentle), Jake=Schedar (even/steady), Sarah=Erinome (clear). Do not swap without his ear. */
+/* ?v=2 cache-buster (2026-07-19): devices that cached the pre-fix JPEG-in-PNG bytes showed broken
+   images even after the server was fixed — a versioned URL bypasses every cache layer. Bump on any re-render. */
 var COACHES = {
-  cal:   { img: "/static/coaches/coach_black_male.png",   voice: "Charon",       label: "Cal"   },
-  maya:  { img: "/static/coaches/coach_black_female.png", voice: "Vindemiatrix", label: "Maya"  },
-  jake:  { img: "/static/coaches/coach_white_male.png",   voice: "Schedar",      label: "Jake"  },
-  sarah: { img: "/static/coaches/coach_white_female.png", voice: "Erinome",      label: "Sarah" }
+  cal:   { img: "/static/coaches/coach_black_male.png?v=2",   voice: "Charon",       label: "Cal"   },
+  maya:  { img: "/static/coaches/coach_black_female.png?v=2", voice: "Vindemiatrix", label: "Maya"  },
+  jake:  { img: "/static/coaches/coach_white_male.png?v=2",   voice: "Schedar",      label: "Jake"  },
+  sarah: { img: "/static/coaches/coach_white_female.png?v=2", voice: "Erinome",      label: "Sarah" }
 };
 /* NOTE 2026-07-19: named coachPersonaKey — a plain coachKey() collided with the EXISTING coach-suggestion
    cache-key function of the same name (later function declaration wins the hoist), which made
