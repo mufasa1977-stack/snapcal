@@ -1738,6 +1738,16 @@ def main():
         _dupes = sorted({n for n in _toplevel_fns if _toplevel_fns.count(n) > 1})
         check("failure-class lock: no duplicate TOP-LEVEL function declarations in index.html (hoist-collision guard)",
               not _dupes, "dupes=%s" % (_dupes or "none"))
+        # SLOW-SIGNAL ANALYZE TIMEOUT (Tariq's restaurant cheese-fries scan, 2026-07-19): api()'s flat 20s
+        # abort killed photo scans on weak cell signal with a misleading "server waking up" toast — the
+        # server itself allows 120s. Lock BOTH halves: api() honors a per-call timeoutMs, and the analyze
+        # call actually passes an extended budget + an honest slow-connection message.
+        check("failure-class lock: api() honors per-call opts.timeoutMs (flat-20s-abort guard)",
+              "opts.timeoutMs || 20000" in _idx_src and "opts.timeoutMessage ||" in _idx_src,
+              "per-call timeout override present in api()")
+        check("failure-class lock: photo analyze passes an extended timeout (75s) + honest slow-signal message",
+              "timeoutMs: 75000" in _idx_src and "weak signal" in _idx_src,
+              "extended analyze timeout present")
         # (b) ARTIFACT-FORMAT MISMATCH: image bytes must match their extension (the JPEG-in-.png incident —
         # desktop sniffs past it, devices show broken images).
         _bad_magic = []
