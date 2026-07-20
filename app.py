@@ -1033,6 +1033,7 @@ def analyze():
         return jsonify({"error": "Gemini analysis failed. See server console for details."}), 502
     if venue:
         result["venue"] = venue   # client shows the "📍 scanned at" chip
+        result = _apply_official_menu(result, venue["name"])   # published menu macros beat photo guesses
     return jsonify(result)
 
 
@@ -1657,6 +1658,42 @@ def _venue_at(lat, lng):
         return best
     except Exception:  # noqa: BLE001 — venue context is a bonus, never a blocker
         return None
+
+
+def _apply_official_menu(result, venue_name):
+    """OFFICIAL tier (top provenance rung, Tariq 2026-07-19: 'if it knows im in outback it would be
+       smart to have the exact caloric intake from there menu'): when the detected venue is a covered
+       chain, the chain's PUBLISHED macros override the photo estimate for every matched item — the
+       chain measured the actual recipe; a camera can't. Unmatched items keep their estimate (never
+       invent an OFFICIAL number). Touched totals are recomputed from the items so the card can never
+       show a total that disagrees with its own lines. Fail-soft: any error returns result unchanged."""
+    try:
+        import chain_menu
+        items = result.get("items") or []
+        hits = 0
+        for it in items:
+            off = chain_menu.lookup(venue_name, it.get("name") or "")
+            if not off:
+                continue
+            for k in ("calories", "protein_g", "carbs_g", "fat_g", "sugar_g", "sodium_mg"):
+                if off.get(k) is not None:
+                    it[k] = off[k]
+            it["name"] = off.get("item", it.get("name") or "").title()
+            if off.get("size"):
+                it["qty"] = off["size"]
+            it["source"] = "OFFICIAL"
+            hits += 1
+        if hits:
+            tot = result.get("total") or {}
+            for k in ("calories", "protein_g", "carbs_g", "fat_g", "sugar_g", "sodium_mg"):
+                vals = [it.get(k) for it in items if isinstance(it.get(k), (int, float))]
+                if vals:
+                    tot[k] = round(sum(vals))
+            result["total"] = tot
+            result["official_count"] = hits
+    except Exception:  # noqa: BLE001 — official override is a bonus, never a blocker
+        pass
+    return result
 
 
 @app.get("/api/nearby")

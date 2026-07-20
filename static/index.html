@@ -3748,6 +3748,7 @@ $("#analyzeBtn").addEventListener("click", async function(){
     if (data && data.limit) { openPaywall(); return; }   // server enforced the free daily scan cap
     analyzeResult = normalizeResult(data);
     analyzeResult.venue = (data && data.venue) || null;   /* "📍 Scanned at ..." chip */
+    analyzeResult.officialCount = (data && data.official_count) || 0;   /* published-menu overrides applied */
     analyzeResult.mults = analyzeResult.items.map(function(){ return 1; });
     renderScanCard();
     renderAddMissedRow();
@@ -3773,7 +3774,8 @@ function normalizeResult(data){
       calories: int(it.calories), protein_g: int(it.protein_g),
       carbs_g: int(it.carbs_g), fat_g: int(it.fat_g),
       fiber_g: int(it.fiber_g), sugar_g: int(it.sugar_g),
-      sat_fat_g: int(it.sat_fat_g), sodium_mg: int(it.sodium_mg)
+      sat_fat_g: int(it.sat_fat_g), sodium_mg: int(it.sodium_mg),
+      source: (it.source === "OFFICIAL" ? "OFFICIAL" : "")   /* published-menu provenance badge */
     };
   });
   var t = data.total || {};
@@ -4025,7 +4027,9 @@ function buildEditableItemsHTML(eff){
   if (!eff.items.length) return '<div class="empty" style="box-shadow:none;padding:16px">No food detected.</div>';
   return eff.items.map(function(it, i){
     return '<div class="item-row">' +
-      '<div class="item-l"><div class="n">' + esc(it.name) + '</div>' +
+      '<div class="item-l"><div class="n">' + esc(it.name) +
+        (it.source === "OFFICIAL" ? ' <span style="font-size:10.5px;font-weight:800;color:var(--brand);border:1px solid var(--brand);border-radius:7px;padding:1px 5px;vertical-align:middle;white-space:nowrap">🍴 OFFICIAL</span>' : '') +
+      '</div>' +
         (it.qty ? '<div class="q">' + esc(it.qty) + '</div>' : '') +
         '<div class="portion">' +
           '<button class="pbtn" type="button" data-i="' + i + '" data-d="-1" aria-label="less">−</button>' +
@@ -4099,7 +4103,9 @@ function renderScanCard(){
          item names + portions lean on that restaurant's real menu. */
       (analyzeResult.venue && analyzeResult.venue.name
         ? '<div class="conf-wrap" style="margin-bottom:6px"><span class="conf-chip conf-hi">📍 Scanned at ' + esc(analyzeResult.venue.name) + '</span>' +
-          '<span class="conf-range">portions sized like they serve them</span></div>'
+          '<span class="conf-range">' + (analyzeResult.officialCount > 0
+            ? '🍴 using their published menu numbers'
+            : 'portions sized like they serve them') + '</span></div>'
         : '') +
       '<div class="conf-wrap"><span class="conf-chip ' + cls + '">' + cf.level + ' confidence</span>' +
       '<span class="conf-range">likely ' + fmtNum(cf.lo) + '&ndash;' + fmtNum(cf.hi) + ' Cal</span></div>' +
