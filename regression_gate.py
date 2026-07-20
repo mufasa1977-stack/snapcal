@@ -1748,6 +1748,44 @@ def main():
         check("failure-class lock: photo analyze passes an extended timeout (75s) + honest slow-signal message",
               "timeoutMs: 75000" in _idx_src and "weak signal" in _idx_src,
               "extended analyze timeout present")
+        # RESTAURANT-AWARE SCAN (Tariq at Outback 2026-07-19: "why didn't it notice I was in that
+        # restaurant?"): the scan attaches a quick cached GPS fix (ONLY when location is already
+        # granted — never a mid-scan permission prompt), the server detects the venue within ~150m
+        # and tells the vision model the restaurant, and the result carries the venue chip. Lock all
+        # three wires so the feature can't silently unplug again (it sat half-built since 07-05).
+        check("restaurant-aware scan: client sends a permission-gated quick GPS fix with the photo",
+              'lsGet("snapcal_loc_primed")' in _idx_src and 'fd.append("lat"' in _idx_src,
+              "client wiring present")
+        check("restaurant-aware scan: server detects the venue and injects LOCATION CONTEXT into the vision prompt",
+              "def _venue_at(" in _app_src and "LOCATION CONTEXT" in _app_src,
+              "server wiring present")
+        check("restaurant-aware scan: the scan result carries the venue for the '📍 Scanned at' chip",
+              'result["venue"] = venue' in _app_src and "Scanned at" in _idx_src,
+              "venue chip wired")
+        # OFFICIAL MENU OVERRIDE (same day, phase 2 — Tariq: "it would be smart to have the exact
+        # caloric intake from there menu"): with a covered chain detected, PUBLISHED macros must
+        # override the photo estimate, tag the item OFFICIAL, leave uncovered items untouched, and
+        # keep the total equal to the sum of its own lines. Deterministic — chain_menu's verified
+        # Panera seed, no network.
+        import app as _appmod_off
+        _fake = {"items": [
+            {"name": "garden steak salad with creamy dressing", "calories": 1030, "protein_g": 71,
+             "carbs_g": 60, "fat_g": 60, "sugar_g": 20, "sodium_mg": 1500},
+            {"name": "mystery cookie", "calories": 300, "protein_g": 4, "carbs_g": 40, "fat_g": 14,
+             "sugar_g": 20, "sodium_mg": 200},
+        ], "total": {"calories": 1330, "protein_g": 75, "carbs_g": 100, "fat_g": 74, "sugar_g": 40,
+                     "sodium_mg": 1700}}
+        _out = _appmod_off._apply_official_menu(_fake, "Panera Bread")
+        _it0, _it1 = _out["items"][0], _out["items"][1]
+        check("official-menu override: covered item takes the chain's PUBLISHED macros + OFFICIAL tag",
+              _it0.get("source") == "OFFICIAL" and _it0["calories"] == 800 and _it0["protein_g"] == 33,
+              "src=%s cal=%s pro=%s" % (_it0.get("source"), _it0.get("calories"), _it0.get("protein_g")))
+        check("official-menu override: uncovered item keeps its estimate (never invents an OFFICIAL number)",
+              _it1.get("source") != "OFFICIAL" and _it1["calories"] == 300,
+              "src=%s cal=%s" % (_it1.get("source"), _it1.get("calories")))
+        check("official-menu override: the total reconciles to the sum of its own lines",
+              _out["total"]["calories"] == 1100 and _out.get("official_count") == 1,
+              "total=%s hits=%s" % (_out["total"].get("calories"), _out.get("official_count")))
         # (b) ARTIFACT-FORMAT MISMATCH: image bytes must match their extension (the JPEG-in-.png incident —
         # desktop sniffs past it, devices show broken images).
         _bad_magic = []

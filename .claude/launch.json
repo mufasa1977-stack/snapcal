@@ -1,10 +1,11 @@
 {
-  "autoPort": true,
-  "servers": [
+  "version": "0.0.1",
+  "configurations": [
     {
       "name": "snapcal",
-      "command": "python app.py",
-      "workingDirectory": "."
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["app.py"],
+      "port": 5177
     }
   ]
 }

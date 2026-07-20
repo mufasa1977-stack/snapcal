@@ -24,6 +24,15 @@ import re
 # kcal, protein_g, carbs_g, fat_g, sugar_g, sodium_mg, plus the size + source URL.
 # Grown over time by scraping the chains' published nutrition (panerabread.com product
 # pages, Starbucks nutrition pages, etc.), cached the way USDA/OpenFoodFacts already are.
+# Outback's official published nutrition PDF (their Azure blob, linked from
+# outback.com/nutrition/smart-dining). "Updated February 2023" per the doc header.
+# Fetched + table-extracted directly from this URL on 2026-07-20; row alignment was
+# coordinate-verified (item-name y-position matched its number row) before use.
+_OUTBACK_PDF = (
+    "https://outback.blob.core.windows.net/content/images/"
+    "OBS_Full_Nutrition_Information_Core_Menu_Items.pdf"
+)
+
 _MENU = {
     "panera": {
         "ultimate garden steak salad": {
@@ -39,12 +48,144 @@ _MENU = {
             "url": "https://www.starbucks.com/menu/product/2122725/iced",
         },
     },
+    # Outback Steakhouse — all numbers per the WHOLE listed size, transcribed from
+    # Outback's own published nutrition PDF (_OUTBACK_PDF). Sizes 6oz/8oz etc. kept as
+    # distinct keys because the token matcher drops bare single digits; the size label
+    # carries the portion. Sugar/fiber shown as "<1" in the PDF are stored as 1.
+    "outback": {
+        "aussie cheese fries": {
+            "size": "Full order (shareable)", "calories": 2620, "protein_g": 89, "carbs_g": 153,
+            "fat_g": 182, "sugar_g": 1, "sodium_mg": 7490,
+            "url": _OUTBACK_PDF,
+        },
+        "bloomin onion": {
+            "size": "Whole (with sauce)", "calories": 1620, "protein_g": 15, "carbs_g": 107,
+            "fat_g": 126, "sugar_g": 20, "sodium_mg": 4140,
+            "url": _OUTBACK_PDF,
+        },
+        "bloomin fried shrimp": {
+            "size": "1 serving", "calories": 990, "protein_g": 45, "carbs_g": 53,
+            "fat_g": 66, "sugar_g": 1, "sodium_mg": 5830,
+            "url": _OUTBACK_PDF,
+        },
+        "gold coast coconut shrimp": {
+            "size": "1 serving (appetizer)", "calories": 520, "protein_g": 31, "carbs_g": 49,
+            "fat_g": 21, "sugar_g": 28, "sodium_mg": 640,
+            "url": _OUTBACK_PDF,
+        },
+        "victorias filet mignon 6oz": {
+            "size": "6 oz", "calories": 380, "protein_g": 47, "carbs_g": 1,
+            "fat_g": 19, "sugar_g": 0, "sodium_mg": 470,
+            "url": _OUTBACK_PDF,
+        },
+        "victorias filet mignon 8oz": {
+            "size": "8 oz", "calories": 530, "protein_g": 62, "carbs_g": 1,
+            "fat_g": 29, "sugar_g": 0, "sodium_mg": 540,
+            "url": _OUTBACK_PDF,
+        },
+        "outback center-cut sirloin 6oz": {
+            "size": "6 oz", "calories": 370, "protein_g": 46, "carbs_g": 1,
+            "fat_g": 20, "sugar_g": 0, "sodium_mg": 510,
+            "url": _OUTBACK_PDF,
+        },
+        "outback center-cut sirloin 8oz": {
+            "size": "8 oz", "calories": 450, "protein_g": 60, "carbs_g": 1,
+            "fat_g": 23, "sugar_g": 0, "sodium_mg": 710,
+            "url": _OUTBACK_PDF,
+        },
+        "ribeye 12oz": {
+            "size": "12 oz", "calories": 900, "protein_g": 58, "carbs_g": 1,
+            "fat_g": 72, "sugar_g": 0, "sodium_mg": 610,
+            "url": _OUTBACK_PDF,
+        },
+        "ribeye 15oz": {
+            "size": "15 oz", "calories": 1110, "protein_g": 73, "carbs_g": 1,
+            "fat_g": 88, "sugar_g": 0, "sodium_mg": 650,
+            "url": _OUTBACK_PDF,
+        },
+        "alice springs chicken": {
+            "size": "1 serving", "calories": 780, "protein_g": 79, "carbs_g": 14,
+            "fat_g": 47, "sugar_g": 12, "sodium_mg": 1160,
+            "url": _OUTBACK_PDF,
+        },
+        "grilled chicken on the barbie": {
+            "size": "1 serving", "calories": 410, "protein_g": 62, "carbs_g": 22,
+            "fat_g": 9, "sugar_g": 17, "sodium_mg": 780,
+            "url": _OUTBACK_PDF,
+        },
+        "toowoomba salmon": {
+            "size": "1 serving", "calories": 760, "protein_g": 61, "carbs_g": 7,
+            "fat_g": 53, "sugar_g": 3, "sodium_mg": 1100,
+            "url": _OUTBACK_PDF,
+        },
+        "perfectly grilled salmon": {
+            "size": "1 serving", "calories": 550, "protein_g": 45, "carbs_g": 1,
+            "fat_g": 39, "sugar_g": 0, "sodium_mg": 430,
+            "url": _OUTBACK_PDF,
+        },
+        "baby back ribs full rack": {
+            "size": "Full rack", "calories": 1430, "protein_g": 96, "carbs_g": 53,
+            "fat_g": 91, "sugar_g": 42, "sodium_mg": 2310,
+            "url": _OUTBACK_PDF,
+        },
+        "baby back ribs half rack": {
+            "size": "1/2 rack", "calories": 720, "protein_g": 48, "carbs_g": 26,
+            "fat_g": 46, "sugar_g": 21, "sodium_mg": 1160,
+            "url": _OUTBACK_PDF,
+        },
+        "steakhouse mac & cheese": {
+            "size": "1 serving (side/entree)", "calories": 720, "protein_g": 25, "carbs_g": 74,
+            "fat_g": 37, "sugar_g": 8, "sodium_mg": 1010,
+            "url": _OUTBACK_PDF,
+        },
+        "aussie fries": {
+            "size": "1 serving (side)", "calories": 500, "protein_g": 7, "carbs_g": 67,
+            "fat_g": 23, "sugar_g": 1, "sodium_mg": 1960,
+            "url": _OUTBACK_PDF,
+        },
+        "loaded mashed potatoes": {
+            "size": "1 serving", "calories": 320, "protein_g": 11, "carbs_g": 22,
+            "fat_g": 22, "sugar_g": 3, "sodium_mg": 1440,
+            "url": _OUTBACK_PDF,
+        },
+        "homestyle mashed potatoes": {
+            "size": "1 serving", "calories": 230, "protein_g": 4, "carbs_g": 28,
+            "fat_g": 11, "sugar_g": 1, "sodium_mg": 540,
+            "url": _OUTBACK_PDF,
+        },
+        "baked potato with everything": {
+            "size": "1 (loaded)", "calories": 440, "protein_g": 13, "carbs_g": 58,
+            "fat_g": 17, "sugar_g": 7, "sodium_mg": 940,
+            "url": _OUTBACK_PDF,
+        },
+        "broccoli": {
+            "size": "1 serving (fresh)", "calories": 140, "protein_g": 5, "carbs_g": 12,
+            "fat_g": 9, "sugar_g": 4, "sodium_mg": 290,
+            "url": _OUTBACK_PDF,
+        },
+        "house salad no dressing": {
+            "size": "1 side salad", "calories": 120, "protein_g": 5, "carbs_g": 8,
+            "fat_g": 7, "sugar_g": 2, "sodium_mg": 180,
+            "url": _OUTBACK_PDF,
+        },
+        "caesar salad side": {
+            "size": "Side, with dressing", "calories": 270, "protein_g": 6, "carbs_g": 7,
+            "fat_g": 25, "sugar_g": 1, "sodium_mg": 600,
+            "url": _OUTBACK_PDF,
+        },
+        "chocolate thunder from down under": {
+            "size": "1 serving", "calories": 1520, "protein_g": 18, "carbs_g": 142,
+            "fat_g": 105, "sugar_g": 119, "sodium_mg": 380,
+            "url": _OUTBACK_PDF,
+        },
+    },
 }
 
 # Common chain-name aliases -> our canonical key (what OSM/geocoding might return).
 _CHAIN_ALIASES = {
     "panera": "panera", "panera bread": "panera",
     "starbucks": "starbucks", "starbucks coffee": "starbucks",
+    "outback": "outback", "outback steakhouse": "outback",
 }
 
 _STOP = {"the", "a", "with", "and", "of", "&", "cal", "calorie", "size", "large",
@@ -106,8 +247,22 @@ if __name__ == "__main__":
     # Unknown item / chain -> None (falls back to USDA/AI, never a wrong OFFICIAL):
     assert lookup("Panera", "grilled cheese") is None
     assert lookup("McDonalds", "Big Mac") is None
+
+    # Outback — the 2026-07-19 dinner that exposed the gap: Tariq scanned Aussie Cheese
+    # Fries. The published number (from Outback's own nutrition PDF) is the ground truth.
+    fries = lookup("Outback Steakhouse", "Aussie Cheese Fries")
+    assert fries and fries["calories"] == 2620 and fries["protein_g"] == 89, fries
+    assert fries["source"] == "OFFICIAL" and fries["url"] == _OUTBACK_PDF, fries
+    # Alias without "Steakhouse" also resolves:
+    onion = lookup("Outback", "Bloomin Onion")
+    assert onion and onion["calories"] == 1620, onion
+    # Item Outback doesn't sell -> None (never a wrong OFFICIAL; falls back to USDA/AI):
+    assert lookup("Outback", "kangaroo burger") is None
+
     meal_cal = salad["calories"] + drink["calories"]
     print(f"OK  chains={covered_chains()}")
     print(f"OK  salad={salad['calories']}cal/{salad['protein_g']}g  drink={drink['calories']}cal")
     print(f"OK  official meal total = {meal_cal} cal (vs app's ~1,180 photo-guess)")
+    print(f"OK  Outback Aussie Cheese Fries = {fries['calories']}cal / {fries['protein_g']}g protein "
+          f"/ {fries['carbs_g']}g carbs / {fries['fat_g']}g fat / {fries['sodium_mg']}mg sodium")
     print("all assertions passed")

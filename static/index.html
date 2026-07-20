@@ -3709,6 +3709,23 @@ function downscaleForAnalysis(file){
   });
 }
 
+/* RESTAURANT-AWARE SCAN: a quick cached GPS fix at analyze time — ONLY when location was already
+   granted (loc_primed flag), so a scan never triggers a mid-flow permission prompt. Capped at 2.5s
+   and racing in parallel with the photo downscale, so it adds ~no latency; null on any failure. */
+function quickScanPos(ms){
+  return new Promise(function(resolve){
+    try {
+      if (!("geolocation" in navigator) || !lsGet("snapcal_loc_primed")) { resolve(null); return; }
+      var done = false;
+      var t = setTimeout(function(){ if (!done){ done = true; resolve(null); } }, ms || 2500);
+      navigator.geolocation.getCurrentPosition(
+        function(p){ if (!done){ done = true; clearTimeout(t); resolve(p.coords); } },
+        function(){ if (!done){ done = true; clearTimeout(t); resolve(null); } },
+        { maximumAge: 600000, timeout: ms || 2500 });
+    } catch (e){ resolve(null); }
+  });
+}
+
 $("#analyzeBtn").addEventListener("click", async function(){
   if (!selectedFile) { toast("Pick a photo first", true); return; }
   if (!isPremium() && scansLeft() <= 0) { openPaywall(); return; }
@@ -3716,6 +3733,7 @@ $("#analyzeBtn").addEventListener("click", async function(){
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Analyzing your food…';
   try {
+    var _posP = quickScanPos(2500);                           /* fires in parallel with the downscale */
     var sendImg = await downscaleForAnalysis(selectedFile);   /* shrink before upload -> faster analyze */
     var fd = new FormData();
     fd.append("photo", sendImg, "photo.jpg");
@@ -3723,10 +3741,14 @@ $("#analyzeBtn").addEventListener("click", async function(){
     /* allergies + diet so the scan's swaps/tips NEVER suggest an allergen, and a logged allergen gets flagged */
     fd.append("allergies", (typeof allergyLabels === "function" ? allergyLabels() : []).join(","));
     fd.append("diet", (typeof dietLabel === "function" ? dietLabel(_diet) : ""));
+    var _pos = await _posP;
+    if (_pos){ fd.append("lat", _pos.latitude); fd.append("lng", _pos.longitude); }   /* server detects the venue */
     var data = await api("/api/analyze", { method: "POST", body: fd, timeoutMs: 75000,
       timeoutMessage: "That took longer than expected — a weak signal can slow the photo upload. Please try again." });
     if (data && data.limit) { openPaywall(); return; }   // server enforced the free daily scan cap
     analyzeResult = normalizeResult(data);
+    analyzeResult.venue = (data && data.venue) || null;   /* "📍 Scanned at ..." chip */
+    analyzeResult.officialCount = (data && data.official_count) || 0;   /* published-menu overrides applied */
     analyzeResult.mults = analyzeResult.items.map(function(){ return 1; });
     renderScanCard();
     renderAddMissedRow();
@@ -3752,7 +3774,8 @@ function normalizeResult(data){
       calories: int(it.calories), protein_g: int(it.protein_g),
       carbs_g: int(it.carbs_g), fat_g: int(it.fat_g),
       fiber_g: int(it.fiber_g), sugar_g: int(it.sugar_g),
-      sat_fat_g: int(it.sat_fat_g), sodium_mg: int(it.sodium_mg)
+      sat_fat_g: int(it.sat_fat_g), sodium_mg: int(it.sodium_mg),
+      source: (it.source === "OFFICIAL" ? "OFFICIAL" : "")   /* published-menu provenance badge */
     };
   });
   var t = data.total || {};
@@ -4004,7 +4027,9 @@ function buildEditableItemsHTML(eff){
   if (!eff.items.length) return '<div class="empty" style="box-shadow:none;padding:16px">No food detected.</div>';
   return eff.items.map(function(it, i){
     return '<div class="item-row">' +
-      '<div class="item-l"><div class="n">' + esc(it.name) + '</div>' +
+      '<div class="item-l"><div class="n">' + esc(it.name) +
+        (it.source === "OFFICIAL" ? ' <span style="font-size:10.5px;font-weight:800;color:var(--brand);border:1px solid var(--brand);border-radius:7px;padding:1px 5px;vertical-align:middle;white-space:nowrap">🍴 OFFICIAL</span>' : '') +
+      '</div>' +
         (it.qty ? '<div class="q">' + esc(it.qty) + '</div>' : '') +
         '<div class="portion">' +
           '<button class="pbtn" type="button" data-i="' + i + '" data-d="-1" aria-label="less">−</button>' +
@@ -4074,6 +4099,14 @@ function renderScanCard(){
   var conf = $("#scanConfidence");
   if (conf){
     conf.innerHTML =
+      /* RESTAURANT-AWARE SCAN: show WHERE the plate was scanned — the model was told the venue, so
+         item names + portions lean on that restaurant's real menu. */
+      (analyzeResult.venue && analyzeResult.venue.name
+        ? '<div class="conf-wrap" style="margin-bottom:6px"><span class="conf-chip conf-hi">📍 Scanned at ' + esc(analyzeResult.venue.name) + '</span>' +
+          '<span class="conf-range">' + (analyzeResult.officialCount > 0
+            ? '🍴 using their published menu numbers'
+            : 'portions sized like they serve them') + '</span></div>'
+        : '') +
       '<div class="conf-wrap"><span class="conf-chip ' + cls + '">' + cf.level + ' confidence</span>' +
       '<span class="conf-range">likely ' + fmtNum(cf.lo) + '&ndash;' + fmtNum(cf.hi) + ' Cal</span></div>' +
       '<div class="conf-honest">Portion size is the hard part of any photo estimate — tap an item to adjust, or get the label\'s numbers for packaged food.</div>' +
