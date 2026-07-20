@@ -633,6 +633,9 @@
   #askCoachBtn{flex:0 0 auto;border:none;background:var(--brand);color:#fff;font-weight:800;font-size:14px;border-radius:11px;padding:11px 18px;cursor:pointer;font-family:inherit}
   .ask-coach-name{font-size:15px;font-weight:800;color:var(--brand);margin:-4px 2px 12px}
   .ask-coach-intro{font-size:14px;line-height:1.5;color:var(--ink);background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:12px;padding:11px 13px;margin-bottom:12px}
+  /* Sticky scan-log bar: sits left of the mic FAB (right:90px clears its 58px + margins), above the nav. */
+  #stickyLogBar{position:fixed;left:14px;right:90px;bottom:96px;z-index:89;display:none}
+  #stickyLogBar button{width:100%;padding:15px 12px;border:none;border-radius:14px;background:var(--brand);color:#fff;font-weight:800;font-size:15.5px;font-family:inherit;cursor:pointer;box-shadow:0 8px 22px rgba(16,185,129,.45)}
   #coachFab{position:fixed;right:16px;bottom:88px;z-index:90;width:58px;height:58px;border-radius:50%;border:none;background:var(--brand);color:#fff;box-shadow:0 8px 22px rgba(16,185,129,.5);cursor:pointer;display:flex;align-items:center;justify-content:center}
   #coachFab:active{transform:scale(.93)}
   .voice-wrap{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center}
@@ -1416,6 +1419,10 @@
       <input class="txt" id="mealName" type="text" autocomplete="off">
       <button class="btn btn-dark" id="addBtn" type="button">Add to today&rsquo;s log</button>
     </div>
+    <!-- Pinned mirror of #addBtn: after a scan the real button sits at the BOTTOM of a long result
+         card — this keeps "log it" one tap away without scrolling. Hidden whenever the real button
+         is on screen; lives inside tab-scan so switching tabs hides it automatically. -->
+    <div id="stickyLogBar"><button id="stickyLogBtn" type="button">✓ Add to today&rsquo;s log</button></div>
   </section>
 
   <!-- ================= HISTORY ================= -->
@@ -8128,6 +8135,31 @@ function renderWeightChart(w){
       }, 700);
     } catch(e){}
   })();
+})();
+
+/* --- Sticky "Add to today's log" (2026-07-19, Tariq: "why is the log my meal button at the very
+       bottom"): the real #addBtn ends a LONG result card, so logging always needed a scroll. This
+       pinned mirror shows only while the result card is open AND the real button is off-screen
+       (IntersectionObserver, with the bottom ~170px treated as covered by the nav + FAB). Tapping it
+       clicks the real #addBtn, so there is exactly ONE log flow — pure add-only UI. --- */
+(function(){
+  var bar = document.getElementById("stickyLogBar");
+  var rc = document.getElementById("resultCard");
+  var addBtn = document.getElementById("addBtn");
+  if (!bar || !rc || !addBtn) return;
+  var btnOnScreen = false;
+  function update(){
+    bar.style.display = (rc.style.display === "block" && !btnOnScreen) ? "block" : "none";
+  }
+  if ("IntersectionObserver" in window){
+    new IntersectionObserver(function(en){
+      btnOnScreen = !!(en[0] && en[0].isIntersecting);
+      update();
+    }, { rootMargin: "0px 0px -170px 0px" }).observe(addBtn);
+  }
+  new MutationObserver(update).observe(rc, { attributes: true, attributeFilter: ["style"] });
+  document.getElementById("stickyLogBtn").addEventListener("click", function(){ addBtn.click(); });
+  update();
 })();
 </script>
 </body>

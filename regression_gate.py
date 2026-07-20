@@ -1969,6 +1969,22 @@ def main():
               histsheet["hasVerdictInline"] and histsheet["hasTipInline"] and not histsheet["hasCollapsedExpander"],
               str(histsheet))
 
+        # STICKY LOG BAR (Tariq 2026-07-19: "why is the log my meal button at the very bottom"): with a
+        # long scan result open and the page scrolled to the top, the pinned "Add to today's log" mirror
+        # must be visible; it must vanish once the REAL #addBtn scrolls into view (one log flow, never
+        # two visible buttons). Reuses the injected P0-2 result still on screen.
+        page.evaluate("() => window.scrollTo(0, 0)")
+        page.wait_for_timeout(500)   # IntersectionObserver delivers async
+        sticky_top = page.evaluate("() => getComputedStyle(document.getElementById('stickyLogBar')).display")
+        page.evaluate("() => document.getElementById('addBtn').scrollIntoView({block: 'center'})")
+        page.wait_for_timeout(500)
+        sticky_at_btn = page.evaluate("() => getComputedStyle(document.getElementById('stickyLogBar')).display")
+        check("sticky log bar: pinned 'Add to today's log' visible atop a long scan result, hides when the real button is on screen",
+              sticky_top != "none" and sticky_at_btn == "none",
+              "top=%s atBtn=%s" % (sticky_top, sticky_at_btn))
+        check("sticky log bar: tap routes to the ONE real add flow (source lock)",
+              "stickyLogBtn" in _idx_src and "addBtn.click()" in _idx_src, "wiring present")
+
         # P1-3: MIC FAB OVERLAP. The 58px FAB floats at bottom:88px (top edge 146px above the viewport
         # floor) — <main>'s bottom padding must clear that + a buffer, on every tab (viewport-independent
         # since padding is a fixed px value, so no phone-viewport swap needed for this lock).
