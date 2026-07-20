@@ -1833,11 +1833,14 @@ async function api(path, opts){
   // Bound every request so a sleeping/slow server can NEVER freeze the UI (Render free tier cold-starts).
   var _ac = ("AbortController" in window) ? new AbortController() : null;
   if (_ac && !opts.signal) opts.signal = _ac.signal;
-  var _to = _ac ? setTimeout(function(){ try { _ac.abort(); } catch(e){} }, 20000) : null;
+  /* Default 20s guard, but heavy calls (photo analyze = cell-signal upload + AI vision) can pass a
+     bigger opts.timeoutMs — the server allows 120s (gunicorn --timeout), it was THIS abort that made
+     slow-signal scans die at 20s with a misleading "waking up" toast. */
+  var _to = _ac ? setTimeout(function(){ try { _ac.abort(); } catch(e){} }, opts.timeoutMs || 20000) : null;
   try {
     res = await fetch(API_BASE + path, opts);
   } catch (e) {
-    if (_ac && _ac.signal.aborted) throw new Error("Server is waking up — give it a few seconds and try again.");
+    if (_ac && _ac.signal.aborted) throw new Error(opts.timeoutMessage || "Server is waking up — give it a few seconds and try again.");
     throw new Error("Network error — is the server up?");
   } finally {
     if (_to) clearTimeout(_to);
@@ -3720,7 +3723,8 @@ $("#analyzeBtn").addEventListener("click", async function(){
     /* allergies + diet so the scan's swaps/tips NEVER suggest an allergen, and a logged allergen gets flagged */
     fd.append("allergies", (typeof allergyLabels === "function" ? allergyLabels() : []).join(","));
     fd.append("diet", (typeof dietLabel === "function" ? dietLabel(_diet) : ""));
-    var data = await api("/api/analyze", { method: "POST", body: fd });
+    var data = await api("/api/analyze", { method: "POST", body: fd, timeoutMs: 75000,
+      timeoutMessage: "That took longer than expected — a weak signal can slow the photo upload. Please try again." });
     if (data && data.limit) { openPaywall(); return; }   // server enforced the free daily scan cap
     analyzeResult = normalizeResult(data);
     analyzeResult.mults = analyzeResult.items.map(function(){ return 1; });
