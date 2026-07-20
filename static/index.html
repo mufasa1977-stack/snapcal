@@ -1407,16 +1407,11 @@
         <div id="totalKcal" style="font-variant-numeric:tabular-nums"></div>
       </div>
       <div id="scanConfidence"></div>
-      <!-- PRIMARY LOG CTA, co-located with the food (Tariq 2026-07-20, second report: "when I analyze
-           my pizza the log button should be RIGHT THERE — I gotta scroll all the way to the bottom").
-           The 2026-07-19 sticky bottom-bar kept it reachable but still read as "at the bottom". Like an
-           "Add to cart" button, the primary action belongs WITH the item + its calories, not after a
-           long menu. This is the button his eye lands on the instant the analysis appears; it drives the
-           exact same one flow as #addBtn (add-only, no duplicate logic). The bottom #addBtn stays for
-           anyone who scrolls through edits first. -->
-      <button class="btn btn-dark" id="addBtnTop" type="button"
-              style="margin:10px 0 4px;box-shadow:0 6px 18px rgba(16,185,129,.35)">
-        &#10003; Add to today&rsquo;s log</button>
+      <!-- (2026-07-20) The eye-level log CTA is now the #analyzeBtn under the photo itself — it turns
+           "Analyze" → "✓ Log this meal" on a successful scan (add-to-cart pattern). A separate top
+           button that used to sit here was removed as a stacked duplicate; the sticky bar covers the
+           mid-scroll case and #addBtn stays the bottom source-of-truth. Result: exactly one visible
+           log button at any scroll position, one shared add flow. -->
       <!-- P0-2 2026-07-15: Coach Cal's verdict+tip get a RESERVED slot right under the total/confidence
            chip, rendered synchronously with everything else (no async section arrives later to push it
            down) — so it always lands inside the first viewport instead of ~2800px down. -->
@@ -8168,12 +8163,12 @@ function renderWeightChart(w){
   var bar = document.getElementById("stickyLogBar");
   var rc = document.getElementById("resultCard");
   var addBtn = document.getElementById("addBtn");
-  var topBtn = document.getElementById("addBtnTop");
+  // The eye-level log CTA is the #analyzeBtn — it becomes "✓ Log this meal" after a scan and fires the
+  // add flow via ITS OWN click handler. Do NOT add a second listener here or logging would double-fire.
+  var topBtn = document.getElementById("analyzeBtn");
   if (!bar || !rc || !addBtn) return;
-  // The top CTA fires the SAME one flow (add-only) — like the sticky bar, it just clicks #addBtn.
-  if (topBtn) topBtn.addEventListener("click", function(){ addBtn.click(); });
-  // Track BOTH real buttons; the sticky bar only appears when NEITHER is on screen (2026-07-20: the
-  // top button now covers the initial view, so the sticky bar is a true fallback for mid-scroll edits).
+  // Track BOTH the eye-level button and the bottom button; the sticky bar only appears when NEITHER is
+  // on screen — a true fallback for mid-scroll edits.
   var bottomOn = false, topOn = false;
   function update(){
     bar.style.display = (rc.style.display === "block" && !bottomOn && !topOn) ? "block" : "none";
