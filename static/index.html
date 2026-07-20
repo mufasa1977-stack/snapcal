@@ -1407,6 +1407,16 @@
         <div id="totalKcal" style="font-variant-numeric:tabular-nums"></div>
       </div>
       <div id="scanConfidence"></div>
+      <!-- PRIMARY LOG CTA, co-located with the food (Tariq 2026-07-20, second report: "when I analyze
+           my pizza the log button should be RIGHT THERE — I gotta scroll all the way to the bottom").
+           The 2026-07-19 sticky bottom-bar kept it reachable but still read as "at the bottom". Like an
+           "Add to cart" button, the primary action belongs WITH the item + its calories, not after a
+           long menu. This is the button his eye lands on the instant the analysis appears; it drives the
+           exact same one flow as #addBtn (add-only, no duplicate logic). The bottom #addBtn stays for
+           anyone who scrolls through edits first. -->
+      <button class="btn btn-dark" id="addBtnTop" type="button"
+              style="margin:10px 0 4px;box-shadow:0 6px 18px rgba(16,185,129,.35)">
+        &#10003; Add to today&rsquo;s log</button>
       <!-- P0-2 2026-07-15: Coach Cal's verdict+tip get a RESERVED slot right under the total/confidence
            chip, rendered synchronously with everything else (no async section arrives later to push it
            down) — so it always lands inside the first viewport instead of ~2800px down. -->
@@ -3648,6 +3658,8 @@ function onPick(e){
   selectedFile = f;
   analyzeResult = null;
   $("#resultCard").style.display = "none";
+  /* new photo → button goes back to "Analyze" (leaves log mode from any prior scan) */
+  var _ab = $("#analyzeBtn"); if (_ab) { _ab.textContent = "Analyze"; _ab.dataset.mode = "analyze"; _ab.disabled = false; }
 
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = URL.createObjectURL(f);
@@ -3734,9 +3746,15 @@ function quickScanPos(ms){
 }
 
 $("#analyzeBtn").addEventListener("click", async function(){
+  /* Add-to-cart behavior (Tariq 2026-07-20): after a successful scan this SAME button turns into
+     the log button, so the action his eye is already on ("Analyze" → "Log this meal") logs the
+     meal with one tap. In log mode it just fires the one #addBtn flow (add-only, no duplicate
+     logic) — exactly like the sticky bar + top-CTA mirrors already do. */
+  if (this.dataset.mode === "log") { var _lb = document.getElementById("addBtn"); if (_lb) _lb.click(); return; }
   if (!selectedFile) { toast("Pick a photo first", true); return; }
   if (!isPremium() && scansLeft() <= 0) { openPaywall(); return; }
   var btn = this;
+  var _scanOk = false;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Analyzing your food…';
   try {
@@ -3762,11 +3780,14 @@ $("#analyzeBtn").addEventListener("click", async function(){
     $("#mealName").value = analyzeResult.items.map(function(it){ return it.name; }).join(", ") || "Meal";
     if (!isPremium()) bumpScan();
     $("#resultCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    _scanOk = true;
   } catch (e) {
     toast(e.message, true);
   } finally {
     btn.disabled = false;
-    btn.textContent = "Analyze";
+    /* On success the button becomes the log CTA; on error/limit it stays "Analyze" so he can retry. */
+    if (_scanOk) { btn.textContent = "✓ Log this meal"; btn.dataset.mode = "log"; }
+    else { btn.textContent = "Analyze"; btn.dataset.mode = "analyze"; }
   }
 });
 
@@ -4391,6 +4412,7 @@ function resetScan(){
   $("#previewImg").src = "";
   $("#previewCard").style.display = "none";
   $("#resultCard").style.display = "none";
+  var _ab = $("#analyzeBtn"); if (_ab) { _ab.textContent = "Analyze"; _ab.dataset.mode = "analyze"; _ab.disabled = false; }
 }
 
 /* ---------------- HISTORY ---------------- */
@@ -8146,16 +8168,26 @@ function renderWeightChart(w){
   var bar = document.getElementById("stickyLogBar");
   var rc = document.getElementById("resultCard");
   var addBtn = document.getElementById("addBtn");
+  var topBtn = document.getElementById("addBtnTop");
   if (!bar || !rc || !addBtn) return;
-  var btnOnScreen = false;
+  // The top CTA fires the SAME one flow (add-only) — like the sticky bar, it just clicks #addBtn.
+  if (topBtn) topBtn.addEventListener("click", function(){ addBtn.click(); });
+  // Track BOTH real buttons; the sticky bar only appears when NEITHER is on screen (2026-07-20: the
+  // top button now covers the initial view, so the sticky bar is a true fallback for mid-scroll edits).
+  var bottomOn = false, topOn = false;
   function update(){
-    bar.style.display = (rc.style.display === "block" && !btnOnScreen) ? "block" : "none";
+    bar.style.display = (rc.style.display === "block" && !bottomOn && !topOn) ? "block" : "none";
   }
   if ("IntersectionObserver" in window){
-    new IntersectionObserver(function(en){
-      btnOnScreen = !!(en[0] && en[0].isIntersecting);
+    var io = new IntersectionObserver(function(en){
+      en.forEach(function(e){
+        if (e.target === addBtn) bottomOn = e.isIntersecting;
+        else if (e.target === topBtn) topOn = e.isIntersecting;
+      });
       update();
-    }, { rootMargin: "0px 0px -170px 0px" }).observe(addBtn);
+    }, { rootMargin: "0px 0px -170px 0px" });
+    io.observe(addBtn);
+    if (topBtn) io.observe(topBtn);
   }
   new MutationObserver(update).observe(rc, { attributes: true, attributeFilter: ["style"] });
   document.getElementById("stickyLogBtn").addEventListener("click", function(){ addBtn.click(); });
