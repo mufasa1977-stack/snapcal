@@ -1748,6 +1748,20 @@ def main():
         check("failure-class lock: photo analyze passes an extended timeout (75s) + honest slow-signal message",
               "timeoutMs: 75000" in _idx_src and "weak signal" in _idx_src,
               "extended analyze timeout present")
+        # RESTAURANT-AWARE SCAN (Tariq at Outback 2026-07-19: "why didn't it notice I was in that
+        # restaurant?"): the scan attaches a quick cached GPS fix (ONLY when location is already
+        # granted — never a mid-scan permission prompt), the server detects the venue within ~150m
+        # and tells the vision model the restaurant, and the result carries the venue chip. Lock all
+        # three wires so the feature can't silently unplug again (it sat half-built since 07-05).
+        check("restaurant-aware scan: client sends a permission-gated quick GPS fix with the photo",
+              'lsGet("snapcal_loc_primed")' in _idx_src and 'fd.append("lat"' in _idx_src,
+              "client wiring present")
+        check("restaurant-aware scan: server detects the venue and injects LOCATION CONTEXT into the vision prompt",
+              "def _venue_at(" in _app_src and "LOCATION CONTEXT" in _app_src,
+              "server wiring present")
+        check("restaurant-aware scan: the scan result carries the venue for the '📍 Scanned at' chip",
+              'result["venue"] = venue' in _app_src and "Scanned at" in _idx_src,
+              "venue chip wired")
         # (b) ARTIFACT-FORMAT MISMATCH: image bytes must match their extension (the JPEG-in-.png incident —
         # desktop sniffs past it, devices show broken images).
         _bad_magic = []

@@ -992,6 +992,24 @@ def analyze():
     diet = request.form.get("diet") or ""
     prompt = (ANALYZE_PROMPT_TMPL.format(goal_desc=GOAL_LABELS[goal])
               + _allergy_clause(allergies) + _diet_clause(diet))
+    # RESTAURANT-AWARE SCAN: if the client attached its location, detect the venue and tell the vision
+    # model WHERE the plate is — real menu-item names + restaurant-sized portions (scans systematically
+    # UNDER-count composed restaurant dishes: heavy dressings/butter/oil are what a camera can't see).
+    venue = None
+    try:
+        _vlat, _vlng = request.form.get("lat"), request.form.get("lng")
+        if _vlat and _vlng:
+            venue = _venue_at(float(_vlat), float(_vlng))
+    except (TypeError, ValueError):
+        venue = None
+    if venue:
+        prompt += (
+            '\n\nLOCATION CONTEXT: the user is AT "%s" right now. If the photographed food plausibly comes '
+            "from there, IDENTIFY items by that restaurant's REAL menu names and size portions the way that "
+            "restaurant actually serves them — restaurant portions run larger than home portions, and "
+            "dressings, butter, oil and cheese are applied heavily. If the food clearly is not from this "
+            "restaurant, ignore this context." % venue["name"]
+        )
 
     try:
         from google import genai
@@ -1013,6 +1031,8 @@ def analyze():
         import traceback
         traceback.print_exc()  # full detail on the server console only
         return jsonify({"error": "Gemini analysis failed. See server console for details."}), 502
+    if venue:
+        result["venue"] = venue   # client shows the "📍 scanned at" chip
     return jsonify(result)
 
 
@@ -1602,6 +1622,41 @@ def _google_nearby(lat, lng, radius, kind):
             tags["amenity"] = "restaurant"
         elements.append({"lat": plat, "lon": plng, "tags": tags})
     return {"elements": elements}
+
+
+def _venue_at(lat, lng):
+    """RESTAURANT-AWARE SCAN (Tariq at Outback, 2026-07-19: 'why didn't it notice I was in that
+       restaurant?'): nearest NAMED food venue within ~150m of the scan location — 'you are AT this
+       restaurant', not merely near one. Reuses the same Google-Places-else-Overpass path and cache
+       as /api/nearby with a tiny radius. Best-effort: any failure returns None and the scan proceeds
+       exactly as before (venue context must never break or slow a scan much — Overpass timeout 8s)."""
+    try:
+        radius = 150
+        query = (
+            "[out:json][timeout:8];("
+            f'nwr(around:{radius},{lat},{lng})["amenity"~"^(fast_food|restaurant|cafe)$"]["name"];'
+            ");out center tags 40;"
+        )
+        ckey = f"venue:{round(lat, 4)},{round(lng, 4)}"
+        payload = _google_nearby(lat, lng, radius, "food")
+        if payload is None:
+            payload = _overpass(query, timeout=8, cache_key=ckey)
+        best = None
+        for el in payload.get("elements", []):
+            tags = el.get("tags") or {}
+            name = (tags.get("name") or tags.get("brand") or "").strip()
+            if not name:
+                continue
+            elat = el.get("lat") if el.get("lat") is not None else (el.get("center") or {}).get("lat")
+            elng = el.get("lon") if el.get("lon") is not None else (el.get("center") or {}).get("lon")
+            if elat is None or elng is None:
+                continue
+            d = _haversine_m(lat, lng, elat, elng)
+            if d <= radius and (best is None or d < best["dist_m"]):
+                best = {"name": name[:80], "dist_m": round(d)}
+        return best
+    except Exception:  # noqa: BLE001 — venue context is a bonus, never a blocker
+        return None
 
 
 @app.get("/api/nearby")
