@@ -1985,6 +1985,18 @@ def main():
         check("sticky log bar: tap routes to the ONE real add flow (source lock)",
               "stickyLogBtn" in _idx_src and "addBtn.click()" in _idx_src, "wiring present")
 
+        # ANALYZE→LOG add-to-cart (Tariq 2026-07-20: "I click analyze, it detected the food, it should
+        # then say log. It still says analyze."): the SAME primary button turns into the log CTA after a
+        # successful scan and fires the ONE #addBtn flow (add-only). On error/limit or a new photo it must
+        # revert to "Analyze". Source-lock so a future edit can't silently drop the transform.
+        _a2l_branch = 'this.dataset.mode === "log"' in _idx_src and 'getElementById("addBtn")' in _idx_src
+        _a2l_become = '"✓ Log this meal"' in _idx_src and 'btn.dataset.mode = "log"' in _idx_src
+        _a2l_revert = _idx_src.count('_ab.dataset.mode = "analyze"') >= 2   # onPick + resetScan both revert
+        check("analyze→log: button becomes 'Log this meal' on scan success and fires the one add flow",
+              _a2l_branch and _a2l_become, "branch=%s become=%s" % (_a2l_branch, _a2l_become))
+        check("analyze→log: reverts to 'Analyze' on new photo pick and after logging (no stuck log state)",
+              _a2l_revert, "revert-sites=%d (need >=2)" % _idx_src.count('_ab.dataset.mode = "analyze"'))
+
         # P1-3: MIC FAB OVERLAP. The 58px FAB floats at bottom:88px (top edge 146px above the viewport
         # floor) — <main>'s bottom padding must clear that + a buffer, on every tab (viewport-independent
         # since padding is a fixed px value, so no phone-viewport swap needed for this lock).
