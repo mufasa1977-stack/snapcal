@@ -154,6 +154,25 @@ def ensure_server():
 
 
 def main():
+    # ---- COACH PERSONA CONTRACT (source-level, offline — runs FIRST so it reports even if the server
+    #      is down). The 2026-07-19 sycophancy fix replaced adjectival tone clauses with STRUCTURAL
+    #      contracts in /api/chat (coaching craft was 52/100; "be honest with me" failed 3/3). That fix
+    #      shipped with NO test — a refactor could silently delete it and Coach Cal would drift back to
+    #      the agreeable mean with every check still green. persona_gate --verify-source is that test. ----
+    try:
+        _pg = r"C:\Users\somme\youtube_videos\scripts\gates\persona_gate.py"
+        if os.path.exists(_pg):
+            _r = subprocess.run([sys.executable, _pg, "--verify-source", "--app-py",
+                                 os.path.join(HERE, "app.py")],
+                                capture_output=True, text=True, timeout=60)
+            check("Coach Cal structural contract intact (anti-sycophancy, 2026-07-19)",
+                  _r.returncode == 0, (_r.stdout or _r.stderr or "").strip()[:200])
+        else:
+            check("Coach Cal persona gate present", False, "persona_gate.py not found at " + _pg)
+    except Exception as _e:
+        check("Coach Cal structural contract intact (anti-sycophancy, 2026-07-19)", False,
+              "gate could not run: %s" % str(_e)[:120])
+
     ensure_server()
     if not server_up():
         print("FATAL: SnapCal server not reachable at " + BASE)
